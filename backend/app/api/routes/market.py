@@ -87,15 +87,7 @@ async def get_indicators(
     if cached is not None:
         return cached
 
-    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
-    if len(bars) < 50:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Insufficient data: need ≥50 bars, got {len(bars)}",
-        )
-
-    df = _bars_to_df(bars)
-    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+    indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
     await indicator_cache.set(cache_key, indicators)
     return indicators
 
@@ -113,15 +105,7 @@ async def get_regime(
     engine: AnalysisEngineDep,
     timeframe: Timeframe = Query(default=Timeframe.M15),
 ) -> MarketRegime:
-    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
-    if len(bars) < 50:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Insufficient data for regime calculation",
-        )
-
-    df = _bars_to_df(bars)
-    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+    indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
 
     # Mock sentiment — replace with real NLP pipeline
     sentiment = SentimentSnapshot(
@@ -154,15 +138,7 @@ async def get_prediction(
     if cached is not None:
         return cached
 
-    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
-    if len(bars) < 50:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Insufficient data for prediction",
-        )
-
-    df = _bars_to_df(bars)
-    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+    indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
     forecast = await model.predict(indicators, timeframe, horizon_bars=horizon)
 
     await prediction_cache.set(cache_key, forecast)
@@ -184,12 +160,10 @@ async def get_signals(
     timeframe: Timeframe = Query(default=Timeframe.M15),
     limit: int = Query(default=10, ge=1, le=50),
 ) -> list[AlphaSignal]:
-    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
-    if len(bars) < 50:
+    try:
+        indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
+    except HTTPException:
         return []
-
-    df = _bars_to_df(bars)
-    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
     forecast = await model.predict(indicators, timeframe)
     regime = await engine.compute_regime(indicators)
 
@@ -198,6 +172,27 @@ async def get_signals(
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _require_bars(bars: list, ticker: str, min_count: int = 50) -> None:
+    """Raise 422 if bars list is too short for indicator computation."""
+    if len(bars) < min_count:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Insufficient data: need ≥{min_count} bars, got {len(bars)} for {ticker}",
+        )
+
+
+async def _load_indicators(
+    ticker: str,
+    timeframe: Timeframe,
+    svc: MarketDataDep,
+    engine: AnalysisEngineDep,
+) -> TechnicalIndicators:
+    """Fetch bars, validate, build DataFrame, compute indicators."""
+    bars = await svc.get_ohlcv(ticker, timeframe, limit=200)
+    _require_bars(bars, ticker)
+    return await engine.compute_indicators(_bars_to_df(bars), ticker, timeframe)
+
 
 def _bars_to_df(bars: list) -> pd.DataFrame:
     """Convert list[Candle] → pandas DataFrame."""

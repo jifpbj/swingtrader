@@ -7,10 +7,79 @@ import type {
   Indicators,
   Prediction,
   AlphaSignal,
+  PredictiveBand,
+  SignalDirection,
+  SignalStrength,
+  Timeframe,
   WSMessage,
 } from "@/types/market";
+import { toBackendTf, toFrontendTf } from "@/lib/timeframeConvert";
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws";
+const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/trades";
+
+// ─── Schema normalisers ────────────────────────────────────────────────────────
+
+// Backend TechnicalIndicators → frontend Indicators
+// Backend shape: { rsi, macd: {macd, signal, histogram}, atr, trend_strength,
+//                  volume_sma, volume_ratio, price, ema_20, ema_50, ... }
+function normalizeIndicators(raw: Record<string, unknown>): Indicators {
+  const macdObj = raw.macd as { macd: number; signal: number; histogram: number };
+  const price = (raw.price as number) ?? 1;
+  const volumeSma = (raw.volume_sma as number) ?? 0;
+  const volumeRatio = (raw.volume_ratio as number) ?? 1;
+  return {
+    rsi: raw.rsi as number,
+    macd: macdObj.macd,
+    macdSignal: macdObj.signal,
+    macdHistogram: macdObj.histogram,
+    regimeScore: raw.trend_strength as number, // both -1 to 1
+    atr: raw.atr as number,
+    // Approximate 24h USDT volume from per-bar volume SMA × bars/day × price
+    volume24h: volumeSma * volumeRatio * 96 * price,
+  };
+}
+
+// Backend PriceProbabilityForecast → frontend Prediction
+// Backend: snake_case; bands use upper_bound / lower_bound
+function normalizePrediction(raw: Record<string, unknown>): Prediction {
+  const rawBands = (raw.bands as Array<Record<string, unknown>>) ?? [];
+  const bands: PredictiveBand[] = rawBands.map((b) => ({
+    time: b.time as number,
+    upperBound: b.upper_bound as number,
+    lowerBound: b.lower_bound as number,
+    midpoint: b.midpoint as number,
+    confidence: b.confidence as number,
+  }));
+  return {
+    ticker: raw.ticker as string,
+    timeframe: toFrontendTf(raw.timeframe as string),
+    confidence: raw.confidence as number,
+    direction: raw.direction as SignalDirection,
+    targetPrice: raw.target_price as number,
+    targetTime: raw.target_time as number,
+    probabilityUp: raw.probability_up as number,
+    probabilityDown: raw.probability_down as number,
+    bands,
+  };
+}
+
+// Backend AlphaSignal → frontend AlphaSignal (timeframe format)
+function normalizeSignal(raw: Record<string, unknown>): AlphaSignal {
+  return {
+    id: raw.id as string,
+    timestamp: raw.timestamp as number,
+    ticker: raw.ticker as string,
+    timeframe: toFrontendTf(raw.timeframe as string),
+    direction: raw.direction as SignalDirection,
+    strength: raw.strength as SignalStrength,
+    title: raw.title as string,
+    description: raw.description as string,
+    confidence: raw.confidence as number,
+    price: raw.price as number,
+  };
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 interface MarketDataCallbacks {
   onCandle?: (candle: Candle) => void;
@@ -28,6 +97,8 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
   const setWsConnected = useUIStore((s) => s.setWsConnected);
   const addSignal = useUIStore((s) => s.addSignal);
   const setConfidenceScore = useUIStore((s) => s.setConfidenceScore);
+  const setIndicators = useUIStore((s) => s.setIndicators);
+  const setPrediction = useUIStore((s) => s.setPrediction);
 
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
@@ -36,7 +107,8 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
     if (!mounted.current) return;
 
     const encodedTicker = encodeURIComponent(ticker);
-    const url = `${WS_BASE}/${encodedTicker}?timeframe=${timeframe}`;
+    const backendTf = toBackendTf(timeframe);
+    const url = `${WS_BASE}/${encodedTicker}?timeframe=${backendTf}`;
 
     try {
       const ws = new WebSocket(url);
@@ -56,18 +128,24 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
             case "candle":
               callbacksRef.current.onCandle?.(msg.data as Candle);
               break;
-            case "indicator":
-              callbacksRef.current.onIndicators?.(msg.data as Indicators);
-              break;
-            case "prediction": {
-              const prediction = msg.data as Prediction;
-              callbacksRef.current.onPrediction?.(prediction);
-              setConfidenceScore(prediction.confidence);
+            case "indicator": {
+              const indicators = normalizeIndicators(msg.data as Record<string, unknown>);
+              setIndicators(indicators);
+              callbacksRef.current.onIndicators?.(indicators);
               break;
             }
-            case "signal":
-              addSignal(msg.data as AlphaSignal);
+            case "prediction": {
+              const prediction = normalizePrediction(msg.data as Record<string, unknown>);
+              setPrediction(prediction);
+              setConfidenceScore(prediction.confidence);
+              callbacksRef.current.onPrediction?.(prediction);
               break;
+            }
+            case "signal": {
+              const signal = normalizeSignal(msg.data as Record<string, unknown>);
+              addSignal(signal);
+              break;
+            }
             default:
               break;
           }
@@ -92,7 +170,7 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
         reconnectTimer.current = setTimeout(connect, 5000);
       }
     }
-  }, [ticker, timeframe, setWsConnected, addSignal, setConfidenceScore]);
+  }, [ticker, timeframe, setWsConnected, addSignal, setConfidenceScore, setIndicators, setPrediction]);
 
   useEffect(() => {
     mounted.current = true;

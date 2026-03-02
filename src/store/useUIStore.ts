@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import type { AlphaSignal, Timeframe } from "@/types/market";
+import type { AlphaSignal, Indicators, Prediction, Timeframe } from "@/types/market";
 
 interface UIState {
   // ─── Active asset
@@ -37,6 +37,14 @@ interface UIState {
   // ─── Confidence score
   confidenceScore: number;
   setConfidenceScore: (score: number) => void;
+
+  // ─── Live indicators (from WS)
+  indicators: Indicators | null;
+  setIndicators: (indicators: Indicators) => void;
+
+  // ─── Live prediction (from WS)
+  prediction: Prediction | null;
+  setPrediction: (prediction: Prediction) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -69,5 +77,11 @@ export const useUIStore = create<UIState>()(
 
     confidenceScore: 0,
     setConfidenceScore: (confidenceScore) => set({ confidenceScore }),
+
+    indicators: null,
+    setIndicators: (indicators) => set({ indicators }),
+
+    prediction: null,
+    setPrediction: (prediction) => set({ prediction }),
   }))
 );

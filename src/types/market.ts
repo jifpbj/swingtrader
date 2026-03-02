@@ -72,7 +72,7 @@ export interface Asset {
 }
 
 // ─── WebSocket Messages ───────────────────────────────────────────────────────
-export type WSMessageType = "candle" | "signal" | "prediction" | "indicator" | "ticker";
+export type WSMessageType = "candle" | "signal" | "prediction" | "indicator" | "ticker" | "subscribe_ack" | "error" | "tick";
 
 export interface WSMessage<T = unknown> {
   type: WSMessageType;

@@ -23,6 +23,17 @@ class Timeframe(str, Enum):
     D1 = "1Day"
 
 
+# Seconds per bar for each timeframe — shared by market_data and predictive engine
+TIMEFRAME_SECONDS: dict[Timeframe, int] = {
+    Timeframe.M1:  60,
+    Timeframe.M5:  300,
+    Timeframe.M15: 900,
+    Timeframe.H1:  3600,
+    Timeframe.H4:  14400,
+    Timeframe.D1:  86400,
+}
+
+
 class SignalDirection(str, Enum):
     BULLISH = "bullish"
     BEARISH = "bearish"

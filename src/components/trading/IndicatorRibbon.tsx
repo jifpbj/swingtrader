@@ -10,8 +10,9 @@ import {
   Tooltip,
 } from "recharts";
 import { generateMockIndicators } from "@/hooks/useMockData";
+import { useUIStore } from "@/store/useUIStore";
 import type { Indicators } from "@/types/market";
-import { cn } from "@/lib/utils";
+import { cn, formatVolume } from "@/lib/utils";
 import { Activity, TrendingUp, Cpu } from "lucide-react";
 
 // ─── RSI Gauge ────────────────────────────────────────────────────────────────
@@ -194,17 +195,13 @@ function ATRDisplay({ atr, price }: { atr: number; price: number }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function IndicatorRibbon() {
-  const [indicators, setIndicators] = useState<Indicators>(() =>
+  const liveIndicators = useUIStore((s) => s.indicators);
+
+  // Fall back to mock data until the first WS indicator message arrives
+  const [mockIndicators] = useState<Indicators>(() =>
     generateMockIndicators(67_000)
   );
-
-  // Poll mock data every 5s
-  useEffect(() => {
-    const id = setInterval(() => {
-      setIndicators(generateMockIndicators(67_000 + (Math.random() - 0.5) * 2000));
-    }, 5000);
-    return () => clearInterval(id);
-  }, []);
+  const indicators = liveIndicators ?? mockIndicators;
 
   return (
     <div className="glass-bright border-t border-white/5 px-4 py-3 shrink-0">
@@ -261,7 +258,7 @@ export function IndicatorRibbon() {
         <div className="shrink-0 flex flex-col justify-center gap-1">
           <span className="text-[10px] text-zinc-500">Vol 24h</span>
           <span className="font-mono text-sm text-white font-medium">
-            {(indicators.volume24h / 1e9).toFixed(2)}B
+            {formatVolume(indicators.volume24h)}
           </span>
           <span className="text-[10px] text-zinc-500">USDT</span>
         </div>

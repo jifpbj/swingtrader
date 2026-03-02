@@ -23,7 +23,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.schemas import Candle, Timeframe
+from app.models.schemas import Candle, Timeframe, TIMEFRAME_SECONDS
 
 logger = get_logger(__name__)
 
@@ -35,15 +35,6 @@ _ALPACA_TIMEFRAME: dict[Timeframe, str] = {
     Timeframe.H1:  "1Hour",
     Timeframe.H4:  "4Hour",
     Timeframe.D1:  "1Day",
-}
-
-_TIMEFRAME_SECONDS: dict[Timeframe, int] = {
-    Timeframe.M1:  60,
-    Timeframe.M5:  300,
-    Timeframe.M15: 900,
-    Timeframe.H1:  3600,
-    Timeframe.H4:  14400,
-    Timeframe.D1:  86400,
 }
 
 # Default anchor prices for mock data (extended when new tickers are requested)

@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
-import { useMockData, generateMockCandles } from "@/hooks/useMockData";
-import type { Candle, PredictiveBand } from "@/types/market";
+import { useMarketData } from "@/hooks/useMarketData";
+import { generateMockCandles } from "@/hooks/useMockData";
+import type { Candle, Prediction, PredictiveBand } from "@/types/market";
 import { Maximize2, EyeOff, Eye, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatPrice } from "@/lib/utils";
+import { toBackendTf } from "@/lib/timeframeConvert";
 
 // lightweight-charts v5 types
 import type {
@@ -66,6 +68,7 @@ export function ChartContainer() {
   const volumeMapRef = useRef<Map<number, number>>(new Map());
 
   const ticker = useUIStore((s) => s.ticker);
+  const timeframe = useUIStore((s) => s.timeframe);
   const showOverlay = useUIStore((s) => s.showPredictiveOverlay);
   const toggleOverlay = useUIStore((s) => s.togglePredictiveOverlay);
 
@@ -75,7 +78,7 @@ export function ChartContainer() {
 
     let chart: IChartApi;
 
-    import("lightweight-charts").then((lc) => {
+    import("lightweight-charts").then(async (lc) => {
       if (!containerRef.current) return;
 
       chart = lc.createChart(containerRef.current, {
@@ -159,8 +162,25 @@ export function ChartContainer() {
       });
       midLineRef.current = midLine;
 
-      // ─── Seed historical data ───────────────────────────────────────────────
-      const initialCandles = generateMockCandles(200);
+      // ─── Seed historical data (REST API, fallback to mock) ─────────────────
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const backendTf = toBackendTf(timeframe);
+      let initialCandles: Candle[] = [];
+      try {
+        const encodedTicker = encodeURIComponent(ticker);
+        const res = await fetch(
+          `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=${backendTf}&limit=200`
+        );
+        if (res.ok) {
+          const json = await res.json() as { bars: Candle[] };
+          initialCandles = json.bars ?? [];
+        }
+      } catch {
+        // fall through to mock
+      }
+      if (initialCandles.length < 10) {
+        initialCandles = generateMockCandles(200);
+      }
       const bands = generateMockBands(initialCandles);
 
       // Populate volume lookup map
@@ -296,7 +316,23 @@ export function ChartContainer() {
     [showOverlay]
   );
 
-  useMockData(ticker, { onCandle: handleCandle });
+  // ─── Live prediction band updates ──────────────────────────────────────────
+  const handlePrediction = useCallback(
+    (prediction: Prediction) => {
+      if (!showOverlay) return;
+      import("lightweight-charts").then((lc) => {
+        for (const b of prediction.bands) {
+          const t = b.time as UTCTimestamp;
+          upperBandRef.current?.update({ time: t, value: b.upperBound });
+          lowerBandRef.current?.update({ time: t, value: b.lowerBound });
+          midLineRef.current?.update({ time: t, value: b.midpoint });
+        }
+      });
+    },
+    [showOverlay]
+  );
+
+  useMarketData({ onCandle: handleCandle, onPrediction: handlePrediction });
 
   return (
     <div className="relative flex flex-col h-full tv-chart-container">
@@ -338,10 +374,7 @@ export function ChartContainer() {
                 : "text-white"
             )}
           >
-            ${lastPrice.toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            ${formatPrice(lastPrice)}
           </div>
           <div
             className={cn(

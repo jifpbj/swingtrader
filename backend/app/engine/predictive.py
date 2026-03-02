@@ -34,19 +34,10 @@ from app.models.schemas import (
     SignalDirection,
     TechnicalIndicators,
     Timeframe,
+    TIMEFRAME_SECONDS,
 )
 
 logger = get_logger(__name__)
-
-# Seconds per bar for each timeframe — used to project bands forward
-_TIMEFRAME_SECONDS: dict[Timeframe, int] = {
-    Timeframe.M1:  60,
-    Timeframe.M5:  300,
-    Timeframe.M15: 900,
-    Timeframe.H1:  3600,
-    Timeframe.H4:  14400,
-    Timeframe.D1:  86400,
-}
 
 
 # ─── Protocol / Abstract Base ─────────────────────────────────────────────────
@@ -131,7 +122,7 @@ class StatisticalModel(PredictiveModel):
         horizon_bars: int,
     ) -> PriceProbabilityForecast:
         now = int(time.time())
-        bar_seconds = _TIMEFRAME_SECONDS.get(timeframe, 900)
+        bar_seconds = TIMEFRAME_SECONDS.get(timeframe, 900)
 
         # ── Step 1: directional vote ──────────────────────────────────────────
         votes = self._directional_votes(ind)
