@@ -1,0 +1,81 @@
+// ─── OHLCV / Candle ──────────────────────────────────────────────────────────
+export interface Candle {
+  time: number; // Unix timestamp (seconds)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// ─── Predictive Overlay ───────────────────────────────────────────────────────
+export interface PredictiveBand {
+  time: number;
+  upperBound: number;
+  lowerBound: number;
+  midpoint: number;
+  confidence: number; // 0–1
+}
+
+// ─── Technical Indicators ────────────────────────────────────────────────────
+export interface Indicators {
+  rsi: number;          // 0–100
+  macd: number;
+  macdSignal: number;
+  macdHistogram: number;
+  regimeScore: number;  // -1 to 1 (bear/bull regime)
+  atr: number;
+  volume24h: number;
+}
+
+// ─── Alpha Signal ─────────────────────────────────────────────────────────────
+export type SignalDirection = "bullish" | "bearish" | "neutral";
+export type SignalStrength = "strong" | "moderate" | "weak";
+export type Timeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
+
+export interface AlphaSignal {
+  id: string;
+  timestamp: number;
+  ticker: string;
+  timeframe: Timeframe;
+  direction: SignalDirection;
+  strength: SignalStrength;
+  title: string;
+  description: string;
+  confidence: number; // 0–100
+  price: number;
+}
+
+// ─── Prediction ───────────────────────────────────────────────────────────────
+export interface Prediction {
+  ticker: string;
+  timeframe: Timeframe;
+  confidence: number;       // 0–100
+  direction: SignalDirection;
+  targetPrice: number;
+  targetTime: number;
+  probabilityUp: number;    // 0–1
+  probabilityDown: number;  // 0–1
+  bands: PredictiveBand[];
+}
+
+// ─── Asset / Ticker ───────────────────────────────────────────────────────────
+export interface Asset {
+  symbol: string;
+  name: string;
+  price: number;
+  change24h: number;
+  changePercent24h: number;
+  volume24h: number;
+  marketCap?: number;
+  type: "crypto" | "equity" | "forex";
+}
+
+// ─── WebSocket Messages ───────────────────────────────────────────────────────
+export type WSMessageType = "candle" | "signal" | "prediction" | "indicator" | "ticker";
+
+export interface WSMessage<T = unknown> {
+  type: WSMessageType;
+  data: T;
+  timestamp: number;
+}

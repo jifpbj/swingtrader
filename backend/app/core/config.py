@@ -1,0 +1,64 @@
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # ─── App ──────────────────────────────────────────────────────────────────
+    app_env: Literal["development", "production", "testing"] = "development"
+    app_host: str = "0.0.0.0"
+    app_port: int = 8000
+    log_level: str = "INFO"
+
+    # ─── Alpaca ───────────────────────────────────────────────────────────────
+    alpaca_api_key: str = Field(default="", alias="ALPACA_API_KEY")
+    alpaca_secret_key: str = Field(default="", alias="ALPACA_SECRET_KEY")
+    alpaca_base_url: str = "https://paper-api.alpaca.markets"
+    alpaca_data_url: str = "https://data.alpaca.markets"
+
+    # ─── Polygon ──────────────────────────────────────────────────────────────
+    polygon_api_key: str = Field(default="", alias="POLYGON_API_KEY")
+
+    # ─── Feature flags ────────────────────────────────────────────────────────
+    use_mock_data: bool = True
+    mock_tick_interval_ms: int = 1000
+
+    # ─── Analysis parameters ──────────────────────────────────────────────────
+    default_timeframe: str = "15Min"
+    default_lookback_bars: int = 200
+    rsi_period: int = 14
+    macd_fast: int = 12
+    macd_slow: int = 26
+    macd_signal: int = 9
+    bollinger_period: int = 20
+    bollinger_std: float = 2.0
+
+    @field_validator("log_level")
+    @classmethod
+    def normalise_log_level(cls, v: str) -> str:
+        return v.upper()
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env == "development"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        if self.is_development:
+            return ["http://localhost:3000", "http://127.0.0.1:3000"]
+        return []  # Lock down in production — set explicitly via env
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Cached singleton — import and call this everywhere."""
+    return Settings()

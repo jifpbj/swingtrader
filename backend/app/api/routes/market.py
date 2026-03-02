@@ -1,0 +1,335 @@
+"""
+REST API — Market data, indicators, predictions, signals.
+
+All endpoints are async, use DI for services, and return Pydantic models
+that FastAPI serialises to JSON automatically.
+"""
+
+from __future__ import annotations
+
+import time
+import uuid
+
+from fastapi import APIRouter, HTTPException, Query, status
+
+from app.api.dependencies import (
+    AnalysisEngineDep,
+    MarketDataDep,
+    PredictiveModelDep,
+)
+from app.core.logging import get_logger
+from app.models.schemas import (
+    AlphaSignal,
+    MarketRegime,
+    OHLCVResponse,
+    PriceProbabilityForecast,
+    SentimentSnapshot,
+    SignalDirection,
+    SignalStrength,
+    TechnicalIndicators,
+    Timeframe,
+)
+from app.services.cache import indicator_cache, ohlcv_cache, prediction_cache
+
+import pandas as pd
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/market", tags=["market"])
+
+
+# ─── OHLCV ───────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/ohlcv/{ticker}",
+    response_model=OHLCVResponse,
+    summary="Historical OHLCV bars",
+)
+async def get_ohlcv(
+    ticker: str,
+    svc: MarketDataDep,
+    timeframe: Timeframe = Query(default=Timeframe.M15),
+    limit: int = Query(default=200, ge=1, le=1000),
+) -> OHLCVResponse:
+    cache_key = f"ohlcv:{ticker}:{timeframe}:{limit}"
+    cached = await ohlcv_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit)
+    except Exception as exc:
+        logger.error("ohlcv_fetch_failed", ticker=ticker, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch OHLCV for {ticker}: {exc}",
+        ) from exc
+
+    result = OHLCVResponse(ticker=ticker.upper(), timeframe=timeframe, bars=bars)
+    await ohlcv_cache.set(cache_key, result)
+    return result
+
+
+# ─── Technical Indicators ────────────────────────────────────────────────────
+
+@router.get(
+    "/indicators/{ticker}",
+    response_model=TechnicalIndicators,
+    summary="RSI, MACD, Bollinger Bands, ATR, EMA",
+)
+async def get_indicators(
+    ticker: str,
+    svc: MarketDataDep,
+    engine: AnalysisEngineDep,
+    timeframe: Timeframe = Query(default=Timeframe.M15),
+) -> TechnicalIndicators:
+    cache_key = f"indicators:{ticker}:{timeframe}"
+    cached = await indicator_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
+    if len(bars) < 50:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Insufficient data: need ≥50 bars, got {len(bars)}",
+        )
+
+    df = _bars_to_df(bars)
+    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+    await indicator_cache.set(cache_key, indicators)
+    return indicators
+
+
+# ─── Market Regime ────────────────────────────────────────────────────────────
+
+@router.get(
+    "/regime/{ticker}",
+    response_model=MarketRegime,
+    summary="Composite Market Regime Score (0–100)",
+)
+async def get_regime(
+    ticker: str,
+    svc: MarketDataDep,
+    engine: AnalysisEngineDep,
+    timeframe: Timeframe = Query(default=Timeframe.M15),
+) -> MarketRegime:
+    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
+    if len(bars) < 50:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Insufficient data for regime calculation",
+        )
+
+    df = _bars_to_df(bars)
+    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+
+    # Mock sentiment — replace with real NLP pipeline
+    sentiment = SentimentSnapshot(
+        score=_mock_sentiment(ticker),
+        source="mock_nlp",
+        confidence=0.6,
+    )
+
+    regime = await engine.compute_regime(indicators, sentiment)
+    return regime
+
+
+# ─── Prediction ───────────────────────────────────────────────────────────────
+
+@router.get(
+    "/prediction/{ticker}",
+    response_model=PriceProbabilityForecast,
+    summary="AI price probability forecast",
+)
+async def get_prediction(
+    ticker: str,
+    svc: MarketDataDep,
+    engine: AnalysisEngineDep,
+    model: PredictiveModelDep,
+    timeframe: Timeframe = Query(default=Timeframe.M15),
+    horizon: int = Query(default=10, ge=1, le=50, description="Forward bars to project"),
+) -> PriceProbabilityForecast:
+    cache_key = f"prediction:{ticker}:{timeframe}:{horizon}"
+    cached = await prediction_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
+    if len(bars) < 50:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Insufficient data for prediction",
+        )
+
+    df = _bars_to_df(bars)
+    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+    forecast = await model.predict(indicators, timeframe, horizon_bars=horizon)
+
+    await prediction_cache.set(cache_key, forecast)
+    return forecast
+
+
+# ─── Signals ─────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/signals/{ticker}",
+    response_model=list[AlphaSignal],
+    summary="Latest AI-generated alpha signals",
+)
+async def get_signals(
+    ticker: str,
+    svc: MarketDataDep,
+    engine: AnalysisEngineDep,
+    model: PredictiveModelDep,
+    timeframe: Timeframe = Query(default=Timeframe.M15),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> list[AlphaSignal]:
+    bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit=200)
+    if len(bars) < 50:
+        return []
+
+    df = _bars_to_df(bars)
+    indicators = await engine.compute_indicators(df, ticker.upper(), timeframe)
+    forecast = await model.predict(indicators, timeframe)
+    regime = await engine.compute_regime(indicators)
+
+    signals = _derive_signals(indicators, forecast, regime, ticker.upper(), timeframe)
+    return signals[:limit]
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _bars_to_df(bars: list) -> pd.DataFrame:
+    """Convert list[Candle] → pandas DataFrame."""
+    return pd.DataFrame(
+        [
+            {
+                "time": b.time,
+                "open": b.open,
+                "high": b.high,
+                "low": b.low,
+                "close": b.close,
+                "volume": b.volume,
+            }
+            for b in bars
+        ]
+    ).set_index("time")
+
+
+def _mock_sentiment(ticker: str) -> float:
+    """
+    Placeholder sentiment score in [-1, 1].
+    Replace with a real NLP service (FinBERT, news API, social scraper).
+    """
+    # Deterministic per ticker so it doesn't change between calls
+    mapping = {
+        "BTC/USD": 0.25, "BTC/USDT": 0.25,
+        "ETH/USD": 0.18, "ETH/USDT": 0.18,
+        "SOL/USD": 0.40, "AAPL": 0.10,
+        "TSLA": -0.05, "NVDA": 0.35,
+    }
+    return mapping.get(ticker, 0.0)
+
+
+_SIGNAL_TEMPLATES = [
+    {
+        "condition": lambda ind, fc: ind.rsi < 30 and fc.direction == SignalDirection.BULLISH,
+        "title": "RSI Oversold Reversal",
+        "description": "RSI({rsi:.1f}) is in oversold territory with bullish model conviction.",
+        "direction": SignalDirection.BULLISH,
+        "strength": SignalStrength.STRONG,
+    },
+    {
+        "condition": lambda ind, fc: ind.rsi > 70 and fc.direction == SignalDirection.BEARISH,
+        "title": "RSI Overbought — Fade Signal",
+        "description": "RSI({rsi:.1f}) is overbought; model projects downside reversion.",
+        "direction": SignalDirection.BEARISH,
+        "strength": SignalStrength.STRONG,
+    },
+    {
+        "condition": lambda ind, fc: ind.macd.histogram > 0 and ind.macd.macd > ind.macd.signal,
+        "title": "MACD Golden Cross",
+        "description": "MACD line crossed above signal; histogram expanding ({hist:+.2f}).",
+        "direction": SignalDirection.BULLISH,
+        "strength": SignalStrength.MODERATE,
+    },
+    {
+        "condition": lambda ind, fc: ind.macd.histogram < 0 and ind.macd.macd < ind.macd.signal,
+        "title": "MACD Death Cross",
+        "description": "MACD below signal line; bearish momentum accelerating ({hist:+.2f}).",
+        "direction": SignalDirection.BEARISH,
+        "strength": SignalStrength.MODERATE,
+    },
+    {
+        "condition": lambda ind, fc: ind.bollinger.percent_b > 0.95,
+        "title": "Bollinger Band Squeeze — Upper Touch",
+        "description": "Price at {pct_b:.0%} of Bollinger Band — potential mean reversion.",
+        "direction": SignalDirection.BEARISH,
+        "strength": SignalStrength.WEAK,
+    },
+    {
+        "condition": lambda ind, fc: ind.bollinger.percent_b < 0.05,
+        "title": "Bollinger Band — Lower Touch",
+        "description": "Price at {pct_b:.0%} of Bollinger Band — potential bounce zone.",
+        "direction": SignalDirection.BULLISH,
+        "strength": SignalStrength.WEAK,
+    },
+    {
+        "condition": lambda ind, fc: ind.volume_ratio > 2.0 and fc.direction == SignalDirection.BULLISH,
+        "title": "Volume Surge — Bullish",
+        "description": "Volume {vol_ratio:.1f}x above SMA with bullish model bias.",
+        "direction": SignalDirection.BULLISH,
+        "strength": SignalStrength.STRONG,
+    },
+    {
+        "condition": lambda ind, fc: ind.trend_strength > 0.6,
+        "title": "Strong Uptrend Confirmed",
+        "description": "EMA-20 well above EMA-50; trend strength {trend:.2f}/1.0.",
+        "direction": SignalDirection.BULLISH,
+        "strength": SignalStrength.MODERATE,
+    },
+]
+
+
+def _derive_signals(
+    indicators: TechnicalIndicators,
+    forecast: PriceProbabilityForecast,
+    regime: MarketRegime,
+    ticker: str,
+    timeframe: Timeframe,
+) -> list[AlphaSignal]:
+    now = int(time.time())
+    signals: list[AlphaSignal] = []
+
+    for template in _SIGNAL_TEMPLATES:
+        try:
+            if not template["condition"](indicators, forecast):
+                continue
+        except Exception:
+            continue
+
+        desc = template["description"].format(
+            rsi=indicators.rsi,
+            hist=indicators.macd.histogram,
+            pct_b=indicators.bollinger.percent_b,
+            vol_ratio=indicators.volume_ratio,
+            trend=indicators.trend_strength,
+        )
+
+        signals.append(
+            AlphaSignal(
+                id=str(uuid.uuid4()),
+                timestamp=now,
+                ticker=ticker,
+                timeframe=timeframe,
+                direction=template["direction"],
+                strength=template["strength"],
+                title=template["title"],
+                description=desc,
+                confidence=forecast.confidence,
+                price=indicators.price,
+                indicators_snapshot=indicators,
+            )
+        )
+
+    return signals
