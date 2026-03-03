@@ -99,6 +99,6 @@ export interface BacktestPeriodResult {
 }
 export interface BacktestResult {
   ticker: string;
-  emaPeriod: number;
+  strategyLabel: string;
   periods: Record<BacktestPeriodKey, BacktestPeriodResult>;
 }

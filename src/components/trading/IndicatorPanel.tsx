@@ -5,13 +5,14 @@ import { useUIStore } from "@/store/useUIStore";
 import type { IndicatorTab } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
 
-const TABS: IndicatorTab[] = ["EMA", "BB", "RSI", "MACD"];
+const TABS: IndicatorTab[] = ["EMA", "BB", "RSI", "MACD", "TD9"];
 
 const TAB_STYLE: Record<IndicatorTab, { active: string; track: string; thumb: string }> = {
   EMA:  { active: "bg-amber-400/15 text-amber-400 border-amber-400/30",   track: "bg-amber-400/60",   thumb: "bg-amber-400" },
   BB:   { active: "bg-sky-400/15 text-sky-400 border-sky-400/30",         track: "bg-sky-400/60",     thumb: "bg-sky-400" },
   RSI:  { active: "bg-violet-400/15 text-violet-400 border-violet-400/30",track: "bg-violet-400/60",  thumb: "bg-violet-400" },
   MACD: { active: "bg-rose-400/15 text-rose-400 border-rose-400/30",      track: "bg-rose-400/60",    thumb: "bg-rose-400" },
+  TD9:  { active: "bg-emerald-400/15 text-emerald-400 border-emerald-400/30", track: "bg-emerald-400/60", thumb: "bg-emerald-400" },
 };
 
 function SliderRow({ label, value, min, max, step = 1, onChange, tab }: {
@@ -119,6 +120,23 @@ function MACDConfig() {
   );
 }
 
+function TD9Config() {
+  const showSignalMarkers = useUIStore(s => s.showSignalMarkers);
+  const setShowSignalMarkers = useUIStore(s => s.setShowSignalMarkers);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-emerald-400 size-3" />
+        <span className="text-[11px] text-zinc-300">Show TD9 completion markers</span>
+      </label>
+      <div className="text-[10px] text-zinc-500 leading-relaxed">
+        TD Sequential setup: counts when Close is below/above the Close 4 bars earlier. Markers trigger on count 9.
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function IndicatorPanel() {
@@ -151,6 +169,7 @@ export function IndicatorPanel() {
         {activeTab === "BB"   && <BBConfig />}
         {activeTab === "RSI"  && <RSIConfig />}
         {activeTab === "MACD" && <MACDConfig />}
+        {activeTab === "TD9"  && <TD9Config />}
       </div>
     </div>
   );

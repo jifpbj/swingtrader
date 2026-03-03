@@ -155,6 +155,86 @@ export function detectMACDCrossovers(candles: Candle[], macd: MACDPoint[]): Cros
   return signals;
 }
 
+// ─── Tom DeMark TD Sequential (Setup 1–9) ────────────────────────────────────
+export interface TDSequentialPoint {
+  time: number;
+  buySetup: number | null;  // 1..9 while active, else null
+  sellSetup: number | null; // 1..9 while active, else null
+}
+
+/**
+ * TD Sequential "Setup" counts.
+ * - Buy setup increments when close < close[lookback] (default lookback=4)
+ * - Sell setup increments when close > close[lookback]
+ * Counts reset to 0 when condition breaks; values are capped at `maxCount` (default 9).
+ */
+export function computeTDSequentialSetup(
+  candles: Candle[],
+  lookback: number = 4,
+  maxCount: number = 9
+): TDSequentialPoint[] {
+  const out: TDSequentialPoint[] = candles.map((c) => ({
+    time: c.time,
+    buySetup: null,
+    sellSetup: null,
+  }));
+
+  if (candles.length === 0 || lookback < 1 || maxCount < 1) return out;
+
+  let buy = 0;
+  let sell = 0;
+
+  for (let i = 0; i < candles.length; i++) {
+    if (i < lookback) continue;
+
+    const close = candles[i].close;
+    const prev = candles[i - lookback].close;
+
+    if (close < prev) {
+      buy = Math.min(buy + 1, maxCount);
+      sell = 0;
+    } else if (close > prev) {
+      sell = Math.min(sell + 1, maxCount);
+      buy = 0;
+    } else {
+      buy = 0;
+      sell = 0;
+    }
+
+    out[i].buySetup = buy > 0 ? buy : null;
+    out[i].sellSetup = sell > 0 ? sell : null;
+  }
+
+  return out;
+}
+
+/**
+ * Convenience: emits a signal when a setup completes (hits `setupCount`, default 9).
+ * - Buy setup completion => direction "entry"
+ * - Sell setup completion => direction "sell"
+ */
+export function detectTDSequentialSetupSignals(
+  candles: Candle[],
+  setupCount: number = 9,
+  lookback: number = 4
+): CrossoverSignal[] {
+  const points = computeTDSequentialSetup(candles, lookback, setupCount);
+  const signals: CrossoverSignal[] = [];
+
+  for (let i = 0; i < candles.length; i++) {
+    const p = points[i];
+    if (p.buySetup === setupCount) {
+      const prev = i > 0 ? points[i - 1].buySetup : null;
+      if (prev !== setupCount) signals.push({ time: candles[i].time, direction: "entry", price: candles[i].close });
+    } else if (p.sellSetup === setupCount) {
+      const prev = i > 0 ? points[i - 1].sellSetup : null;
+      if (prev !== setupCount) signals.push({ time: candles[i].time, direction: "sell", price: candles[i].close });
+    }
+  }
+
+  return signals;
+}
+
 // Simulates long-only EMA crossover strategy from fromTimestamp onwards
 function runBacktest(
   candles: Candle[],
@@ -215,10 +295,75 @@ function runBacktest(
   return { strategyReturn, holdReturn, tradeCount, winRate, maxDrawdown };
 }
 
-export function computeAllBacktests(
+function runSignalBacktest(
   candles: Candle[],
-  period: number,
-  ticker: string
+  fromTimestamp: number,
+  buildSignals: (slice: Candle[]) => CrossoverSignal[]
+): BacktestPeriodResult {
+  const slice = candles.filter((c) => c.time >= fromTimestamp);
+
+  const zero: BacktestPeriodResult = {
+    strategyReturn: 0,
+    holdReturn: 0,
+    tradeCount: 0,
+    winRate: 0,
+    maxDrawdown: 0,
+  };
+
+  if (slice.length < 2) return zero;
+
+  const signals = buildSignals(slice);
+
+  let inTrade = false;
+  let entryPrice = 0;
+  const gains: number[] = [];
+
+  for (const sig of signals) {
+    if (sig.direction === "entry" && !inTrade) {
+      inTrade = true;
+      entryPrice = sig.price;
+    } else if (sig.direction === "sell" && inTrade) {
+      gains.push((sig.price - entryPrice) / entryPrice);
+      inTrade = false;
+    }
+  }
+
+  if (inTrade) gains.push((slice[slice.length - 1].close - entryPrice) / entryPrice);
+
+  const tradeCount = gains.length;
+  const strategyReturn = gains.reduce((acc, g) => acc * (1 + g), 1) - 1;
+  const holdReturn = (slice[slice.length - 1].close / slice[0].open) - 1;
+  const wins = gains.filter((g) => g > 0).length;
+  const winRate = tradeCount === 0 ? 0 : wins / tradeCount;
+
+  let peak = 1;
+  let equity = 1;
+  let maxDrawdown = 0;
+  for (const g of gains) {
+    equity *= 1 + g;
+    if (equity > peak) peak = equity;
+    const dd = (equity - peak) / peak;
+    if (dd < maxDrawdown) maxDrawdown = dd;
+  }
+
+  return { strategyReturn, holdReturn, tradeCount, winRate, maxDrawdown };
+}
+
+export type BacktestStrategy = "EMA" | "RSI" | "MACD" | "TD9" | "BB";
+
+export function computeStrategyBacktests(
+  candles: Candle[],
+  strategy: BacktestStrategy,
+  ticker: string,
+  params: {
+    emaPeriod: number;
+    rsiPeriod: number;
+    rsiOverbought: number;
+    rsiOversold: number;
+    macdFast: number;
+    macdSlow: number;
+    macdSignal: number;
+  }
 ): BacktestResult {
   const now = Math.floor(Date.now() / 1000);
   const currentYear = new Date().getUTCFullYear();
@@ -231,9 +376,58 @@ export function computeAllBacktests(
   };
 
   const periods = {} as Record<BacktestPeriodKey, BacktestPeriodResult>;
+
+  const buildSignals = (slice: Candle[]): CrossoverSignal[] => {
+    const closes = slice.map((c) => c.close);
+    switch (strategy) {
+      case "EMA": {
+        const emas = computeEMA(closes, params.emaPeriod);
+        return detectCrossovers(slice, emas);
+      }
+      case "RSI": {
+        const rsi = computeRSI(closes, params.rsiPeriod);
+        return detectRSICrossovers(slice, rsi, params.rsiOverbought, params.rsiOversold);
+      }
+      case "MACD": {
+        const macd = computeMACDValues(closes, params.macdFast, params.macdSlow, params.macdSignal);
+        return detectMACDCrossovers(slice, macd);
+      }
+      case "TD9":
+        return detectTDSequentialSetupSignals(slice, 9, 4);
+      case "BB":
+        return [];
+    }
+  };
+
   for (const key of ["1M", "6M", "YTD", "1Y"] as BacktestPeriodKey[]) {
-    periods[key] = runBacktest(candles, period, periodStarts[key]);
+    // Keep EMA behavior requiring enough bars for the EMA period; other strategies just need 2+ bars.
+    if (strategy === "EMA") periods[key] = runBacktest(candles, params.emaPeriod, periodStarts[key]);
+    else periods[key] = runSignalBacktest(candles, periodStarts[key], buildSignals);
   }
 
-  return { ticker, emaPeriod: period, periods };
+  const strategyLabel =
+    strategy === "EMA"  ? `EMA(${params.emaPeriod})` :
+    strategy === "RSI"  ? `RSI(${params.rsiPeriod})` :
+    strategy === "MACD" ? `MACD(${params.macdFast},${params.macdSlow},${params.macdSignal})` :
+    strategy === "TD9"  ? "TD Sequential 9" :
+    "BB";
+
+  return { ticker, strategyLabel, periods };
+}
+
+// Backwards-compatible wrapper (EMA)
+export function computeAllBacktests(
+  candles: Candle[],
+  period: number,
+  ticker: string
+): BacktestResult {
+  return computeStrategyBacktests(candles, "EMA", ticker, {
+    emaPeriod: period,
+    rsiPeriod: 14,
+    rsiOverbought: 70,
+    rsiOversold: 30,
+    macdFast: 12,
+    macdSlow: 26,
+    macdSignal: 9,
+  });
 }

@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { AlphaSignal, Indicators, Prediction, Timeframe } from "@/types/market";
 
-export type IndicatorTab = "EMA" | "BB" | "RSI" | "MACD";
+export type IndicatorTab = "EMA" | "BB" | "RSI" | "MACD" | "TD9";
 
 interface UIState {
   // ─── Active asset

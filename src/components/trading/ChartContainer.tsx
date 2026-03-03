@@ -10,6 +10,7 @@ import {
   computeBollingerBands,
   computeRSI, detectRSICrossovers,
   computeMACDValues, detectMACDCrossovers,
+  computeTDSequentialSetup,
 } from "@/lib/indicators";
 import type { Candle, Prediction, PredictiveBand, CrossoverSignal } from "@/types/market";
 import { Maximize2, EyeOff, Eye, RefreshCw } from "lucide-react";
@@ -18,7 +19,7 @@ import { toBackendTf } from "@/lib/timeframeConvert";
 
 import type {
   IChartApi, ISeriesApi, UTCTimestamp, Time,
-  ISeriesMarkersPluginApi, SeriesMarker,
+  ISeriesMarkersPluginApi, SeriesMarker, IPriceLine,
 } from "lightweight-charts";
 
 interface CandleTooltip {
@@ -52,6 +53,62 @@ function buildMarkers(crossovers: CrossoverSignal[]): SeriesMarker<Time>[] {
   }));
 }
 
+function buildTD9Markers(candles: Candle[]): SeriesMarker<Time>[] {
+  const points = computeTDSequentialSetup(candles, 4, 9);
+  const markers: SeriesMarker<Time>[] = [];
+
+  for (let i = 0; i < candles.length; i++) {
+    const p = points[i];
+    if (!p) continue;
+
+    if (p.buySetup !== null) {
+      if (p.buySetup >= 6 && p.buySetup <= 8) {
+        markers.push({
+          time: candles[i].time as UTCTimestamp,
+          position: "belowBar",
+          color: "#22c55e",
+          shape: "circle",
+          text: String(p.buySetup),
+          size: 1,
+        });
+      } else if (p.buySetup === 9) {
+        markers.push({
+          time: candles[i].time as UTCTimestamp,
+          position: "belowBar",
+          color: "#22c55e",
+          shape: "arrowUp",
+          text: "BUY 9",
+          size: 1,
+        });
+      }
+    }
+
+    if (p.sellSetup !== null) {
+      if (p.sellSetup >= 6 && p.sellSetup <= 8) {
+        markers.push({
+          time: candles[i].time as UTCTimestamp,
+          position: "aboveBar",
+          color: "#ef4444",
+          shape: "circle",
+          text: String(p.sellSetup),
+          size: 1,
+        });
+      } else if (p.sellSetup === 9) {
+        markers.push({
+          time: candles[i].time as UTCTimestamp,
+          position: "aboveBar",
+          color: "#ef4444",
+          shape: "arrowDown",
+          text: "SELL 9",
+          size: 1,
+        });
+      }
+    }
+  }
+
+  return markers;
+}
+
 function computeMarkersForTab(
   candles: Candle[], tab: IndicatorTab,
   emaPeriod: number,
@@ -64,6 +121,7 @@ function computeMarkersForTab(
     case "RSI":  return detectRSICrossovers(candles, computeRSI(closes, rsiPeriod), rsiOverbought, rsiOversold);
     case "MACD": return detectMACDCrossovers(candles, computeMACDValues(closes, macdFast, macdSlow, macdSignal));
     case "BB":   return []; // BB uses band overlay, not markers
+    case "TD9":  return [];
   }
 }
 
@@ -80,6 +138,12 @@ export function ChartContainer() {
   const bbLowerRef = useRef<ISeriesApi<"Line"> | null>(null);
   const bbMiddleRef = useRef<ISeriesApi<"Line"> | null>(null);
   const candlesRef = useRef<Candle[]>([]);
+  const rsiSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const rsiObLineRef = useRef<IPriceLine | null>(null);
+  const rsiOsLineRef = useRef<IPriceLine | null>(null);
+  const macdLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const macdSignalSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const macdHistSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
   const [chartReady, setChartReady] = useState(false);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
@@ -166,6 +230,23 @@ export function ChartContainer() {
       const bbMiddle = chart.addSeries(lc.LineSeries, { color: "rgba(56,189,248,0.3)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
       bbMiddleRef.current = bbMiddle;
 
+      // Sub-pane 1 — RSI
+      const rsiSeries = chart.addSeries(lc.LineSeries, { color: "#a78bfa", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
+      rsiSeriesRef.current = rsiSeries;
+      rsiObLineRef.current = rsiSeries.createPriceLine({ price: 70, color: "rgba(167,139,250,0.35)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: false, lineVisible: false });
+      rsiOsLineRef.current = rsiSeries.createPriceLine({ price: 30, color: "rgba(167,139,250,0.35)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: false, lineVisible: false });
+
+      // Sub-pane 1 — MACD line + signal + histogram
+      const macdLineSeries = chart.addSeries(lc.LineSeries, { color: "#fb7185", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
+      macdLineSeriesRef.current = macdLineSeries;
+      const macdSignalSeries = chart.addSeries(lc.LineSeries, { color: "#fb923c", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
+      macdSignalSeriesRef.current = macdSignalSeries;
+      const macdHistSeries = chart.addSeries(lc.HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 1);
+      macdHistSeriesRef.current = macdHistSeries;
+
+      // Sub-pane starts minimized (EMA is default active tab)
+      chart.panes()[1]?.setHeight(30);
+
       // Seed historical data
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
       let initialCandles: Candle[] = [];
@@ -213,7 +294,9 @@ export function ChartContainer() {
       mounted = false; ro.disconnect(); chartRef.current?.remove();
       chartRef.current = candleSeriesRef.current = upperBandRef.current = lowerBandRef.current =
       midLineRef.current = emaSeriesRef.current = markerPluginRef.current =
-      bbUpperRef.current = bbLowerRef.current = bbMiddleRef.current = null;
+      bbUpperRef.current = bbLowerRef.current = bbMiddleRef.current =
+      rsiSeriesRef.current = rsiObLineRef.current = rsiOsLineRef.current =
+      macdLineSeriesRef.current = macdSignalSeriesRef.current = macdHistSeriesRef.current = null;
       setChartReady(false);
     };
   }, [ticker]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -274,6 +357,12 @@ export function ChartContainer() {
         }
         break;
       }
+      case "TD9": {
+        if (showSignalMarkers) {
+          markerPluginRef.current?.setMarkers(buildTD9Markers(candles));
+        }
+        break;
+      }
     }
   }, [
     chartReady, activeIndicatorTab, showSignalMarkers,
@@ -317,6 +406,11 @@ export function ChartContainer() {
         }
       }
 
+      // Incremental TD9 marker update (on new bars)
+      if (activeTabRef.current === "TD9" && isNewBar && showMarkersRef.current && markerPluginRef.current) {
+        markerPluginRef.current.setMarkers(buildTD9Markers(arr));
+      }
+
       setLastPrice(prev => { if (prev !== null) setPriceChange(candle.close - prev); return candle.close; });
 
       if (showOverlay) {
@@ -349,6 +443,7 @@ export function ChartContainer() {
       case "BB":   return `BB(${bbPeriod}, ${bbStdDev})`;
       case "RSI":  return `RSI(${rsiPeriod}) signals`;
       case "MACD": return `MACD(${macdFastPeriod},${macdSlowPeriod},${macdSignalPeriod}) signals`;
+      case "TD9":  return "TD Sequential 9 signals";
     }
   };
   const legendLine = activeIndicatorTab === "EMA" ? "solid-amber" : activeIndicatorTab === "BB" ? "solid-sky" : "markers-only";

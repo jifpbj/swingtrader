@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
 import { generateMockDailyCandles } from "@/hooks/useMockData";
-import { computeAllBacktests } from "@/lib/indicators";
+import { computeStrategyBacktests } from "@/lib/indicators";
 import type { Candle, BacktestResult, BacktestPeriodKey } from "@/types/market";
 import { formatPercent } from "@/lib/utils";
 import { BarChart2 } from "lucide-react";
@@ -14,6 +14,13 @@ const PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
 export function BacktestPanel() {
   const ticker = useUIStore((s) => s.ticker);
   const emaPeriod = useUIStore((s) => s.emaPeriod);
+  const activeIndicatorTab = useUIStore((s) => s.activeIndicatorTab);
+  const rsiPeriod = useUIStore((s) => s.rsiPeriod);
+  const rsiOverbought = useUIStore((s) => s.rsiOverbought);
+  const rsiOversold = useUIStore((s) => s.rsiOversold);
+  const macdFastPeriod = useUIStore((s) => s.macdFastPeriod);
+  const macdSlowPeriod = useUIStore((s) => s.macdSlowPeriod);
+  const macdSignalPeriod = useUIStore((s) => s.macdSignalPeriod);
 
   const [candles, setCandles] = useState<Candle[]>([]);
   const [result, setResult] = useState<BacktestResult | null>(null);
@@ -40,8 +47,29 @@ export function BacktestPanel() {
   // Recompute backtest whenever candles or period changes
   useEffect(() => {
     if (!candles.length) return;
-    setResult(computeAllBacktests(candles, emaPeriod, ticker));
-  }, [candles, emaPeriod, ticker]);
+    setResult(computeStrategyBacktests(
+      candles,
+      // Keep tab values aligned with computeStrategyBacktests's BacktestStrategy union
+      (activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab) as "EMA" | "BB" | "RSI" | "MACD" | "TD9",
+      ticker,
+      {
+        emaPeriod,
+        rsiPeriod,
+        rsiOverbought,
+        rsiOversold,
+        macdFast: macdFastPeriod,
+        macdSlow: macdSlowPeriod,
+        macdSignal: macdSignalPeriod,
+      }
+    ));
+  }, [
+    candles,
+    ticker,
+    activeIndicatorTab,
+    emaPeriod,
+    rsiPeriod, rsiOverbought, rsiOversold,
+    macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
+  ]);
 
   const oneYearResult = result?.periods["1Y"];
 
@@ -54,7 +82,7 @@ export function BacktestPanel() {
           <span className="text-xs font-semibold text-zinc-200">Backtest</span>
         </div>
         <span className="text-[10px] text-zinc-500 font-mono">
-          EMA({emaPeriod})·Daily
+          {result?.strategyLabel ?? `EMA(${emaPeriod})`}·Daily
         </span>
       </div>
 
@@ -75,7 +103,7 @@ export function BacktestPanel() {
                 {PERIOD_KEYS.map((key) => {
                   const p = result.periods[key];
                   return (
-                    <tr key={key} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                    <tr key={key} className="border-b border-white/3 hover:bg-white/2">
                       <td className="px-2 py-1.5 font-mono text-zinc-400">{key}</td>
                       <td className={cn(
                         "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
