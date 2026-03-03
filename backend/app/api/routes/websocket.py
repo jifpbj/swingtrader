@@ -156,7 +156,7 @@ async def _run_stream(
     SIGNAL_EVERY = 20
 
     try:
-        async for candle in svc.stream_ticks(ticker, tick_interval):
+        async for candle in svc.stream_ticks(ticker, timeframe, tick_interval):
             # Stop quickly if there are no listeners left.
             async with _streams_lock:
                 state = _streams.get(key)
@@ -273,7 +273,7 @@ async def _run_stream(
 
 # ─── WebSocket route ──────────────────────────────────────────────────────────
 
-@router.websocket("/ws/trades/{ticker}")
+@router.websocket("/ws/trades/{ticker:path}")
 async def ws_trades(
     websocket: WebSocket,
     ticker: str,

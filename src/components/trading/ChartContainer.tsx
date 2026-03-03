@@ -15,7 +15,7 @@ import {
 import type { Candle, Prediction, PredictiveBand, CrossoverSignal } from "@/types/market";
 import { Maximize2, EyeOff, Eye, RefreshCw } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
-import { toBackendTf } from "@/lib/timeframeConvert";
+import { TIMEFRAME_SECONDS, toBackendTf } from "@/lib/timeframeConvert";
 
 import type {
   IChartApi, ISeriesApi, UTCTimestamp, Time,
@@ -231,13 +231,13 @@ export function ChartContainer() {
       bbMiddleRef.current = bbMiddle;
 
       // Sub-pane 1 — RSI
-      const rsiSeries = chart.addSeries(lc.LineSeries, { color: "#a78bfa", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
+      const rsiSeries = chart.addSeries(lc.LineSeries, { color: "#a78bfa", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
       rsiSeriesRef.current = rsiSeries;
       rsiObLineRef.current = rsiSeries.createPriceLine({ price: 70, color: "rgba(167,139,250,0.35)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: false, lineVisible: false });
       rsiOsLineRef.current = rsiSeries.createPriceLine({ price: 30, color: "rgba(167,139,250,0.35)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: false, lineVisible: false });
 
       // Sub-pane 1 — MACD line + signal + histogram
-      const macdLineSeries = chart.addSeries(lc.LineSeries, { color: "#fb7185", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
+      const macdLineSeries = chart.addSeries(lc.LineSeries, { color: "#fb7185", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
       macdLineSeriesRef.current = macdLineSeries;
       const macdSignalSeries = chart.addSeries(lc.LineSeries, { color: "#fb923c", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
       macdSignalSeriesRef.current = macdSignalSeries;
@@ -299,7 +299,7 @@ export function ChartContainer() {
       macdLineSeriesRef.current = macdSignalSeriesRef.current = macdHistSeriesRef.current = null;
       setChartReady(false);
     };
-  }, [ticker]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ticker, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Toggle AI overlay ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -415,13 +415,13 @@ export function ChartContainer() {
 
       if (showOverlay) {
         const halfRange = candle.close * 0.01;
-        const nextTime = (candle.time + 15 * 60) as UTCTimestamp;
+        const nextTime = (candle.time + TIMEFRAME_SECONDS[timeframe]) as UTCTimestamp;
         upperBandRef.current?.update({ time: nextTime, value: candle.close + halfRange });
         lowerBandRef.current?.update({ time: nextTime, value: candle.close - halfRange });
         midLineRef.current?.update({ time: nextTime, value: candle.close });
       }
     });
-  }, [showOverlay]);
+  }, [showOverlay, timeframe]);
 
   const handlePrediction = useCallback((prediction: Prediction) => {
     if (!showOverlay) return;

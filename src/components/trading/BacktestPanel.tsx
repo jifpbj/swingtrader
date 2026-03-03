@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
-import { generateMockDailyCandles } from "@/hooks/useMockData";
+import { generateMockCandles, generateMockDailyCandles } from "@/hooks/useMockData";
 import { computeStrategyBacktests } from "@/lib/indicators";
 import type { Candle, BacktestResult, BacktestPeriodKey } from "@/types/market";
 import { formatPercent } from "@/lib/utils";
 import { BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toBackendTf } from "@/lib/timeframeConvert";
 
 const PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
 
 export function BacktestPanel() {
   const ticker = useUIStore((s) => s.ticker);
+  const timeframe = useUIStore((s) => s.timeframe);
   const emaPeriod = useUIStore((s) => s.emaPeriod);
   const activeIndicatorTab = useUIStore((s) => s.activeIndicatorTab);
   const rsiPeriod = useUIStore((s) => s.rsiPeriod);
@@ -34,13 +36,15 @@ export function BacktestPanel() {
     maximumFractionDigits: 0,
   });
 
-  // Fetch daily bars; fallback to mock on error
+  // Fetch timeframe bars; fallback to mock on error
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const encodedTicker = encodeURIComponent(ticker);
+    const backendTimeframe = toBackendTf(timeframe);
+    const limit = timeframe === "1d" ? 365 : 1000;
 
     fetch(
-      `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=1Day&limit=365`,
+      `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=${backendTimeframe}&limit=${limit}`,
     )
       .then((res) => {
         if (!res.ok) throw new Error("fetch failed");
@@ -48,12 +52,13 @@ export function BacktestPanel() {
       })
       .then((json) => {
         const bars = json.bars ?? [];
-        setCandles(bars.length >= 10 ? bars : generateMockDailyCandles(252));
+        const fallback = timeframe === "1d" ? generateMockDailyCandles(252) : generateMockCandles(500);
+        setCandles(bars.length >= 10 ? bars : fallback);
       })
       .catch(() => {
-        setCandles(generateMockDailyCandles(252));
+        setCandles(timeframe === "1d" ? generateMockDailyCandles(252) : generateMockCandles(500));
       });
-  }, [ticker]);
+  }, [ticker, timeframe]);
 
   // Recompute backtest whenever candles or period changes
   useEffect(() => {
@@ -108,7 +113,7 @@ export function BacktestPanel() {
           <span className="text-xs font-semibold text-zinc-200">Backtest</span>
         </div>
         <span className="text-[10px] text-zinc-500 font-mono">
-          {result?.strategyLabel ?? `EMA(${emaPeriod})`}·Daily
+          {result?.strategyLabel ?? `EMA(${emaPeriod})`}·{timeframe.toUpperCase()}
         </span>
       </div>
 
@@ -175,11 +180,9 @@ export function BacktestPanel() {
                     initialInvestment * (1 + p.strategyReturn);
                   const profitLoss = strategyValue - initialInvestment;
                   const strategyColor =
-                    p.strategyReturn < 0
-                      ? "text-red-400"
-                      : p.strategyReturn > p.holdReturn
-                        ? "text-emerald-400"
-                        : "text-zinc-100";
+                    p.strategyReturn > p.holdReturn
+                      ? "text-emerald-400"
+                      : "text-red-400";
                   return (
                     <tr
                       key={key}

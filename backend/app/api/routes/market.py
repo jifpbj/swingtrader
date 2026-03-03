@@ -40,7 +40,7 @@ router = APIRouter(prefix="/market", tags=["market"])
 # ─── OHLCV ───────────────────────────────────────────────────────────────────
 
 @router.get(
-    "/ohlcv/{ticker}",
+    "/ohlcv/{ticker:path}",
     response_model=OHLCVResponse,
     summary="Historical OHLCV bars",
 )
@@ -72,7 +72,7 @@ async def get_ohlcv(
 # ─── Technical Indicators ────────────────────────────────────────────────────
 
 @router.get(
-    "/indicators/{ticker}",
+    "/indicators/{ticker:path}",
     response_model=TechnicalIndicators,
     summary="RSI, MACD, Bollinger Bands, ATR, EMA",
 )
@@ -95,7 +95,7 @@ async def get_indicators(
 # ─── Market Regime ────────────────────────────────────────────────────────────
 
 @router.get(
-    "/regime/{ticker}",
+    "/regime/{ticker:path}",
     response_model=MarketRegime,
     summary="Composite Market Regime Score (0–100)",
 )
@@ -121,7 +121,7 @@ async def get_regime(
 # ─── Prediction ───────────────────────────────────────────────────────────────
 
 @router.get(
-    "/prediction/{ticker}",
+    "/prediction/{ticker:path}",
     response_model=PriceProbabilityForecast,
     summary="AI price probability forecast",
 )
@@ -148,7 +148,7 @@ async def get_prediction(
 # ─── Signals ─────────────────────────────────────────────────────────────────
 
 @router.get(
-    "/signals/{ticker}",
+    "/signals/{ticker:path}",
     response_model=list[AlphaSignal],
     summary="Latest AI-generated alpha signals",
 )

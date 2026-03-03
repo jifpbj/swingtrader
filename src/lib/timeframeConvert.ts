@@ -10,6 +10,16 @@ export const BACKEND_TF: Record<Timeframe, string> = {
   "1d":  "1Day",
 };
 
+/** Frontend timeframe length in seconds */
+export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
+  "1m": 60,
+  "5m": 300,
+  "15m": 900,
+  "1h": 3600,
+  "4h": 14400,
+  "1d": 86400,
+};
+
 /** Backend Timeframe enum value → frontend Timeframe (e.g. "15Min" → "15m") */
 export const FRONTEND_TF: Record<string, Timeframe> = {
   "1Min":  "1m",

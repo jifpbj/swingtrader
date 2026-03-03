@@ -379,13 +379,14 @@ export function computeStrategyBacktests(
   }
 ): BacktestResult {
   const now = Math.floor(Date.now() / 1000);
-  const currentYear = new Date().getUTCFullYear();
+  const endTimestamp = candles[candles.length - 1]?.time ?? now;
+  const endYear = new Date(endTimestamp * 1000).getUTCFullYear();
 
   const periodStarts: Record<BacktestPeriodKey, number> = {
-    "1M":  now - 21 * 86400,
-    "6M":  now - 126 * 86400,
-    "YTD": Math.floor(Date.UTC(currentYear, 0, 1) / 1000),
-    "1Y":  now - 252 * 86400,
+    "1M":  endTimestamp - 21 * 86400,
+    "6M":  endTimestamp - 126 * 86400,
+    "YTD": Math.floor(Date.UTC(endYear, 0, 1) / 1000),
+    "1Y":  endTimestamp - 252 * 86400,
   };
 
   const periods = {} as Record<BacktestPeriodKey, BacktestPeriodResult>;

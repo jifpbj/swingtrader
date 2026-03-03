@@ -74,6 +74,7 @@ class MarketDataService(ABC):
     async def stream_ticks(
         self,
         ticker: str,
+        timeframe: Timeframe,
         interval_seconds: float,
     ) -> AsyncIterator[Candle]:
         """
@@ -114,10 +115,11 @@ class MockMarketDataService(MarketDataService):
     async def stream_ticks(
         self,
         ticker: str,
+        timeframe: Timeframe,
         interval_seconds: float = 1.0,
     ) -> AsyncIterator[Candle]:
         price = self._prices.get(ticker, _SEED_PRICES.get(ticker, 100.0))
-        bar_seconds = max(1, int(interval_seconds))
+        bar_seconds = TIMEFRAME_SECONDS.get(timeframe, 60)
 
         while True:
             await asyncio.sleep(interval_seconds)
@@ -151,7 +153,7 @@ class MockMarketDataService(MarketDataService):
         self, ticker: str, timeframe: Timeframe, limit: int
     ) -> list[Candle]:
         seed_price = _SEED_PRICES.get(ticker, 100.0)
-        bar_seconds = _TIMEFRAME_SECONDS.get(timeframe, 900)
+        bar_seconds = TIMEFRAME_SECONDS.get(timeframe, 900)
         now = int(time.time())
 
         # Deterministic seed based on ticker so history is stable
@@ -297,18 +299,29 @@ class AlpacaMarketDataService(MarketDataService):
     async def stream_ticks(
         self,
         ticker: str,
+        timeframe: Timeframe,
         interval_seconds: float = 1.0,
     ) -> AsyncIterator[Candle]:
         """
         Polls the latest bar on each interval.
         For true streaming, integrate alpaca-py's DataStream client here.
         """
-        bar_seconds = max(1, int(interval_seconds))
+        last_sig: tuple[int, float, float, float, float] | None = None
         while True:
             await asyncio.sleep(interval_seconds)
             try:
-                bars = await self.get_ohlcv(ticker, Timeframe.M1, limit=1)
+                bars = await self.get_ohlcv(ticker, timeframe, limit=1)
                 if bars:
-                    yield bars[-1]
+                    latest = bars[-1]
+                    sig = (
+                        latest.time,
+                        latest.open,
+                        latest.high,
+                        latest.low,
+                        latest.close,
+                    )
+                    if sig != last_sig:
+                        last_sig = sig
+                        yield latest
             except Exception as exc:
                 logger.warning("alpaca_stream_error", ticker=ticker, error=str(exc))
