@@ -362,6 +362,11 @@ function runSignalBacktest(
 
 export type BacktestStrategy = "EMA" | "RSI" | "MACD" | "TD9" | "BB";
 
+// Crypto trades 24/7; bars per calendar day per timeframe
+const BARS_PER_DAY: Record<string, number> = {
+  "1m": 1440, "5m": 288, "15m": 96, "1h": 24, "4h": 6, "1d": 1,
+};
+
 export function computeStrategyBacktests(
   candles: Candle[],
   strategy: BacktestStrategy,
@@ -376,17 +381,32 @@ export function computeStrategyBacktests(
     macdFast: number;
     macdSlow: number;
     macdSignal: number;
-  }
+  },
+  timeframe = "1d",
 ): BacktestResult {
-  const now = Math.floor(Date.now() / 1000);
-  const endTimestamp = candles[candles.length - 1]?.time ?? now;
-  const endYear = new Date(endTimestamp * 1000).getUTCFullYear();
+  const n = candles.length;
+  const lastTs = candles[n - 1]?.time ?? Math.floor(Date.now() / 1000);
+  const endYear = new Date(lastTs * 1000).getUTCFullYear();
+
+  // Scale trading-day counts to actual bar counts for the current timeframe.
+  // This ensures each period covers a distinct subset of candles regardless of
+  // how much history is available — e.g. for 15m data, "1M" = last 21×96 bars.
+  const bpd = BARS_PER_DAY[timeframe] ?? 96;
+
+  function periodStartTs(tradingDays: number): number {
+    const barCount = Math.round(tradingDays * bpd);
+    const idx = Math.max(0, n - 1 - Math.min(barCount, n - 1));
+    return candles[idx].time;
+  }
+
+  const ytdTs = Math.floor(Date.UTC(endYear, 0, 1) / 1000);
+  const ytdIdx = candles.findIndex((c) => c.time >= ytdTs);
 
   const periodStarts: Record<BacktestPeriodKey, number> = {
-    "1M":  endTimestamp - 21 * 86400,
-    "6M":  endTimestamp - 126 * 86400,
-    "YTD": Math.floor(Date.UTC(endYear, 0, 1) / 1000),
-    "1Y":  endTimestamp - 252 * 86400,
+    "1M":  periodStartTs(21),
+    "6M":  periodStartTs(126),
+    "YTD": ytdIdx >= 0 ? candles[ytdIdx].time : candles[0].time,
+    "1Y":  periodStartTs(252),
   };
 
   const periods = {} as Record<BacktestPeriodKey, BacktestPeriodResult>;

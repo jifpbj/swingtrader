@@ -12,11 +12,24 @@ function seededRand(seed: number) {
   };
 }
 
-export function generateMockCandles(count = 200, basePrice = 67_000): Candle[] {
+const TF_INTERVAL_SECS: Record<string, number> = {
+  "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400,
+};
+
+export function generateMockCandlesForTimeframe(
+  count: number,
+  timeframe: string,
+  basePrice = 67_000,
+): Candle[] {
+  if (timeframe === "1d") return generateMockDailyCandles(count, basePrice);
+  return generateMockCandles(count, basePrice, TF_INTERVAL_SECS[timeframe] ?? 900);
+}
+
+export function generateMockCandles(count = 200, basePrice = 67_000, intervalSecs = 15 * 60): Candle[] {
   const rand = seededRand(42);
   const candles: Candle[] = [];
   const now = Math.floor(Date.now() / 1000);
-  const interval = 15 * 60; // 15m
+  const interval = intervalSecs;
 
   let price = basePrice;
   for (let i = count - 1; i >= 0; i--) {

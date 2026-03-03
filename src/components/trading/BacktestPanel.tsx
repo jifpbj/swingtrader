@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
-import { generateMockCandles, generateMockDailyCandles } from "@/hooks/useMockData";
+import { generateMockCandlesForTimeframe } from "@/hooks/useMockData";
 import { computeStrategyBacktests } from "@/lib/indicators";
 import type { Candle, BacktestResult, BacktestPeriodKey } from "@/types/market";
 import { formatPercent } from "@/lib/utils";
@@ -36,12 +36,16 @@ export function BacktestPanel() {
     maximumFractionDigits: 0,
   });
 
-  // Fetch timeframe bars; fallback to mock on error
+  // Fetch timeframe bars; fallback to mock on error.
+  // Limit is sized to cover 1Y of bars for the current timeframe (capped at 5000).
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const encodedTicker = encodeURIComponent(ticker);
     const backendTimeframe = toBackendTf(timeframe);
-    const limit = timeframe === "1d" ? 365 : 1000;
+    const BPD: Record<string, number> = {
+      "1m": 1440, "5m": 288, "15m": 96, "1h": 24, "4h": 6, "1d": 1,
+    };
+    const limit = Math.min(Math.ceil(252 * (BPD[timeframe] ?? 96)) + 50, 5000);
 
     fetch(
       `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=${backendTimeframe}&limit=${limit}`,
@@ -52,11 +56,10 @@ export function BacktestPanel() {
       })
       .then((json) => {
         const bars = json.bars ?? [];
-        const fallback = timeframe === "1d" ? generateMockDailyCandles(252) : generateMockCandles(500);
-        setCandles(bars.length >= 10 ? bars : fallback);
+        setCandles(bars.length >= 10 ? bars : generateMockCandlesForTimeframe(limit, timeframe));
       })
       .catch(() => {
-        setCandles(timeframe === "1d" ? generateMockDailyCandles(252) : generateMockCandles(500));
+        setCandles(generateMockCandlesForTimeframe(limit, timeframe));
       });
   }, [ticker, timeframe]);
 
@@ -66,7 +69,6 @@ export function BacktestPanel() {
     setResult(
       computeStrategyBacktests(
         candles,
-        // Keep tab values aligned with computeStrategyBacktests's BacktestStrategy union
         (activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab) as
           | "EMA"
           | "BB"
@@ -85,6 +87,7 @@ export function BacktestPanel() {
           macdSlow: macdSlowPeriod,
           macdSignal: macdSignalPeriod,
         },
+        timeframe,
       ),
     );
   }, [
