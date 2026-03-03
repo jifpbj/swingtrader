@@ -37,10 +37,6 @@ interface UIState {
   wsConnected: boolean;
   setWsConnected: (connected: boolean) => void;
 
-  // ─── Layout
-  showPredictiveOverlay: boolean;
-  togglePredictiveOverlay: () => void;
-
   // ─── Confidence score
   confidenceScore: number;
   setConfidenceScore: (score: number) => void;
@@ -111,9 +107,6 @@ export const useUIStore = create<UIState>()(
 
     wsConnected: false,
     setWsConnected: (wsConnected) => set({ wsConnected }),
-
-    showPredictiveOverlay: true,
-    togglePredictiveOverlay: () => set((s) => ({ showPredictiveOverlay: !s.showPredictiveOverlay })),
 
     confidenceScore: 0,
     setConfidenceScore: (confidenceScore) => set({ confidenceScore }),

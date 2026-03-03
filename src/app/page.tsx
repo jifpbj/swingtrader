@@ -5,7 +5,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ChartContainer } from "@/components/trading/ChartContainer";
 import { IndicatorRibbon } from "@/components/trading/IndicatorRibbon";
-import { PredictiveGauge } from "@/components/analysis/PredictiveGauge";
 import { BacktestPanel } from "@/components/trading/BacktestPanel";
 import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
@@ -84,9 +83,6 @@ export default function TradingDashboard() {
             className="flex flex-col gap-3 shrink-0 overflow-y-auto min-w-[300px] max-w-[65vw]"
             style={{ width: `${rightPanelWidth}px` }}
           >
-            {/* Predictive Gauge */}
-            <PredictiveGauge />
-
             {/* Indicator config + Backtest — adjacent */}
             <IndicatorPanel />
             <BacktestPanel />

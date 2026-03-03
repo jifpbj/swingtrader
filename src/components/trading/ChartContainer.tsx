@@ -12,10 +12,10 @@ import {
   computeMACDValues, detectMACDCrossovers,
   computeTDSequentialSetup,
 } from "@/lib/indicators";
-import type { Candle, Prediction, PredictiveBand, CrossoverSignal } from "@/types/market";
-import { Maximize2, EyeOff, Eye, RefreshCw } from "lucide-react";
+import type { Candle, CrossoverSignal } from "@/types/market";
+import { Maximize2, RefreshCw } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
-import { TIMEFRAME_SECONDS, toBackendTf } from "@/lib/timeframeConvert";
+import { toBackendTf } from "@/lib/timeframeConvert";
 
 import type {
   IChartApi, ISeriesApi, UTCTimestamp, Time,
@@ -33,14 +33,6 @@ const CHART_COLORS = {
   grid: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.06)",
   crosshair: "rgba(255,255,255,0.2)", bull: "#22c55e", bear: "#ef4444",
 };
-
-function generateMockBands(candles: Candle[]): PredictiveBand[] {
-  return candles.slice(-40).map((c) => {
-    const halfRange = c.close * (0.008 + Math.random() * 0.012);
-    const drift = (Math.random() - 0.48) * c.close * 0.003;
-    return { time: c.time, upperBound: c.close + halfRange + drift, lowerBound: c.close - halfRange + drift, midpoint: c.close + drift, confidence: 0.6 + Math.random() * 0.35 };
-  });
-}
 
 function buildMarkers(crossovers: CrossoverSignal[]): SeriesMarker<Time>[] {
   return crossovers.map((c) => ({
@@ -129,9 +121,6 @@ export function ChartContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const upperBandRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const lowerBandRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const midLineRef = useRef<ISeriesApi<"Line"> | null>(null);
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const markerPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const bbUpperRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -153,8 +142,6 @@ export function ChartContainer() {
 
   const ticker              = useUIStore(s => s.ticker);
   const timeframe           = useUIStore(s => s.timeframe);
-  const showOverlay         = useUIStore(s => s.showPredictiveOverlay);
-  const toggleOverlay       = useUIStore(s => s.togglePredictiveOverlay);
   const activeIndicatorTab  = useUIStore(s => s.activeIndicatorTab);
   const showSignalMarkers   = useUIStore(s => s.showSignalMarkers);
   const emaPeriod           = useUIStore(s => s.emaPeriod);
@@ -210,14 +197,6 @@ export function ChartContainer() {
       });
       candleSeriesRef.current = candleSeries;
 
-      // AI Predictive overlay
-      const upperBand = chart.addSeries(lc.LineSeries, { color: "rgba(34,197,94,0.5)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      upperBandRef.current = upperBand;
-      const lowerBand = chart.addSeries(lc.LineSeries, { color: "rgba(34,197,94,0.5)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      lowerBandRef.current = lowerBand;
-      const midLine = chart.addSeries(lc.LineSeries, { color: "rgba(34,197,94,0.22)", lineWidth: 1, lineStyle: lc.LineStyle.SparseDotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      midLineRef.current = midLine;
-
       // EMA — amber
       const emaSeries = chart.addSeries(lc.LineSeries, { color: "#f59e0b", lineWidth: 1, lineStyle: lc.LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
       emaSeriesRef.current = emaSeries;
@@ -261,11 +240,7 @@ export function ChartContainer() {
       for (const c of initialCandles) volMap.set(c.time, c.volume);
       volumeMapRef.current = volMap;
 
-      const bands = generateMockBands(initialCandles);
       candleSeries.setData(initialCandles.map(c => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close })));
-      upperBand.setData(bands.map(b => ({ time: b.time as UTCTimestamp, value: b.upperBound })));
-      lowerBand.setData(bands.map(b => ({ time: b.time as UTCTimestamp, value: b.lowerBound })));
-      midLine.setData(bands.map(b => ({ time: b.time as UTCTimestamp, value: b.midpoint })));
 
       // Marker plugin (data applied by the unified update effect when chartReady fires)
       markerPluginRef.current = lc.createSeriesMarkers(candleSeries, []);
@@ -292,22 +267,13 @@ export function ChartContainer() {
 
     return () => {
       mounted = false; ro.disconnect(); chartRef.current?.remove();
-      chartRef.current = candleSeriesRef.current = upperBandRef.current = lowerBandRef.current =
-      midLineRef.current = emaSeriesRef.current = markerPluginRef.current =
+      chartRef.current = candleSeriesRef.current = emaSeriesRef.current = markerPluginRef.current =
       bbUpperRef.current = bbLowerRef.current = bbMiddleRef.current =
       rsiSeriesRef.current = rsiObLineRef.current = rsiOsLineRef.current =
       macdLineSeriesRef.current = macdSignalSeriesRef.current = macdHistSeriesRef.current = null;
       setChartReady(false);
     };
   }, [ticker, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ─── Toggle AI overlay ─────────────────────────────────────────────────────
-  useEffect(() => {
-    const a = showOverlay ? 0.5 : 0;
-    upperBandRef.current?.applyOptions({ color: `rgba(34,197,94,${a})` });
-    lowerBandRef.current?.applyOptions({ color: `rgba(34,197,94,${a})` });
-    midLineRef.current?.applyOptions({ color: `rgba(34,197,94,${a * 0.44})` });
-  }, [showOverlay]);
 
   // ─── Unified indicator update effect ──────────────────────────────────────
   // Fires whenever the active tab, any config value, or chartReady changes.
@@ -412,30 +378,10 @@ export function ChartContainer() {
       }
 
       setLastPrice(prev => { if (prev !== null) setPriceChange(candle.close - prev); return candle.close; });
-
-      if (showOverlay) {
-        const halfRange = candle.close * 0.01;
-        const nextTime = (candle.time + TIMEFRAME_SECONDS[timeframe]) as UTCTimestamp;
-        upperBandRef.current?.update({ time: nextTime, value: candle.close + halfRange });
-        lowerBandRef.current?.update({ time: nextTime, value: candle.close - halfRange });
-        midLineRef.current?.update({ time: nextTime, value: candle.close });
-      }
     });
-  }, [showOverlay, timeframe]);
+  }, []);
 
-  const handlePrediction = useCallback((prediction: Prediction) => {
-    if (!showOverlay) return;
-    import("lightweight-charts").then(() => {
-      for (const b of prediction.bands) {
-        const t = b.time as UTCTimestamp;
-        upperBandRef.current?.update({ time: t, value: b.upperBound });
-        lowerBandRef.current?.update({ time: t, value: b.lowerBound });
-        midLineRef.current?.update({ time: t, value: b.midpoint });
-      }
-    });
-  }, [showOverlay]);
-
-  useMarketData({ onCandle: handleCandle, onPrediction: handlePrediction });
+  useMarketData({ onCandle: handleCandle });
 
   const legendLabel = () => {
     switch (activeIndicatorTab) {
@@ -452,10 +398,6 @@ export function ChartContainer() {
     <div className="relative flex flex-col h-full tv-chart-container">
       {/* Toolbar */}
       <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-        <button onClick={toggleOverlay} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-sm text-xs font-medium transition-all", showOverlay ? "text-emerald-400" : "text-zinc-500")}>
-          {showOverlay ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-          AI Overlay
-        </button>
         {!chartReady && (
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-sm text-xs text-zinc-500">
             <RefreshCw className="size-3.5 animate-spin" /> Loading
@@ -481,8 +423,6 @@ export function ChartContainer() {
       {/* Legend */}
       {chartReady && (
         <div className="absolute bottom-8 left-3 z-10 flex items-center gap-4 glass-sm px-2.5 py-1.5 rounded-lg">
-          {showOverlay && <LegendItem line="dashed-emerald" label="AI Range" />}
-          {showOverlay && <LegendItem line="dotted-emerald" label="AI Mid" />}
           <LegendItem line={legendLine} label={legendLabel()} />
         </div>
       )}
@@ -545,15 +485,13 @@ function OHLCRow({ label, value, color, bold }: { label: string; value: number; 
   );
 }
 
-type LegendLineType = "dashed-emerald" | "dotted-emerald" | "solid-amber" | "solid-sky" | "markers-only";
+type LegendLineType = "solid-amber" | "solid-sky" | "markers-only";
 
 function LegendItem({ line, label }: { line: LegendLineType; label: string }) {
   const stroke =
-    line === "dashed-emerald" ? "rgba(34,197,94,0.6)" :
-    line === "dotted-emerald" ? "rgba(34,197,94,0.3)" :
-    line === "solid-amber"    ? "#f59e0b" :
-    line === "solid-sky"      ? "rgba(56,189,248,0.8)" : "transparent";
-  const dash = line === "dashed-emerald" ? "4 3" : line === "dotted-emerald" ? "2 4" : undefined;
+    line === "solid-amber" ? "#f59e0b" :
+    line === "solid-sky"   ? "rgba(56,189,248,0.8)" : "transparent";
+  const dash = undefined;
 
   return (
     <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
