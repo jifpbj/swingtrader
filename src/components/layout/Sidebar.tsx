@@ -33,7 +33,6 @@ export function Sidebar() {
         collapsed ? "w-14" : "w-48"
       )}
     >
-      {/* Nav items */}
       <nav className="flex flex-col gap-1 flex-1 w-full px-2">
         {NAV_ITEMS.map(({ icon: Icon, label, active }) => (
           <button
@@ -45,33 +44,19 @@ export function Sidebar() {
                 : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5"
             )}
           >
-            <Icon
-              className={cn(
-                "size-5 shrink-0 transition-colors",
-                active ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-300"
-              )}
-            />
-            {!collapsed && (
-              <span className="truncate">{label}</span>
-            )}
-            {!collapsed && active && (
-              <span className="ml-auto size-1.5 rounded-full bg-emerald-400 shrink-0" />
-            )}
+            <Icon className={cn("size-5 shrink-0 transition-colors", active ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-300")} />
+            {!collapsed && <span className="truncate">{label}</span>}
+            {!collapsed && active && <span className="ml-auto size-1.5 rounded-full bg-emerald-400 shrink-0" />}
           </button>
         ))}
       </nav>
 
-      {/* Collapse toggle */}
       <button
         onClick={toggle}
         className="mt-2 mx-2 p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all self-start"
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
-        {collapsed ? (
-          <ChevronRight className="size-4" />
-        ) : (
-          <ChevronLeft className="size-4" />
-        )}
+        {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
       </button>
     </aside>
   );

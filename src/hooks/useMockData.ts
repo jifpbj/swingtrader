@@ -45,6 +45,39 @@ export function generateMockCandles(count = 200, basePrice = 67_000): Candle[] {
   return candles;
 }
 
+export function generateMockDailyCandles(count = 252, basePrice = 67_000): Candle[] {
+  const rand = seededRand(99);
+  const candles: Candle[] = [];
+  const now = Math.floor(Date.now() / 1000);
+  const interval = 86400; // 1 day
+
+  let price = basePrice;
+  for (let i = count - 1; i >= 0; i--) {
+    const sigma = 0.015;
+    const direction = rand() > 0.48 ? 1 : -1;
+    const open = price;
+    const change = price * sigma * direction * rand();
+    const close = price + change;
+    const highExtra = price * (rand() * 0.008);
+    const lowExtra = price * (rand() * 0.008);
+    const high = Math.max(open, close) + highExtra;
+    const low = Math.min(open, close) - lowExtra;
+    const volume = 1000 + rand() * 20000;
+
+    candles.push({
+      time: now - i * interval,
+      open: +open.toFixed(2),
+      high: +high.toFixed(2),
+      low: +low.toFixed(2),
+      close: +close.toFixed(2),
+      volume: +volume.toFixed(2),
+    });
+
+    price = close;
+  }
+  return candles;
+}
+
 export function generateMockIndicators(price: number): Indicators {
   return {
     rsi: 45 + Math.random() * 30,

@@ -4,6 +4,8 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { AlphaSignal, Indicators, Prediction, Timeframe } from "@/types/market";
 
+export type IndicatorTab = "EMA" | "BB" | "RSI" | "MACD";
+
 interface UIState {
   // ─── Active asset
   ticker: string;
@@ -45,6 +47,40 @@ interface UIState {
   // ─── Live prediction (from WS)
   prediction: Prediction | null;
   setPrediction: (prediction: Prediction) => void;
+
+  // ─── Active indicator tab — drives what's drawn on the chart
+  activeIndicatorTab: IndicatorTab;
+  setActiveIndicatorTab: (tab: IndicatorTab) => void;
+
+  // ─── Shared: show BUY/SELL markers for indicator crossovers
+  showSignalMarkers: boolean;
+  setShowSignalMarkers: (v: boolean) => void;
+
+  // ─── EMA config
+  emaPeriod: number;
+  setEmaPeriod: (v: number) => void;
+
+  // ─── Bollinger Bands config
+  bbPeriod: number;
+  setBbPeriod: (v: number) => void;
+  bbStdDev: number;
+  setBbStdDev: (v: number) => void;
+
+  // ─── RSI config
+  rsiPeriod: number;
+  setRsiPeriod: (v: number) => void;
+  rsiOverbought: number;
+  setRsiOverbought: (v: number) => void;
+  rsiOversold: number;
+  setRsiOversold: (v: number) => void;
+
+  // ─── MACD config
+  macdFastPeriod: number;
+  setMacdFastPeriod: (v: number) => void;
+  macdSlowPeriod: number;
+  setMacdSlowPeriod: (v: number) => void;
+  macdSignalPeriod: number;
+  setMacdSignalPeriod: (v: number) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -59,10 +95,7 @@ export const useUIStore = create<UIState>()(
     setSearchOpen: (searchOpen) => set({ searchOpen }),
 
     signals: [],
-    addSignal: (signal) =>
-      set((s) => ({
-        signals: [signal, ...s.signals].slice(0, 50), // cap at 50
-      })),
+    addSignal: (signal) => set((s) => ({ signals: [signal, ...s.signals].slice(0, 50) })),
     clearSignals: () => set({ signals: [] }),
 
     sidebarCollapsed: false,
@@ -72,8 +105,7 @@ export const useUIStore = create<UIState>()(
     setWsConnected: (wsConnected) => set({ wsConnected }),
 
     showPredictiveOverlay: true,
-    togglePredictiveOverlay: () =>
-      set((s) => ({ showPredictiveOverlay: !s.showPredictiveOverlay })),
+    togglePredictiveOverlay: () => set((s) => ({ showPredictiveOverlay: !s.showPredictiveOverlay })),
 
     confidenceScore: 0,
     setConfidenceScore: (confidenceScore) => set({ confidenceScore }),
@@ -83,5 +115,34 @@ export const useUIStore = create<UIState>()(
 
     prediction: null,
     setPrediction: (prediction) => set({ prediction }),
+
+    // Tab drives which indicator is active on the chart
+    activeIndicatorTab: "EMA",
+    setActiveIndicatorTab: (activeIndicatorTab) => set({ activeIndicatorTab }),
+
+    showSignalMarkers: true,
+    setShowSignalMarkers: (showSignalMarkers) => set({ showSignalMarkers }),
+
+    emaPeriod: 20,
+    setEmaPeriod: (emaPeriod) => set({ emaPeriod }),
+
+    bbPeriod: 20,
+    setBbPeriod: (bbPeriod) => set({ bbPeriod }),
+    bbStdDev: 2.0,
+    setBbStdDev: (bbStdDev) => set({ bbStdDev }),
+
+    rsiPeriod: 14,
+    setRsiPeriod: (rsiPeriod) => set({ rsiPeriod }),
+    rsiOverbought: 70,
+    setRsiOverbought: (rsiOverbought) => set({ rsiOverbought }),
+    rsiOversold: 30,
+    setRsiOversold: (rsiOversold) => set({ rsiOversold }),
+
+    macdFastPeriod: 12,
+    setMacdFastPeriod: (macdFastPeriod) => set({ macdFastPeriod }),
+    macdSlowPeriod: 26,
+    setMacdSlowPeriod: (macdSlowPeriod) => set({ macdSlowPeriod }),
+    macdSignalPeriod: 9,
+    setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
   }))
 );

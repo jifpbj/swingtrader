@@ -1,0 +1,239 @@
+import type {
+  Candle,
+  CrossoverSignal,
+  BacktestPeriodKey,
+  BacktestPeriodResult,
+  BacktestResult,
+} from "@/types/market";
+
+export interface BollingerPoint {
+  time: number;
+  upper: number;
+  middle: number;
+  lower: number;
+}
+
+export function computeBollingerBands(
+  candles: Candle[],
+  period: number,
+  stdDevMultiplier: number
+): BollingerPoint[] {
+  const result: BollingerPoint[] = [];
+  for (let i = period - 1; i < candles.length; i++) {
+    const slice = candles.slice(i - period + 1, i + 1);
+    const mean = slice.reduce((s, c) => s + c.close, 0) / period;
+    const variance = slice.reduce((s, c) => s + (c.close - mean) ** 2, 0) / period;
+    const std = Math.sqrt(variance);
+    result.push({
+      time: candles[i].time,
+      upper: mean + stdDevMultiplier * std,
+      middle: mean,
+      lower: mean - stdDevMultiplier * std,
+    });
+  }
+  return result;
+}
+
+// Returns array same length as closes; first (period-1) entries are null
+export function computeEMA(closes: number[], period: number): (number | null)[] {
+  if (closes.length === 0 || period < 1) return closes.map(() => null);
+
+  const result: (number | null)[] = new Array(closes.length).fill(null);
+  if (closes.length < period) return result;
+
+  const k = 2 / (period + 1);
+
+  // Seed with SMA of first `period` closes
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += closes[i];
+  result[period - 1] = sum / period;
+
+  for (let i = period; i < closes.length; i++) {
+    result[i] = closes[i] * k + (result[i - 1] as number) * (1 - k);
+  }
+  return result;
+}
+
+// Detects price-crosses-EMA events; candles and emas are index-aligned
+export function detectCrossovers(
+  candles: Candle[],
+  emas: (number | null)[]
+): CrossoverSignal[] {
+  const signals: CrossoverSignal[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const ema0 = emas[i - 1];
+    const ema1 = emas[i];
+    if (ema0 === null || ema1 === null) continue;
+
+    const prevAbove = candles[i - 1].close > ema0;
+    const currAbove = candles[i].close > ema1;
+
+    if (!prevAbove && currAbove) {
+      signals.push({ time: candles[i].time, direction: "entry", price: candles[i].close });
+    } else if (prevAbove && !currAbove) {
+      signals.push({ time: candles[i].time, direction: "sell", price: candles[i].close });
+    }
+  }
+  return signals;
+}
+
+// ─── RSI (Wilder's smoothed) ──────────────────────────────────────────────────
+export function computeRSI(closes: number[], period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(closes.length).fill(null);
+  if (closes.length < period + 1) return result;
+
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) avgGain += diff; else avgLoss -= diff;
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  result[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+  for (let i = period + 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + Math.max(diff, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-diff, 0)) / period;
+    result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return result;
+}
+
+export function detectRSICrossovers(
+  candles: Candle[],
+  rsi: (number | null)[],
+  overbought: number,
+  oversold: number
+): CrossoverSignal[] {
+  const signals: CrossoverSignal[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    if (rsi[i - 1] === null || rsi[i] === null) continue;
+    const prev = rsi[i - 1]!;
+    const curr = rsi[i]!;
+    if (prev <= oversold && curr > oversold)   signals.push({ time: candles[i].time, direction: "entry", price: candles[i].close });
+    if (prev >= overbought && curr < overbought) signals.push({ time: candles[i].time, direction: "sell",  price: candles[i].close });
+  }
+  return signals;
+}
+
+// ─── MACD ─────────────────────────────────────────────────────────────────────
+export interface MACDPoint { macd: number | null; signal: number | null; }
+
+export function computeMACDValues(
+  closes: number[], fast: number, slow: number, signalPeriod: number
+): MACDPoint[] {
+  const fastEMA = computeEMA(closes, fast);
+  const slowEMA = computeEMA(closes, slow);
+  const macdLine: (number | null)[] = closes.map((_, i) =>
+    fastEMA[i] !== null && slowEMA[i] !== null ? fastEMA[i]! - slowEMA[i]! : null
+  );
+
+  // Signal = EMA of macd line, seeded from first non-null MACD value
+  const signalLine: (number | null)[] = new Array(closes.length).fill(null);
+  const first = macdLine.findIndex(v => v !== null);
+  if (first !== -1 && first + signalPeriod - 1 < closes.length) {
+    const k = 2 / (signalPeriod + 1);
+    let sum = 0;
+    for (let i = 0; i < signalPeriod; i++) sum += macdLine[first + i]!;
+    signalLine[first + signalPeriod - 1] = sum / signalPeriod;
+    for (let i = first + signalPeriod; i < closes.length; i++) {
+      signalLine[i] = macdLine[i]! * k + signalLine[i - 1]! * (1 - k);
+    }
+  }
+  return closes.map((_, i) => ({ macd: macdLine[i], signal: signalLine[i] }));
+}
+
+export function detectMACDCrossovers(candles: Candle[], macd: MACDPoint[]): CrossoverSignal[] {
+  const signals: CrossoverSignal[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const p = macd[i - 1], c = macd[i];
+    if (p.macd === null || p.signal === null || c.macd === null || c.signal === null) continue;
+    if (p.macd <= p.signal && c.macd > c.signal) signals.push({ time: candles[i].time, direction: "entry", price: candles[i].close });
+    if (p.macd >= p.signal && c.macd < c.signal) signals.push({ time: candles[i].time, direction: "sell",  price: candles[i].close });
+  }
+  return signals;
+}
+
+// Simulates long-only EMA crossover strategy from fromTimestamp onwards
+function runBacktest(
+  candles: Candle[],
+  period: number,
+  fromTimestamp: number
+): BacktestPeriodResult {
+  const slice = candles.filter((c) => c.time >= fromTimestamp);
+
+  const zero: BacktestPeriodResult = {
+    strategyReturn: 0,
+    holdReturn: 0,
+    tradeCount: 0,
+    winRate: 0,
+    maxDrawdown: 0,
+  };
+
+  if (slice.length < period) return zero;
+
+  const emas = computeEMA(slice.map((c) => c.close), period);
+  const crossovers = detectCrossovers(slice, emas);
+
+  // Simulate long-only compound strategy
+  let inTrade = false;
+  let entryPrice = 0;
+  const gains: number[] = [];
+
+  for (const sig of crossovers) {
+    if (sig.direction === "entry" && !inTrade) {
+      inTrade = true;
+      entryPrice = sig.price;
+    } else if (sig.direction === "sell" && inTrade) {
+      gains.push((sig.price - entryPrice) / entryPrice);
+      inTrade = false;
+    }
+  }
+  // Close open trade at last bar
+  if (inTrade) {
+    gains.push((slice[slice.length - 1].close - entryPrice) / entryPrice);
+  }
+
+  const tradeCount = gains.length;
+  const strategyReturn = gains.reduce((acc, g) => acc * (1 + g), 1) - 1;
+  const holdReturn = (slice[slice.length - 1].close / slice[0].open) - 1;
+  const wins = gains.filter((g) => g > 0).length;
+  const winRate = tradeCount === 0 ? 0 : wins / tradeCount;
+
+  // Max drawdown on equity curve
+  let peak = 1;
+  let equity = 1;
+  let maxDrawdown = 0;
+  for (const g of gains) {
+    equity *= 1 + g;
+    if (equity > peak) peak = equity;
+    const dd = (equity - peak) / peak;
+    if (dd < maxDrawdown) maxDrawdown = dd;
+  }
+
+  return { strategyReturn, holdReturn, tradeCount, winRate, maxDrawdown };
+}
+
+export function computeAllBacktests(
+  candles: Candle[],
+  period: number,
+  ticker: string
+): BacktestResult {
+  const now = Math.floor(Date.now() / 1000);
+  const currentYear = new Date().getUTCFullYear();
+
+  const periodStarts: Record<BacktestPeriodKey, number> = {
+    "1M":  now - 21 * 86400,
+    "6M":  now - 126 * 86400,
+    "YTD": Math.floor(Date.UTC(currentYear, 0, 1) / 1000),
+    "1Y":  now - 252 * 86400,
+  };
+
+  const periods = {} as Record<BacktestPeriodKey, BacktestPeriodResult>;
+  for (const key of ["1M", "6M", "YTD", "1Y"] as BacktestPeriodKey[]) {
+    periods[key] = runBacktest(candles, period, periodStarts[key]);
+  }
+
+  return { ticker, emaPeriod: period, periods };
+}

@@ -79,3 +79,26 @@ export interface WSMessage<T = unknown> {
   data: T;
   timestamp: number;
 }
+
+// ─── EMA / Crossover ──────────────────────────────────────────────────────────
+export type CrossoverDirection = "entry" | "sell";
+export interface CrossoverSignal {
+  time: number;        // Unix seconds, matches Candle.time
+  direction: CrossoverDirection;
+  price: number;       // close price at crossover bar
+}
+
+// ─── Backtest ─────────────────────────────────────────────────────────────────
+export type BacktestPeriodKey = "1M" | "6M" | "YTD" | "1Y";
+export interface BacktestPeriodResult {
+  strategyReturn: number; // decimal (0.14 = +14%)
+  holdReturn: number;
+  tradeCount: number;     // completed round-trips
+  winRate: number;        // decimal (0 if tradeCount=0)
+  maxDrawdown: number;    // decimal, ≤ 0 (e.g. -0.12)
+}
+export interface BacktestResult {
+  ticker: string;
+  emaPeriod: number;
+  periods: Record<BacktestPeriodKey, BacktestPeriodResult>;
+}

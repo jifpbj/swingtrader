@@ -5,7 +5,8 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { ChartContainer } from "@/components/trading/ChartContainer";
 import { IndicatorRibbon } from "@/components/trading/IndicatorRibbon";
 import { PredictiveGauge } from "@/components/analysis/PredictiveGauge";
-import { AlphaFeed } from "@/components/analysis/AlphaFeed";
+import { BacktestPanel } from "@/components/trading/BacktestPanel";
+import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 
 export default function TradingDashboard() {
@@ -38,14 +39,13 @@ export default function TradingDashboard() {
           </div>
 
           {/* ─── Right: Analysis Panel ─── */}
-          <aside className="flex flex-col gap-3 w-72 shrink-0 overflow-hidden">
+          <aside className="flex flex-col gap-3 w-72 shrink-0 overflow-y-auto">
             {/* Predictive Gauge */}
             <PredictiveGauge />
 
-            {/* Alpha Signal Feed */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <AlphaFeed />
-            </div>
+            {/* Indicator config + Backtest — adjacent */}
+            <IndicatorPanel />
+            <BacktestPanel />
           </aside>
         </main>
       </div>
