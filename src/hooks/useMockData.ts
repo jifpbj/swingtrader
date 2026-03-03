@@ -22,10 +22,22 @@ export function generateMockCandlesForTimeframe(
   basePrice = 67_000,
 ): Candle[] {
   if (timeframe === "1d") return generateMockDailyCandles(count, basePrice);
-  return generateMockCandles(count, basePrice, TF_INTERVAL_SECS[timeframe] ?? 900);
+  const intervalSecs = TF_INTERVAL_SECS[timeframe] ?? 900;
+  // Normalise per-bar vol to ~2.5% daily-equivalent sigma regardless of timeframe.
+  // Without this, short intervals (15m) compound to hundreds-of-percent hold returns.
+  const volScale = Math.sqrt(intervalSecs / 86400); // e.g. 15m → 0.102, 1h → 0.204, 4h → 0.408
+  return generateMockCandles(count, basePrice, intervalSecs, 0.003 * volScale, 0.010 * volScale);
 }
 
-export function generateMockCandles(count = 200, basePrice = 67_000, intervalSecs = 15 * 60): Candle[] {
+export function generateMockCandles(
+  count = 200,
+  basePrice = 67_000,
+  intervalSecs = 15 * 60,
+  // Per-bar vol range — defaults match original behaviour (used by ChartContainer).
+  // Pass scaled values via generateMockCandlesForTimeframe for accurate backtest data.
+  volMin = 0.003,
+  volMax = 0.010,
+): Candle[] {
   const rand = seededRand(42);
   const candles: Candle[] = [];
   const now = Math.floor(Date.now() / 1000);
@@ -33,13 +45,15 @@ export function generateMockCandles(count = 200, basePrice = 67_000, intervalSec
 
   let price = basePrice;
   for (let i = count - 1; i >= 0; i--) {
-    const vol = 0.003 + rand() * 0.007;
+    const vol = volMin + rand() * (volMax - volMin);
     const direction = rand() > 0.48 ? 1 : -1;
     const open = price;
     const change = price * vol * direction;
     const close = price + change;
-    const highExtra = price * (rand() * 0.004);
-    const lowExtra = price * (rand() * 0.004);
+    // Scale wicks proportionally so candle shape stays realistic
+    const wickScale = vol / 0.0065;
+    const highExtra = price * (rand() * 0.004 * wickScale);
+    const lowExtra = price * (rand() * 0.004 * wickScale);
     const high = Math.max(open, close) + highExtra;
     const low = Math.min(open, close) - lowExtra;
     const volume = 100 + rand() * 2000;
