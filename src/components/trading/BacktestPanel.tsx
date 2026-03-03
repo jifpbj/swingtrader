@@ -156,7 +156,7 @@ export function BacktestPanel() {
             <table className="w-full min-w-[660px] text-[11px]">
               <thead>
                 <tr className="border-b border-white/5">
-                  <th className="text-left px-1 py-1 text-zinc-500 font-medium">
+                  <th className="sticky left-0 z-10 bg-card text-left px-2 py-1 text-zinc-500 font-medium border-r border-white/5">
                     Period
                   </th>
                   <th className="text-right px-1 py-1 text-zinc-500 font-medium">
@@ -191,7 +191,7 @@ export function BacktestPanel() {
                       key={key}
                       className="border-b border-white/3 hover:bg-white/2"
                     >
-                      <td className="px-2 py-1.5 font-mono text-zinc-400">
+                      <td className="sticky left-0 z-10 bg-card px-2 py-1.5 font-mono text-zinc-400 border-r border-white/5">
                         {key}
                       </td>
                       <td
