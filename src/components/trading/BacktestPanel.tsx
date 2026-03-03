@@ -6,7 +6,7 @@ import { generateMockCandlesForTimeframe } from "@/hooks/useMockData";
 import { computeStrategyBacktests } from "@/lib/indicators";
 import type { Candle, BacktestResult, BacktestPeriodKey } from "@/types/market";
 import { formatPercent } from "@/lib/utils";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, Percent, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toBackendTf } from "@/lib/timeframeConvert";
 
@@ -28,6 +28,7 @@ export function BacktestPanel() {
 
   const [candles, setCandles] = useState<Candle[]>([]);
   const [result, setResult] = useState<BacktestResult | null>(null);
+  const [viewMode, setViewMode] = useState<"pct" | "val">("pct");
   const [initialInvestment, setInitialInvestment] = useState<number>(100_000);
 
   const currencyFmt = new Intl.NumberFormat("en-US", {
@@ -110,68 +111,88 @@ export function BacktestPanel() {
   return (
     <div className="glass rounded-2xl px-4 py-3 flex flex-col gap-3 shrink-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <BarChart2 className="size-4 text-amber-400" />
           <span className="text-xs font-semibold text-zinc-200">Backtest</span>
+          <span className="text-[10px] text-zinc-500 font-mono">
+            {result?.strategyLabel ?? `EMA(${emaPeriod})`}·{timeframe.toUpperCase()}
+          </span>
         </div>
-        <span className="text-[10px] text-zinc-500 font-mono">
-          {result?.strategyLabel ?? `EMA(${emaPeriod})`}·{timeframe.toUpperCase()}
-        </span>
+
+        {/* % / $ toggle */}
+        <div className="flex items-center gap-0.5 glass rounded-lg px-0.5 py-0.5">
+          <button
+            onClick={() => setViewMode("pct")}
+            title="Percent change"
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all",
+              viewMode === "pct"
+                ? "bg-amber-500/20 text-amber-400"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Percent className="size-3" />
+            <span>%</span>
+          </button>
+          <button
+            onClick={() => setViewMode("val")}
+            title="Dollar value"
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all",
+              viewMode === "val"
+                ? "bg-amber-500/20 text-amber-400"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <DollarSign className="size-3" />
+            <span>$</span>
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 text-[10px]">
-        <label
-          htmlFor="initial-investment"
-          className="text-zinc-500 font-medium"
-        >
-          Initial investment
-        </label>
-        <div className="flex items-center gap-1.5">
-          <span className="text-zinc-500 font-mono">$</span>
-          <input
-            id="initial-investment"
-            type="number"
-            min={0}
-            step={1000}
-            inputMode="decimal"
-            value={
-              Number.isFinite(initialInvestment) ? initialInvestment : 100_000
-            }
-            onChange={(e) => {
-              const parsed = Number(e.target.value);
-              setInitialInvestment(
-                Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
-              );
-            }}
-            className="w-28 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
-          />
+      {/* Initial investment — only visible in value mode */}
+      {viewMode === "val" && (
+        <div className="flex items-center justify-between gap-3 text-[10px]">
+          <label htmlFor="initial-investment" className="text-zinc-500 font-medium">
+            Initial investment
+          </label>
+          <div className="flex items-center gap-1.5">
+            <span className="text-zinc-500 font-mono">$</span>
+            <input
+              id="initial-investment"
+              type="number"
+              min={0}
+              step={1000}
+              inputMode="decimal"
+              value={Number.isFinite(initialInvestment) ? initialInvestment : 100_000}
+              onChange={(e) => {
+                const parsed = Number(e.target.value);
+                setInitialInvestment(Number.isFinite(parsed) ? Math.max(0, parsed) : 0);
+              }}
+              className="w-28 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Table */}
       {result ? (
         <>
           <div className="overflow-x-auto rounded-lg border border-white/5">
-            <table className="w-full min-w-[660px] text-[11px]">
+            <table className={cn("w-full text-[11px]", viewMode === "pct" ? "min-w-[240px]" : "min-w-[360px]")}>
               <thead>
                 <tr className="border-b border-white/5">
                   <th className="sticky left-0 z-10 bg-card text-left px-2 py-1 text-zinc-500 font-medium border-r border-white/5">
                     Period
                   </th>
-                  <th className="text-right px-1 py-1 text-zinc-500 font-medium">
+                  <th className="text-right px-2 py-1 text-zinc-500 font-medium">
                     Strategy
                   </th>
-                  <th className="text-right px-1 py-1 text-zinc-500 font-medium">
+                  <th className="text-right px-2 py-1 text-zinc-500 font-medium">
                     Hold
                   </th>
-                  <th className="text-right px-1 py-1 text-zinc-500 font-medium min-w-[60px]">
-                    P/L
-                  </th>
-                  <th className="text-right px-1 py-1 text-zinc-500 font-medium min-w-[70px]">
-                    Value
-                  </th>
-                  <th className="text-right px-1 py-1 text-zinc-500 font-medium">
+                  <th className="text-right px-2 py-1 text-zinc-500 font-medium">
                     Trades
                   </th>
                 </tr>
@@ -179,60 +200,37 @@ export function BacktestPanel() {
               <tbody>
                 {PERIOD_KEYS.map((key) => {
                   const p = result.periods[key];
-                  const strategyValue =
-                    initialInvestment * (1 + p.strategyReturn);
-                  const profitLoss = strategyValue - initialInvestment;
-                  const strategyColor =
-                    p.strategyReturn > p.holdReturn
-                      ? "text-emerald-400"
-                      : "text-red-400";
+                  const strategyDollar = initialInvestment * p.strategyReturn;
+                  const holdDollar = initialInvestment * p.holdReturn;
+                  const beatsBenchmark = p.strategyReturn > p.holdReturn;
                   return (
-                    <tr
-                      key={key}
-                      className="border-b border-white/3 hover:bg-white/2"
-                    >
+                    <tr key={key} className="border-b border-white/3 hover:bg-white/2">
                       <td className="sticky left-0 z-10 bg-card px-2 py-1.5 font-mono text-zinc-400 border-r border-white/5">
                         {key}
                       </td>
                       <td
                         className={cn(
                           "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
-                          strategyColor,
+                          beatsBenchmark ? "text-emerald-400" : "text-red-400",
                         )}
                       >
-                        {formatPercent(p.strategyReturn * 100)}
+                        {viewMode === "pct"
+                          ? formatPercent(p.strategyReturn * 100)
+                          : currencyFmt.format(strategyDollar)}
                       </td>
                       <td
                         className={cn(
-                          "px-1 py-1.5 text-right font-mono tabular-nums",
-                          p.holdReturn >= 0 ? "text-zinc-300" : "text-zinc-500",
+                          "px-2 py-1.5 text-right font-mono tabular-nums",
+                          viewMode === "val"
+                            ? holdDollar >= 0 ? "text-emerald-300" : "text-red-300"
+                            : p.holdReturn >= 0 ? "text-foreground/70" : "text-muted-foreground",
                         )}
                       >
-                        {formatPercent(p.holdReturn * 100)}
+                        {viewMode === "pct"
+                          ? formatPercent(p.holdReturn * 100)
+                          : currencyFmt.format(holdDollar)}
                       </td>
-                      <td
-                        className={cn(
-                          "px-1 py-1.5 text-right font-mono tabular-nums",
-                          profitLoss > 0
-                            ? "text-emerald-300"
-                            : profitLoss < 0
-                              ? "text-red-300"
-                              : "text-zinc-300",
-                        )}
-                      >
-                        {currencyFmt.format(profitLoss)}
-                      </td>
-                      <td
-                        className={cn(
-                          "px-1 py-1.5 text-right font-mono tabular-nums",
-                          strategyValue >= initialInvestment
-                            ? "text-emerald-300"
-                            : "text-red-300",
-                        )}
-                      >
-                        {currencyFmt.format(strategyValue)}
-                      </td>
-                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-zinc-400">
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted-foreground">
                         {p.tradeCount}
                       </td>
                     </tr>
@@ -265,7 +263,9 @@ export function BacktestPanel() {
                 >
                   {oneYearResult.maxDrawdown === 0
                     ? "—"
-                    : formatPercent(oneYearResult.maxDrawdown * 100)}
+                    : viewMode === "val"
+                      ? currencyFmt.format(initialInvestment * oneYearResult.maxDrawdown)
+                      : formatPercent(oneYearResult.maxDrawdown * 100)}
                 </span>
               </span>
             </div>
