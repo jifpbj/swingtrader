@@ -12,6 +12,7 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
@@ -43,7 +44,7 @@ export function TopBar() {
           <div className="size-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-900/40">
             <span className="text-xs font-black text-white">PA</span>
           </div>
-          <span className="text-sm font-semibold tracking-tight text-white/80 hidden sm:block">
+          <span className="text-sm font-semibold tracking-tight text-foreground/80 hidden sm:block">
             Predictive<span className="text-emerald-400">Alpha</span>
           </span>
         </div>
@@ -53,13 +54,13 @@ export function TopBar() {
           onClick={() => setSearchOpen(true)}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass hover:bg-white/5 transition-colors group"
         >
-          <span className="text-sm font-bold text-white">{ticker}</span>
-          <Search className="size-3.5 text-muted-foreground group-hover:text-white transition-colors" />
+          <span className="text-sm font-bold text-foreground">{ticker}</span>
+          <Search className="size-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
         </button>
 
         {/* Price */}
         <div className="hidden md:flex items-center gap-3">
-          <span className="text-lg font-mono font-semibold text-white tabular-nums">
+          <span className="text-lg font-mono font-semibold text-foreground tabular-nums">
             ${formatPrice(MOCK_STATS.price)}
           </span>
           <span
@@ -94,7 +95,7 @@ export function TopBar() {
               "px-2.5 py-1 rounded-lg text-xs font-medium transition-all",
               timeframe === tf
                 ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
-                : "text-muted-foreground hover:text-white"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             {tf}
@@ -110,7 +111,7 @@ export function TopBar() {
             "flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors",
             wsConnected
               ? "text-emerald-400 bg-emerald-500/10"
-              : "text-zinc-500 bg-zinc-800/50"
+              : "text-muted-foreground bg-muted/50"
           )}
         >
           {wsConnected ? (
@@ -126,18 +127,20 @@ export function TopBar() {
           )}
         </div>
 
-        <button className="p-2 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-white transition-colors relative">
+        <ThemeToggle />
+
+        <button className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors relative">
           <Bell className="size-4" />
           <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400" />
         </button>
 
-        <button className="p-2 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-white transition-colors">
+        <button className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors">
           <Settings className="size-4" />
         </button>
 
         <button
           onClick={() => setSearchOpen(true)}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 glass rounded-lg text-xs text-muted-foreground hover:text-white transition-colors"
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 glass rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <Search className="size-3.5" />
           <span>Search</span>
@@ -151,8 +154,8 @@ export function TopBar() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <span>
-      <span className="text-zinc-600">{label} </span>
-      <span className="text-zinc-300 font-mono">{value}</span>
+      <span className="text-muted-foreground">{label} </span>
+      <span className="text-foreground/70 font-mono">{value}</span>
     </span>
   );
 }

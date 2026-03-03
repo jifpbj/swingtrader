@@ -5,8 +5,13 @@ import { subscribeWithSelector } from "zustand/middleware";
 import type { AlphaSignal, Indicators, Prediction, Timeframe } from "@/types/market";
 
 export type IndicatorTab = "EMA" | "BB" | "RSI" | "MACD" | "TD9";
+export type Theme = "light" | "dark" | "system";
 
 interface UIState {
+  // ─── Theme
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+
   // ─── Active asset
   ticker: string;
   setTicker: (ticker: string) => void;
@@ -85,6 +90,9 @@ interface UIState {
 
 export const useUIStore = create<UIState>()(
   subscribeWithSelector((set) => ({
+    theme: "dark" as Theme,
+    setTheme: (theme) => set({ theme }),
+
     ticker: "BTC/USDT",
     setTicker: (ticker) => set({ ticker }),
 
