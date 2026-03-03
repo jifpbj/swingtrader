@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends
+from starlette.requests import HTTPConnection
 
 from app.engine.analysis import AnalysisEngine
 from app.engine.predictive import PredictiveModel
@@ -30,17 +31,17 @@ from app.services.market_data import MarketDataService
 
 # ─── Service accessors ────────────────────────────────────────────────────────
 
-def get_market_data(request: Request) -> MarketDataService:
+def get_market_data(request: HTTPConnection) -> MarketDataService:
     """Return the market data service stored on app.state at startup."""
     return request.app.state.market_data  # type: ignore[no-any-return]
 
 
-def get_analysis_engine(request: Request) -> AnalysisEngine:
+def get_analysis_engine(request: HTTPConnection) -> AnalysisEngine:
     """Return the shared AnalysisEngine (stateless — safe to share)."""
     return request.app.state.analysis_engine  # type: ignore[no-any-return]
 
 
-def get_predictive_model(request: Request) -> PredictiveModel:
+def get_predictive_model(request: HTTPConnection) -> PredictiveModel:
     """Return the warmed-up predictive model."""
     return request.app.state.predictive_model  # type: ignore[no-any-return]
 

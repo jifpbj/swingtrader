@@ -18,19 +18,30 @@ export function BacktestPanel() {
   const rsiPeriod = useUIStore((s) => s.rsiPeriod);
   const rsiOverbought = useUIStore((s) => s.rsiOverbought);
   const rsiOversold = useUIStore((s) => s.rsiOversold);
+  const bbPeriod = useUIStore((s) => s.bbPeriod);
+  const bbStdDev = useUIStore((s) => s.bbStdDev);
   const macdFastPeriod = useUIStore((s) => s.macdFastPeriod);
   const macdSlowPeriod = useUIStore((s) => s.macdSlowPeriod);
   const macdSignalPeriod = useUIStore((s) => s.macdSignalPeriod);
 
   const [candles, setCandles] = useState<Candle[]>([]);
   const [result, setResult] = useState<BacktestResult | null>(null);
+  const [initialInvestment, setInitialInvestment] = useState<number>(100_000);
+
+  const currencyFmt = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 
   // Fetch daily bars; fallback to mock on error
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const encodedTicker = encodeURIComponent(ticker);
 
-    fetch(`${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=1Day&limit=365`)
+    fetch(
+      `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=1Day&limit=365`,
+    )
       .then((res) => {
         if (!res.ok) throw new Error("fetch failed");
         return res.json() as Promise<{ bars: Candle[] }>;
@@ -47,28 +58,43 @@ export function BacktestPanel() {
   // Recompute backtest whenever candles or period changes
   useEffect(() => {
     if (!candles.length) return;
-    setResult(computeStrategyBacktests(
-      candles,
-      // Keep tab values aligned with computeStrategyBacktests's BacktestStrategy union
-      (activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab) as "EMA" | "BB" | "RSI" | "MACD" | "TD9",
-      ticker,
-      {
-        emaPeriod,
-        rsiPeriod,
-        rsiOverbought,
-        rsiOversold,
-        macdFast: macdFastPeriod,
-        macdSlow: macdSlowPeriod,
-        macdSignal: macdSignalPeriod,
-      }
-    ));
+    setResult(
+      computeStrategyBacktests(
+        candles,
+        // Keep tab values aligned with computeStrategyBacktests's BacktestStrategy union
+        (activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab) as
+          | "EMA"
+          | "BB"
+          | "RSI"
+          | "MACD"
+          | "TD9",
+        ticker,
+        {
+          emaPeriod,
+          bbPeriod,
+          bbStdDev,
+          rsiPeriod,
+          rsiOverbought,
+          rsiOversold,
+          macdFast: macdFastPeriod,
+          macdSlow: macdSlowPeriod,
+          macdSignal: macdSignalPeriod,
+        },
+      ),
+    );
   }, [
     candles,
     ticker,
     activeIndicatorTab,
     emaPeriod,
-    rsiPeriod, rsiOverbought, rsiOversold,
-    macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
+    bbPeriod,
+    bbStdDev,
+    rsiPeriod,
+    rsiOverbought,
+    rsiOversold,
+    macdFastPeriod,
+    macdSlowPeriod,
+    macdSignalPeriod,
   ]);
 
   const oneYearResult = result?.periods["1Y"];
@@ -86,36 +112,119 @@ export function BacktestPanel() {
         </span>
       </div>
 
+      <div className="flex items-center justify-between gap-3 text-[10px]">
+        <label
+          htmlFor="initial-investment"
+          className="text-zinc-500 font-medium"
+        >
+          Initial investment
+        </label>
+        <div className="flex items-center gap-1.5">
+          <span className="text-zinc-500 font-mono">$</span>
+          <input
+            id="initial-investment"
+            type="number"
+            min={0}
+            step={1000}
+            inputMode="decimal"
+            value={
+              Number.isFinite(initialInvestment) ? initialInvestment : 100_000
+            }
+            onChange={(e) => {
+              const parsed = Number(e.target.value);
+              setInitialInvestment(
+                Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+              );
+            }}
+            className="w-28 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
+          />
+        </div>
+      </div>
+
       {/* Table */}
       {result ? (
         <>
-          <div className="overflow-hidden rounded-lg border border-white/5">
-            <table className="w-full text-[11px]">
+          <div className="overflow-x-auto rounded-lg border border-white/5">
+            <table className="w-full min-w-[660px] text-[11px]">
               <thead>
                 <tr className="border-b border-white/5">
-                  <th className="text-left px-2 py-1.5 text-zinc-500 font-medium">Period</th>
-                  <th className="text-right px-2 py-1.5 text-zinc-500 font-medium">Strategy</th>
-                  <th className="text-right px-2 py-1.5 text-zinc-500 font-medium">Hold</th>
-                  <th className="text-right px-2 py-1.5 text-zinc-500 font-medium">Trades</th>
+                  <th className="text-left px-1 py-1 text-zinc-500 font-medium">
+                    Period
+                  </th>
+                  <th className="text-right px-1 py-1 text-zinc-500 font-medium">
+                    Strategy
+                  </th>
+                  <th className="text-right px-1 py-1 text-zinc-500 font-medium">
+                    Hold
+                  </th>
+                  <th className="text-right px-1 py-1 text-zinc-500 font-medium min-w-[60px]">
+                    P/L
+                  </th>
+                  <th className="text-right px-1 py-1 text-zinc-500 font-medium min-w-[70px]">
+                    Value
+                  </th>
+                  <th className="text-right px-1 py-1 text-zinc-500 font-medium">
+                    Trades
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {PERIOD_KEYS.map((key) => {
                   const p = result.periods[key];
+                  const strategyValue =
+                    initialInvestment * (1 + p.strategyReturn);
+                  const profitLoss = strategyValue - initialInvestment;
+                  const strategyColor =
+                    p.strategyReturn < 0
+                      ? "text-red-400"
+                      : p.strategyReturn > p.holdReturn
+                        ? "text-emerald-400"
+                        : "text-zinc-100";
                   return (
-                    <tr key={key} className="border-b border-white/3 hover:bg-white/2">
-                      <td className="px-2 py-1.5 font-mono text-zinc-400">{key}</td>
-                      <td className={cn(
-                        "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
-                        p.strategyReturn >= 0 ? "text-emerald-400" : "text-red-400"
-                      )}>
+                    <tr
+                      key={key}
+                      className="border-b border-white/3 hover:bg-white/2"
+                    >
+                      <td className="px-2 py-1.5 font-mono text-zinc-400">
+                        {key}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
+                          strategyColor,
+                        )}
+                      >
                         {formatPercent(p.strategyReturn * 100)}
                       </td>
-                      <td className={cn(
-                        "px-2 py-1.5 text-right font-mono tabular-nums",
-                        p.holdReturn >= 0 ? "text-zinc-300" : "text-zinc-500"
-                      )}>
+                      <td
+                        className={cn(
+                          "px-1 py-1.5 text-right font-mono tabular-nums",
+                          p.holdReturn >= 0 ? "text-zinc-300" : "text-zinc-500",
+                        )}
+                      >
                         {formatPercent(p.holdReturn * 100)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-1 py-1.5 text-right font-mono tabular-nums",
+                          profitLoss > 0
+                            ? "text-emerald-300"
+                            : profitLoss < 0
+                              ? "text-red-300"
+                              : "text-zinc-300",
+                        )}
+                      >
+                        {currencyFmt.format(profitLoss)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-1 py-1.5 text-right font-mono tabular-nums",
+                          strategyValue >= initialInvestment
+                            ? "text-emerald-300"
+                            : "text-red-300",
+                        )}
+                      >
+                        {currencyFmt.format(strategyValue)}
                       </td>
                       <td className="px-2 py-1.5 text-right font-mono tabular-nums text-zinc-400">
                         {p.tradeCount}
@@ -140,10 +249,14 @@ export function BacktestPanel() {
               </span>
               <span>
                 Max DD:{" "}
-                <span className={cn(
-                  "font-mono",
-                  oneYearResult.maxDrawdown < -0.05 ? "text-red-400" : "text-zinc-300"
-                )}>
+                <span
+                  className={cn(
+                    "font-mono",
+                    oneYearResult.maxDrawdown < -0.05
+                      ? "text-red-400"
+                      : "text-zinc-300",
+                  )}
+                >
                   {oneYearResult.maxDrawdown === 0
                     ? "—"
                     : formatPercent(oneYearResult.maxDrawdown * 100)}
@@ -153,7 +266,9 @@ export function BacktestPanel() {
           )}
         </>
       ) : (
-        <div className="text-[11px] text-zinc-600 text-center py-4">Computing…</div>
+        <div className="text-[11px] text-zinc-600 text-center py-4">
+          Computing…
+        </div>
       )}
     </div>
   );

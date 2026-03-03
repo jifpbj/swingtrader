@@ -155,6 +155,38 @@ export function detectMACDCrossovers(candles: Candle[], macd: MACDPoint[]): Cros
   return signals;
 }
 
+// ─── Bollinger signal helper (mean reversion flavor) ────────────────────────
+export function detectBollingerCrossovers(
+  candles: Candle[],
+  period: number,
+  stdDevMultiplier: number
+): CrossoverSignal[] {
+  const signals: CrossoverSignal[] = [];
+  const bands = computeBollingerBands(candles, period, stdDevMultiplier);
+  if (bands.length < 2) return signals;
+
+  // bands[j] corresponds to candles[j + period - 1]
+  for (let j = 1; j < bands.length; j++) {
+    const prevBand = bands[j - 1];
+    const currBand = bands[j];
+    const prevCandle = candles[j + period - 2];
+    const currCandle = candles[j + period - 1];
+
+    // Entry when price re-enters from below lower band.
+    if (prevCandle.close < prevBand.lower && currCandle.close >= currBand.lower) {
+      signals.push({ time: currCandle.time, direction: "entry", price: currCandle.close });
+      continue;
+    }
+
+    // Exit when price re-enters from above upper band.
+    if (prevCandle.close > prevBand.upper && currCandle.close <= currBand.upper) {
+      signals.push({ time: currCandle.time, direction: "sell", price: currCandle.close });
+    }
+  }
+
+  return signals;
+}
+
 // ─── Tom DeMark TD Sequential (Setup 1–9) ────────────────────────────────────
 export interface TDSequentialPoint {
   time: number;
@@ -235,64 +267,87 @@ export function detectTDSequentialSetupSignals(
   return signals;
 }
 
-// Simulates long-only EMA crossover strategy from fromTimestamp onwards
-function runBacktest(
-  candles: Candle[],
-  period: number,
-  fromTimestamp: number
-): BacktestPeriodResult {
-  const slice = candles.filter((c) => c.time >= fromTimestamp);
-
-  const zero: BacktestPeriodResult = {
+function zeroResult(): BacktestPeriodResult {
+  return {
     strategyReturn: 0,
     holdReturn: 0,
     tradeCount: 0,
     winRate: 0,
     maxDrawdown: 0,
   };
+}
 
-  if (slice.length < period) return zero;
+// Bar-by-bar marked-to-market simulation of long-only strategy.
+function runLongOnlyBacktest(
+  slice: Candle[],
+  signals: CrossoverSignal[]
+): BacktestPeriodResult {
+  if (slice.length < 2) return zeroResult();
 
-  const emas = computeEMA(slice.map((c) => c.close), period);
-  const crossovers = detectCrossovers(slice, emas);
-
-  // Simulate long-only compound strategy
+  const orderedSignals = [...signals].sort((a, b) => a.time - b.time);
+  let signalIdx = 0;
   let inTrade = false;
   let entryPrice = 0;
+  let cash = 1;
+  let units = 0;
   const gains: number[] = [];
 
-  for (const sig of crossovers) {
-    if (sig.direction === "entry" && !inTrade) {
-      inTrade = true;
-      entryPrice = sig.price;
-    } else if (sig.direction === "sell" && inTrade) {
-      gains.push((sig.price - entryPrice) / entryPrice);
-      inTrade = false;
-    }
-  }
-  // Close open trade at last bar
-  if (inTrade) {
-    gains.push((slice[slice.length - 1].close - entryPrice) / entryPrice);
-  }
-
-  const tradeCount = gains.length;
-  const strategyReturn = gains.reduce((acc, g) => acc * (1 + g), 1) - 1;
-  const holdReturn = (slice[slice.length - 1].close / slice[0].open) - 1;
-  const wins = gains.filter((g) => g > 0).length;
-  const winRate = tradeCount === 0 ? 0 : wins / tradeCount;
-
-  // Max drawdown on equity curve
   let peak = 1;
-  let equity = 1;
   let maxDrawdown = 0;
-  for (const g of gains) {
-    equity *= 1 + g;
+
+  for (const candle of slice) {
+    while (signalIdx < orderedSignals.length && orderedSignals[signalIdx].time <= candle.time) {
+      const sig = orderedSignals[signalIdx];
+      if (sig.direction === "entry" && !inTrade) {
+        inTrade = true;
+        entryPrice = sig.price;
+        units = cash / sig.price;
+        cash = 0;
+      } else if (sig.direction === "sell" && inTrade) {
+        cash = units * sig.price;
+        units = 0;
+        gains.push((sig.price - entryPrice) / entryPrice);
+        inTrade = false;
+      }
+      signalIdx += 1;
+    }
+
+    const equity = inTrade ? units * candle.close : cash;
     if (equity > peak) peak = equity;
     const dd = (equity - peak) / peak;
     if (dd < maxDrawdown) maxDrawdown = dd;
   }
 
-  return { strategyReturn, holdReturn, tradeCount, winRate, maxDrawdown };
+  if (inTrade) {
+    const lastClose = slice[slice.length - 1].close;
+    cash = units * lastClose;
+    gains.push((lastClose - entryPrice) / entryPrice);
+  }
+
+  const tradeCount = gains.length;
+  const wins = gains.filter((g) => g > 0).length;
+
+  return {
+    strategyReturn: cash - 1,
+    holdReturn: (slice[slice.length - 1].close / slice[0].close) - 1,
+    tradeCount,
+    winRate: tradeCount === 0 ? 0 : wins / tradeCount,
+    maxDrawdown,
+  };
+}
+
+// Simulates long-only EMA crossover strategy from fromTimestamp onwards.
+function runBacktest(
+  candles: Candle[],
+  period: number,
+  fromTimestamp: number
+): BacktestPeriodResult {
+  const slice = candles.filter((c) => c.time >= fromTimestamp);
+  if (slice.length < period) return zeroResult();
+
+  const emas = computeEMA(slice.map((c) => c.close), period);
+  const crossovers = detectCrossovers(slice, emas);
+  return runLongOnlyBacktest(slice, crossovers);
 }
 
 function runSignalBacktest(
@@ -301,52 +356,8 @@ function runSignalBacktest(
   buildSignals: (slice: Candle[]) => CrossoverSignal[]
 ): BacktestPeriodResult {
   const slice = candles.filter((c) => c.time >= fromTimestamp);
-
-  const zero: BacktestPeriodResult = {
-    strategyReturn: 0,
-    holdReturn: 0,
-    tradeCount: 0,
-    winRate: 0,
-    maxDrawdown: 0,
-  };
-
-  if (slice.length < 2) return zero;
-
-  const signals = buildSignals(slice);
-
-  let inTrade = false;
-  let entryPrice = 0;
-  const gains: number[] = [];
-
-  for (const sig of signals) {
-    if (sig.direction === "entry" && !inTrade) {
-      inTrade = true;
-      entryPrice = sig.price;
-    } else if (sig.direction === "sell" && inTrade) {
-      gains.push((sig.price - entryPrice) / entryPrice);
-      inTrade = false;
-    }
-  }
-
-  if (inTrade) gains.push((slice[slice.length - 1].close - entryPrice) / entryPrice);
-
-  const tradeCount = gains.length;
-  const strategyReturn = gains.reduce((acc, g) => acc * (1 + g), 1) - 1;
-  const holdReturn = (slice[slice.length - 1].close / slice[0].open) - 1;
-  const wins = gains.filter((g) => g > 0).length;
-  const winRate = tradeCount === 0 ? 0 : wins / tradeCount;
-
-  let peak = 1;
-  let equity = 1;
-  let maxDrawdown = 0;
-  for (const g of gains) {
-    equity *= 1 + g;
-    if (equity > peak) peak = equity;
-    const dd = (equity - peak) / peak;
-    if (dd < maxDrawdown) maxDrawdown = dd;
-  }
-
-  return { strategyReturn, holdReturn, tradeCount, winRate, maxDrawdown };
+  if (slice.length < 2) return zeroResult();
+  return runLongOnlyBacktest(slice, buildSignals(slice));
 }
 
 export type BacktestStrategy = "EMA" | "RSI" | "MACD" | "TD9" | "BB";
@@ -357,6 +368,8 @@ export function computeStrategyBacktests(
   ticker: string,
   params: {
     emaPeriod: number;
+    bbPeriod: number;
+    bbStdDev: number;
     rsiPeriod: number;
     rsiOverbought: number;
     rsiOversold: number;
@@ -395,7 +408,7 @@ export function computeStrategyBacktests(
       case "TD9":
         return detectTDSequentialSetupSignals(slice, 9, 4);
       case "BB":
-        return [];
+        return detectBollingerCrossovers(slice, params.bbPeriod, params.bbStdDev);
     }
   };
 
@@ -407,10 +420,10 @@ export function computeStrategyBacktests(
 
   const strategyLabel =
     strategy === "EMA"  ? `EMA(${params.emaPeriod})` :
+    strategy === "BB"   ? `BB(${params.bbPeriod}, ${params.bbStdDev})` :
     strategy === "RSI"  ? `RSI(${params.rsiPeriod})` :
     strategy === "MACD" ? `MACD(${params.macdFast},${params.macdSlow},${params.macdSignal})` :
-    strategy === "TD9"  ? "TD Sequential 9" :
-    "BB";
+    "TD Sequential 9";
 
   return { ticker, strategyLabel, periods };
 }
@@ -423,6 +436,8 @@ export function computeAllBacktests(
 ): BacktestResult {
   return computeStrategyBacktests(candles, "EMA", ticker, {
     emaPeriod: period,
+    bbPeriod: 20,
+    bbStdDev: 2,
     rsiPeriod: 14,
     rsiOverbought: 70,
     rsiOversold: 30,

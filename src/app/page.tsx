@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ChartContainer } from "@/components/trading/ChartContainer";
@@ -10,6 +11,37 @@ import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 
 export default function TradingDashboard() {
+  const [rightPanelWidth, setRightPanelWidth] = useState(360);
+  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const onResizeHandlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    dragStateRef.current = { startX: e.clientX, startWidth: rightPanelWidth };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [rightPanelWidth]);
+
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      const dragState = dragStateRef.current;
+      if (!dragState) return;
+      const delta = dragState.startX - e.clientX;
+      const viewportMax = Math.floor(window.innerWidth * 0.65);
+      const next = dragState.startWidth + delta;
+      setRightPanelWidth(Math.min(Math.max(next, 300), Math.max(300, viewportMax)));
+    };
+
+    const onPointerUp = () => {
+      dragStateRef.current = null;
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Top navigation bar */}
@@ -38,8 +70,20 @@ export default function TradingDashboard() {
             </div>
           </div>
 
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onPointerDown={onResizeHandlePointerDown}
+            className="hidden md:flex w-1.5 -mx-1 cursor-col-resize items-stretch justify-center group"
+          >
+            <span className="w-px rounded-full bg-white/8 transition-colors group-hover:bg-amber-400/70" />
+          </div>
+
           {/* ─── Right: Analysis Panel ─── */}
-          <aside className="flex flex-col gap-3 w-72 shrink-0 overflow-y-auto">
+          <aside
+            className="flex flex-col gap-3 shrink-0 overflow-y-auto min-w-[300px] max-w-[65vw]"
+            style={{ width: `${rightPanelWidth}px` }}
+          >
             {/* Predictive Gauge */}
             <PredictiveGauge />
 

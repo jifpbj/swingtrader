@@ -117,7 +117,7 @@ class MockMarketDataService(MarketDataService):
         interval_seconds: float = 1.0,
     ) -> AsyncIterator[Candle]:
         price = self._prices.get(ticker, _SEED_PRICES.get(ticker, 100.0))
-        bar_seconds = int(interval_seconds)
+        bar_seconds = max(1, int(interval_seconds))
 
         while True:
             await asyncio.sleep(interval_seconds)

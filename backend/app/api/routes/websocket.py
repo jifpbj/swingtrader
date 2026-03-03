@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import defaultdict
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 
 import pandas as pd
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -38,27 +39,236 @@ from app.models.schemas import (
 logger = get_logger(__name__)
 router = APIRouter(tags=["websocket"])
 
-# ─── Connection registry ──────────────────────────────────────────────────────
-# Maps ticker → set of active WebSocket connections.
-# Using a module-level dict means all workers share state; for multi-process
-# deployments, replace with a Redis pub/sub channel.
+# ─── Stream hub registry ──────────────────────────────────────────────────────
+# One producer loop per (ticker, timeframe, horizon) key.
+# For multi-process deployments, replace this in-memory registry with
+# a shared broker (Redis pub/sub, NATS, Kafka).
 
-_connections: dict[str, set[WebSocket]] = defaultdict(set)
+StreamKey = tuple[str, Timeframe, int]
 
 
-async def _broadcast(ticker: str, message: WSMessage) -> None:
-    """Send a message to all subscribers of a ticker, dropping dead sockets."""
-    dead: set[WebSocket] = set()
+@dataclass
+class StreamState:
+    clients: set[WebSocket] = field(default_factory=set)
+    producer: asyncio.Task[None] | None = None
+
+
+_streams: dict[StreamKey, StreamState] = {}
+_streams_lock = asyncio.Lock()
+
+
+async def _send_safely(ws: WebSocket, payload: str, timeout_s: float = 1.0) -> bool:
+    try:
+        await asyncio.wait_for(ws.send_text(payload), timeout=timeout_s)
+        return True
+    except Exception:
+        return False
+
+
+async def _broadcast(key: StreamKey, message: WSMessage) -> int:
+    """Fan out to all subscribers of a stream key and prune dead sockets."""
+    async with _streams_lock:
+        state = _streams.get(key)
+        if state is None or not state.clients:
+            return 0
+        clients = list(state.clients)
+
     payload = message.model_dump_json()
+    results = await asyncio.gather(
+        *(_send_safely(ws, payload) for ws in clients),
+        return_exceptions=False,
+    )
 
-    for ws in list(_connections.get(ticker, set())):
-        try:
-            await ws.send_text(payload)
-        except Exception:
-            dead.add(ws)
+    dead = [ws for ws, ok in zip(clients, results) if not ok]
+    if not dead:
+        return len(clients)
 
-    for ws in dead:
-        _connections[ticker].discard(ws)
+    async with _streams_lock:
+        state = _streams.get(key)
+        if state is None:
+            return 0
+        for ws in dead:
+            state.clients.discard(ws)
+        return len(state.clients)
+
+
+async def _subscribe(
+    websocket: WebSocket,
+    key: StreamKey,
+    *,
+    start_producer: Callable[[], Awaitable[None]],
+) -> int:
+    """Register a subscriber and lazily start the producer task."""
+    async with _streams_lock:
+        state = _streams.get(key)
+        if state is None:
+            state = StreamState()
+            _streams[key] = state
+        state.clients.add(websocket)
+
+        if state.producer is None or state.producer.done():
+            state.producer = asyncio.create_task(start_producer())
+
+        return len(state.clients)
+
+
+async def _unsubscribe(websocket: WebSocket, key: StreamKey) -> int:
+    """Unregister subscriber and stop producer when stream has no clients."""
+    async with _streams_lock:
+        state = _streams.get(key)
+        if state is None:
+            return 0
+
+        state.clients.discard(websocket)
+        remaining = len(state.clients)
+        producer = state.producer
+
+        if remaining == 0:
+            _streams.pop(key, None)
+            if producer and not producer.done():
+                producer.cancel()
+
+        return remaining
+
+
+async def _run_stream(
+    *,
+    key: StreamKey,
+    tick_interval: float,
+    svc,
+    engine,
+    model,
+) -> None:
+    ticker, timeframe, horizon = key
+
+    # Pre-fetch history so we can compute indicators immediately
+    try:
+        bars = await svc.get_ohlcv(ticker, timeframe, limit=200)
+    except Exception as exc:
+        logger.error("ws_history_fetch_failed", ticker=ticker, error=str(exc))
+        bars = []
+
+    df_history: pd.DataFrame = _bars_to_df(bars) if len(bars) >= 50 else pd.DataFrame()
+
+    tick_count = 0
+    INDICATOR_EVERY = 5
+    PREDICTION_EVERY = 15
+    SIGNAL_EVERY = 20
+
+    try:
+        async for candle in svc.stream_ticks(ticker, tick_interval):
+            # Stop quickly if there are no listeners left.
+            async with _streams_lock:
+                state = _streams.get(key)
+                if state is None or not state.clients:
+                    break
+
+            active = await _broadcast(
+                key,
+                WSMessage(
+                    type=WSMessageType.CANDLE,
+                    data=candle.model_dump(),
+                    timestamp=int(time.time()),
+                ),
+            )
+            if active == 0:
+                break
+
+            if not df_history.empty:
+                new_row = pd.DataFrame(
+                    [{
+                        "open": candle.open,
+                        "high": candle.high,
+                        "low": candle.low,
+                        "close": candle.close,
+                        "volume": candle.volume,
+                    }],
+                    index=[candle.time],
+                )
+                df_history = pd.concat([df_history, new_row]).iloc[-200:]
+
+            tick_count += 1
+
+            if tick_count % INDICATOR_EVERY == 0 and len(df_history) >= 50:
+                try:
+                    indicators = await engine.compute_indicators(
+                        df_history, ticker, timeframe
+                    )
+                    await _broadcast(
+                        key,
+                        WSMessage(
+                            type=WSMessageType.INDICATOR,
+                            data=indicators.model_dump(),
+                            timestamp=int(time.time()),
+                        ),
+                    )
+
+                    if tick_count % PREDICTION_EVERY == 0:
+                        forecast = await model.predict(
+                            indicators, timeframe, horizon_bars=horizon
+                        )
+                        await _broadcast(
+                            key,
+                            WSMessage(
+                                type=WSMessageType.PREDICTION,
+                                data=forecast.model_dump(),
+                                timestamp=int(time.time()),
+                            ),
+                        )
+
+                        if tick_count % SIGNAL_EVERY == 0:
+                            regime = await engine.compute_regime(
+                                indicators,
+                                SentimentSnapshot(
+                                    score=_mock_sentiment(ticker),
+                                    source="mock_nlp",
+                                    confidence=0.6,
+                                ),
+                            )
+                            signals = _derive_signals(
+                                indicators, forecast, regime, ticker, timeframe
+                            )
+                            for sig in signals:
+                                await _broadcast(
+                                    key,
+                                    WSMessage(
+                                        type=WSMessageType.SIGNAL,
+                                        data=sig.model_dump(),
+                                        timestamp=int(time.time()),
+                                    ),
+                                )
+                except Exception as exc:
+                    logger.warning(
+                        "ws_analysis_error",
+                        ticker=ticker,
+                        timeframe=timeframe,
+                        error=str(exc),
+                    )
+
+            await asyncio.sleep(0)
+    except asyncio.CancelledError:
+        logger.info(
+            "ws_stream_cancelled",
+            ticker=ticker,
+            timeframe=timeframe,
+            horizon=horizon,
+        )
+        raise
+    except Exception as exc:
+        logger.error(
+            "ws_stream_error",
+            ticker=ticker,
+            timeframe=timeframe,
+            horizon=horizon,
+            error=str(exc),
+        )
+    finally:
+        logger.info(
+            "ws_stream_stopped",
+            ticker=ticker,
+            timeframe=timeframe,
+            horizon=horizon,
+        )
 
 
 # ─── WebSocket route ──────────────────────────────────────────────────────────
@@ -83,138 +293,66 @@ async def ws_trades(
         timeframe = Timeframe(params.get("timeframe", Timeframe.M15))
     except ValueError:
         timeframe = Timeframe.M15
-    horizon = int(params.get("horizon", 10))
+
+    try:
+        horizon = int(params.get("horizon", 10))
+    except (TypeError, ValueError):
+        horizon = 10
+    horizon = max(1, min(50, horizon))
 
     ticker = ticker.upper()
-    _connections[ticker].add(websocket)
+    key: StreamKey = (ticker, timeframe, horizon)
 
     logger.info(
         "ws_connected",
         ticker=ticker,
         timeframe=timeframe,
+        horizon=horizon,
         remote=websocket.client,
     )
 
-    # Grab services from app.state via the websocket's app reference
-    app = websocket.app
-    svc = get_market_data(websocket)  # type: ignore[arg-type]
-    engine = get_analysis_engine(websocket)  # type: ignore[arg-type]
-    model = get_predictive_model(websocket)  # type: ignore[arg-type]
+    # Grab services from app.state
+    svc = get_market_data(websocket)
+    engine = get_analysis_engine(websocket)
+    model = get_predictive_model(websocket)
 
     settings = get_settings()
     tick_interval = settings.mock_tick_interval_ms / 1000
 
-    # Send ACK so the client knows the connection is live
-    await websocket.send_text(
-        WSMessage(
-            type=WSMessageType.SUBSCRIBE_ACK,
-            data={"ticker": ticker, "timeframe": timeframe, "horizon": horizon},
-            timestamp=int(time.time()),
-        ).model_dump_json()
+    async def start_producer() -> None:
+        await _run_stream(
+            key=key,
+            tick_interval=tick_interval,
+            svc=svc,
+            engine=engine,
+            model=model,
+        )
+
+    subscribers = await _subscribe(
+        websocket,
+        key,
+        start_producer=start_producer,
     )
 
-    # Pre-fetch history so we can compute indicators immediately
     try:
-        bars = await svc.get_ohlcv(ticker, timeframe, limit=200)
-    except Exception as exc:
-        logger.error("ws_history_fetch_failed", ticker=ticker, error=str(exc))
-        bars = []
+        # Send ACK so the client knows the connection is live.
+        await websocket.send_text(
+            WSMessage(
+                type=WSMessageType.SUBSCRIBE_ACK,
+                data={"ticker": ticker, "timeframe": timeframe, "horizon": horizon},
+                timestamp=int(time.time()),
+            ).model_dump_json()
+        )
 
-    df_history: pd.DataFrame = _bars_to_df(bars) if len(bars) >= 50 else pd.DataFrame()
-
-    tick_count = 0
-    INDICATOR_EVERY = 5    # recompute indicators every N ticks
-    PREDICTION_EVERY = 15  # recompute prediction every M ticks
-    SIGNAL_EVERY = 20      # check for new signals every P ticks
-
-    try:
-        async for candle in svc.stream_ticks(ticker, tick_interval):
-            # ── 1. Broadcast raw candle ───────────────────────────────────────
-            await _broadcast(
-                ticker,
-                WSMessage(
-                    type=WSMessageType.CANDLE,
-                    data=candle.model_dump(),
-                    timestamp=int(time.time()),
-                ),
-            )
-
-            # Keep rolling history in sync
-            if not df_history.empty:
-                new_row = pd.DataFrame(
-                    [{
-                        "open": candle.open, "high": candle.high,
-                        "low": candle.low, "close": candle.close,
-                        "volume": candle.volume,
-                    }],
-                    index=[candle.time],
-                )
-                df_history = pd.concat([df_history, new_row]).iloc[-200:]
-
-            tick_count += 1
-
-            # ── 2. Indicators ─────────────────────────────────────────────────
-            if tick_count % INDICATOR_EVERY == 0 and len(df_history) >= 50:
-                try:
-                    indicators = await engine.compute_indicators(
-                        df_history, ticker, timeframe
-                    )
-                    await _broadcast(
-                        ticker,
-                        WSMessage(
-                            type=WSMessageType.INDICATOR,
-                            data=indicators.model_dump(),
-                            timestamp=int(time.time()),
-                        ),
-                    )
-
-                    # ── 3. Prediction ─────────────────────────────────────────
-                    if tick_count % PREDICTION_EVERY == 0:
-                        forecast = await model.predict(indicators, timeframe, horizon)
-                        await _broadcast(
-                            ticker,
-                            WSMessage(
-                                type=WSMessageType.PREDICTION,
-                                data=forecast.model_dump(),
-                                timestamp=int(time.time()),
-                            ),
-                        )
-
-                        # ── 4. Signals ────────────────────────────────────────
-                        if tick_count % SIGNAL_EVERY == 0:
-                            regime = await engine.compute_regime(
-                                indicators,
-                                SentimentSnapshot(
-                                    score=_mock_sentiment(ticker),
-                                    source="mock_nlp",
-                                    confidence=0.6,
-                                ),
-                            )
-                            signals = _derive_signals(
-                                indicators, forecast, regime, ticker, timeframe
-                            )
-                            for sig in signals:
-                                await _broadcast(
-                                    ticker,
-                                    WSMessage(
-                                        type=WSMessageType.SIGNAL,
-                                        data=sig.model_dump(),
-                                        timestamp=int(time.time()),
-                                    ),
-                                )
-
-                except Exception as exc:
-                    logger.warning(
-                        "ws_analysis_error", ticker=ticker, error=str(exc)
-                    )
-
-            # Yield control so other coroutines can run
-            await asyncio.sleep(0)
-
+        # Keep socket open and detect disconnects.
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
     except WebSocketDisconnect:
-        logger.info("ws_disconnected", ticker=ticker)
+        logger.info("ws_disconnected", ticker=ticker, timeframe=timeframe, horizon=horizon)
     except Exception as exc:
-        logger.error("ws_stream_error", ticker=ticker, error=str(exc))
+        logger.error("ws_connection_error", ticker=ticker, error=str(exc))
         try:
             await websocket.send_text(
                 WSMessage(
@@ -226,9 +364,12 @@ async def ws_trades(
         except Exception:
             pass
     finally:
-        _connections[ticker].discard(websocket)
+        remaining = await _unsubscribe(websocket, key)
         logger.info(
             "ws_cleanup",
             ticker=ticker,
-            remaining=len(_connections.get(ticker, set())),
+            timeframe=timeframe,
+            horizon=horizon,
+            remaining=remaining,
+            subscribers=subscribers,
         )
