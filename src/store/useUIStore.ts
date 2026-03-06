@@ -49,6 +49,14 @@ interface UIState {
   prediction: Prediction | null;
   setPrediction: (prediction: Prediction) => void;
 
+  // ─── Live price stats (polled every 1s + daily bar for context)
+  livePrice: number | null;
+  priceOpen: number | null;
+  high24h: number | null;
+  low24h: number | null;
+  volume24h: number | null;
+  setPriceStats: (stats: { livePrice?: number; priceOpen?: number; high24h?: number; low24h?: number; volume24h?: number }) => void;
+
   // ─── Active indicator tab — drives what's drawn on the chart
   activeIndicatorTab: IndicatorTab;
   setActiveIndicatorTab: (tab: IndicatorTab) => void;
@@ -83,19 +91,6 @@ interface UIState {
   macdSignalPeriod: number;
   setMacdSignalPeriod: (v: number) => void;
 
-  // ─── Live price stats (updated by useLivePrice, consumed by TopBar)
-  livePrice: number | null;
-  priceOpen: number | null;
-  high24h: number | null;
-  low24h: number | null;
-  volume24h: number | null;
-  setPriceStats: (stats: Partial<{
-    livePrice: number;
-    priceOpen: number;
-    high24h: number;
-    low24h: number;
-    volume24h: number;
-  }>) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -103,8 +98,8 @@ export const useUIStore = create<UIState>()(
     theme: "dark" as Theme,
     setTheme: (theme) => set({ theme }),
 
-    ticker: "BTC/USDT",
-    setTicker: (ticker) => set({ ticker }),
+    ticker: "BTC/USD",
+    setTicker: (ticker) => set({ ticker, livePrice: null, priceOpen: null, high24h: null, low24h: null, volume24h: null }),
 
     timeframe: "15m",
     setTimeframe: (timeframe) => set({ timeframe }),
@@ -130,6 +125,19 @@ export const useUIStore = create<UIState>()(
 
     prediction: null,
     setPrediction: (prediction) => set({ prediction }),
+
+    livePrice: null,
+    priceOpen: null,
+    high24h: null,
+    low24h: null,
+    volume24h: null,
+    setPriceStats: (stats) => set((s) => ({
+      livePrice:  stats.livePrice  ?? s.livePrice,
+      priceOpen:  stats.priceOpen  ?? s.priceOpen,
+      high24h:    stats.high24h    ?? s.high24h,
+      low24h:     stats.low24h     ?? s.low24h,
+      volume24h:  stats.volume24h  ?? s.volume24h,
+    })),
 
     // Tab drives which indicator is active on the chart
     activeIndicatorTab: "EMA",
@@ -160,11 +168,5 @@ export const useUIStore = create<UIState>()(
     macdSignalPeriod: 9,
     setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
 
-    livePrice: null,
-    priceOpen: null,
-    high24h: null,
-    low24h: null,
-    volume24h: null,
-    setPriceStats: (stats) => set(stats),
   }))
 );
