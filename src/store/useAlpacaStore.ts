@@ -39,7 +39,7 @@ interface AlpacaState {
   secretKey: string;
 
   // ─── Live state (ephemeral)
-  connected: boolean;
+  // Note: `connected` is derived — check `account !== null` instead.
   account: AlpacaAccount | null;
   positions: AlpacaPosition[];
   orders: AlpacaOrder[];
@@ -48,7 +48,7 @@ interface AlpacaState {
 
   // ─── Actions
   setCredentials: (apiKey: string, secretKey: string) => void;
-  connect: () => Promise<void>;
+  connect: (apiKey: string, secretKey: string) => Promise<void>;
   disconnect: () => void;
   fetchAccount: () => Promise<void>;
   fetchPositions: () => Promise<void>;
@@ -64,7 +64,6 @@ export const useAlpacaStore = create<AlpacaState>()(
     (set, get) => ({
       apiKey: "",
       secretKey: "",
-      connected: false,
       account: null,
       positions: [],
       orders: [],
@@ -74,31 +73,28 @@ export const useAlpacaStore = create<AlpacaState>()(
       setCredentials: (apiKey, secretKey) =>
         set({ apiKey, secretKey, error: null }),
 
-      connect: async () => {
-        const { apiKey, secretKey } = get();
+      connect: async (apiKey, secretKey) => {
         if (!apiKey || !secretKey) {
           set({ error: "API key and secret key are required." });
           return;
         }
-        set({ loading: true, error: null });
+        set({ apiKey, secretKey, loading: true, error: null });
         try {
           const account = await alpacaFetch<AlpacaAccount>(
             "/api/v1/trading/account",
             apiKey,
             secretKey,
           );
-          set({ account, connected: true, loading: false });
-          // Background-fetch positions and orders
-          void get().fetchPositions();
-          void get().fetchOrders();
+          set({ account, loading: false });
+          // Background-fetch positions and orders in parallel
+          void Promise.all([get().fetchPositions(), get().fetchOrders()]);
         } catch (e) {
-          set({ error: (e as Error).message, loading: false, connected: false });
+          set({ error: (e as Error).message, loading: false });
         }
       },
 
       disconnect: () =>
         set({
-          connected: false,
           account: null,
           positions: [],
           orders: [],
@@ -166,24 +162,28 @@ export const useAlpacaStore = create<AlpacaState>()(
 
       cancelOrder: async (orderId) => {
         const { apiKey, secretKey } = get();
-        await fetch(`${API_BASE}/api/v1/trading/orders/${orderId}`, {
-          method: "DELETE",
-          headers: alpacaHeaders(apiKey, secretKey),
-        });
+        await alpacaFetch<void>(
+          `/api/v1/trading/orders/${orderId}`,
+          apiKey,
+          secretKey,
+          { method: "DELETE" },
+        );
         void get().fetchOrders();
       },
 
       cancelAllOrders: async () => {
         const { apiKey, secretKey } = get();
-        await fetch(`${API_BASE}/api/v1/trading/orders`, {
-          method: "DELETE",
-          headers: alpacaHeaders(apiKey, secretKey),
-        });
+        await alpacaFetch<void>(
+          "/api/v1/trading/orders",
+          apiKey,
+          secretKey,
+          { method: "DELETE" },
+        );
         void get().fetchOrders();
       },
 
       refresh: async () => {
-        if (!get().connected) return;
+        if (!get().account) return;
         await Promise.all([
           get().fetchAccount(),
           get().fetchPositions(),

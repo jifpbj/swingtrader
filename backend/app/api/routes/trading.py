@@ -21,6 +21,10 @@ router = APIRouter(prefix="/trading", tags=["trading"])
 
 ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
 
+# Shared client — connection pool is reused across all requests.
+# Credentials are supplied per-request via headers.
+_client = httpx.AsyncClient(base_url=ALPACA_PAPER_URL, timeout=15.0)
+
 
 def _headers(api_key: str, secret_key: str) -> dict[str, str]:
     return {
@@ -37,12 +41,9 @@ async def _request(
     **kwargs: Any,
 ) -> Any:
     """Proxy a request to Alpaca paper API, raising HTTPException on error."""
-    async with httpx.AsyncClient(
-        base_url=ALPACA_PAPER_URL,
-        headers=_headers(api_key, secret_key),
-        timeout=15.0,
-    ) as client:
-        resp = await client.request(method, path, **kwargs)
+    resp = await _client.request(
+        method, path, headers=_headers(api_key, secret_key), **kwargs
+    )
 
     if resp.status_code == 401:
         raise HTTPException(
