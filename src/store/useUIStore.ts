@@ -82,6 +82,20 @@ interface UIState {
   setMacdSlowPeriod: (v: number) => void;
   macdSignalPeriod: number;
   setMacdSignalPeriod: (v: number) => void;
+
+  // ─── Live price stats (updated by useLivePrice, consumed by TopBar)
+  livePrice: number | null;
+  priceOpen: number | null;
+  high24h: number | null;
+  low24h: number | null;
+  volume24h: number | null;
+  setPriceStats: (stats: Partial<{
+    livePrice: number;
+    priceOpen: number;
+    high24h: number;
+    low24h: number;
+    volume24h: number;
+  }>) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -145,5 +159,12 @@ export const useUIStore = create<UIState>()(
     setMacdSlowPeriod: (macdSlowPeriod) => set({ macdSlowPeriod }),
     macdSignalPeriod: 9,
     setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
+
+    livePrice: null,
+    priceOpen: null,
+    high24h: null,
+    low24h: null,
+    volume24h: null,
+    setPriceStats: (stats) => set(stats),
   }))
 );

@@ -6,15 +6,8 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { Zap, CheckCircle2, LogOut, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toAlpacaSymbol, isCrypto } from "@/lib/alpaca";
 import type { PlaceOrderRequest } from "@/types/market";
-
-function isCrypto(ticker: string): boolean {
-  return ticker.includes("/") || /USD[TC]?$/.test(ticker);
-}
-
-function toAlpacaSymbol(ticker: string): string {
-  return ticker.replace("/", "");
-}
 
 export function TradeStrategyWidget() {
   const ticker             = useUIStore(s => s.ticker);
@@ -32,7 +25,7 @@ export function TradeStrategyWidget() {
   const openAuthModal = useAuthStore(s => s.openAuthModal);
   const signOut       = useAuthStore(s => s.signOut);
 
-  const alpacaConnected = useAlpacaStore(s => s.connected);
+  const alpacaConnected = useAlpacaStore(s => s.account !== null);
   const placeOrder      = useAlpacaStore(s => s.placeOrder);
 
   const [qty, setQty] = useState("1");

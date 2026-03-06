@@ -16,36 +16,9 @@ import {
 } from "lucide-react";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { useUIStore } from "@/store/useUIStore";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency, formatPercent } from "@/lib/utils";
+import { toAlpacaSymbol, isCrypto } from "@/lib/alpaca";
 import type { PlaceOrderRequest } from "@/types/market";
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
-
-function fmt$(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
-function fmtPct(n: number | null | undefined): string {
-  if (n == null) return "—";
-  const pct = n * 100;
-  return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-}
-
-/** Convert BTC/USD → BTCUSD for Alpaca, leave equities unchanged */
-function toAlpacaSymbol(ticker: string): string {
-  return ticker.replace("/", "");
-}
-
-/** Crypto symbols contain a slash or end in USD/USDT */
-function isCrypto(ticker: string): boolean {
-  return ticker.includes("/") || /USD[TC]?$/.test(ticker);
-}
 
 type Tab = "trade" | "positions" | "orders";
 type OrderSide = "buy" | "sell";
@@ -54,21 +27,14 @@ type OrderType = "market" | "limit";
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ConnectForm() {
-  const { apiKey, secretKey, loading, error, setCredentials, connect } =
-    useAlpacaStore();
+  const { apiKey, secretKey, loading, error, connect } = useAlpacaStore();
   const [localKey, setLocalKey] = useState(apiKey);
   const [localSecret, setLocalSecret] = useState(secretKey);
   const [showSecret, setShowSecret] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setCredentials(localKey.trim(), localSecret.trim());
-    // The store reads from state synchronously in connect(), so we patch first
-    useAlpacaStore.setState({
-      apiKey: localKey.trim(),
-      secretKey: localSecret.trim(),
-    });
-    connect();
+    connect(localKey.trim(), localSecret.trim());
   }
 
   return (
@@ -202,13 +168,11 @@ function AccountBar() {
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="Equity" value={fmt$(account?.equity)} />
-        <Stat label="Buying Power" value={fmt$(account?.buying_power)} />
+        <Stat label="Equity" value={account == null ? "—" : formatCurrency(account.equity)} />
+        <Stat label="Buying Power" value={account == null ? "—" : formatCurrency(account.buying_power)} />
         <Stat
           label="Unrealized P&L"
-          value={fmt$(
-            positions.reduce((s, p) => s + p.unrealized_pl, 0),
-          )}
+          value={formatCurrency(positions.reduce((s, p) => s + p.unrealized_pl, 0))}
           className={
             positions.reduce((s, p) => s + p.unrealized_pl, 0) >= 0
               ? "text-emerald-400"
@@ -382,7 +346,7 @@ function TradeForm() {
       {/* Live price hint */}
       {livePrice != null && (
         <div className="text-[11px] text-zinc-600 font-mono">
-          Last: ${livePrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+          Last: ${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(livePrice)}
           {" · "}
           <span className="text-zinc-500">{tif.toUpperCase()}</span>
         </div>
@@ -456,7 +420,7 @@ function PositionsTab() {
                 {p.symbol}
               </span>
               <span className="text-[10px] text-zinc-500 font-mono">
-                {p.qty} · avg {fmt$(p.avg_entry_price)}
+                {p.qty} · avg {formatCurrency(p.avg_entry_price)}
               </span>
             </div>
             <div className="flex flex-col items-end gap-0.5">
@@ -466,7 +430,7 @@ function PositionsTab() {
                   isProfit ? "text-emerald-400" : "text-red-400",
                 )}
               >
-                {fmt$(p.unrealized_pl)}
+                {formatCurrency(p.unrealized_pl)}
               </span>
               <span
                 className={cn(
@@ -474,7 +438,7 @@ function PositionsTab() {
                   isProfit ? "text-emerald-500/70" : "text-red-500/70",
                 )}
               >
-                {fmtPct(p.unrealized_plpc)}
+                {formatPercent(p.unrealized_plpc * 100)}
               </span>
             </div>
           </div>
@@ -573,7 +537,7 @@ function OrdersTab() {
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function PaperTradingPanel() {
-  const connected = useAlpacaStore((s) => s.connected);
+  const connected = useAlpacaStore((s) => s.account !== null);
   const positions = useAlpacaStore((s) => s.positions);
   const orders = useAlpacaStore((s) => s.orders);
   const [tab, setTab] = useState<Tab>("trade");
