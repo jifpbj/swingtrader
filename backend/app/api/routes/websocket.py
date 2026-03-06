@@ -317,7 +317,7 @@ async def ws_trades(
     model = get_predictive_model(websocket)
 
     settings = get_settings()
-    tick_interval = settings.mock_tick_interval_ms / 1000
+    tick_interval = settings.tick_interval_ms / 1000
 
     async def start_producer() -> None:
         await _run_stream(

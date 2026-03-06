@@ -1,7 +1,7 @@
 "use client";
 
 import { useUIStore } from "@/store/useUIStore";
-import { formatPrice, formatPercent, getChangeColor } from "@/lib/utils";
+import { formatPrice, formatPercent } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
   Wifi,
@@ -16,24 +16,22 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
-// Mock ticker stats (replace with TanStack Query in production)
-const MOCK_STATS = {
-  price: 67_843.21,
-  change: 1_243.5,
-  changePercent: 1.86,
-  high24h: 68_950.0,
-  low24h: 65_120.0,
-  volume24h: 42_300_000_000,
-};
-
 export function TopBar() {
-  const ticker = useUIStore((s) => s.ticker);
-  const timeframe = useUIStore((s) => s.timeframe);
-  const setTimeframe = useUIStore((s) => s.setTimeframe);
+  const ticker      = useUIStore((s) => s.ticker);
+  const timeframe   = useUIStore((s) => s.timeframe);
+  const setTimeframe  = useUIStore((s) => s.setTimeframe);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const wsConnected = useUIStore((s) => s.wsConnected);
 
-  const isUp = MOCK_STATS.changePercent >= 0;
+  const livePrice = useUIStore((s) => s.livePrice);
+  const priceOpen = useUIStore((s) => s.priceOpen);
+  const high24h   = useUIStore((s) => s.high24h);
+  const low24h    = useUIStore((s) => s.low24h);
+  const volume24h = useUIStore((s) => s.volume24h);
+
+  const change        = livePrice != null && priceOpen ? livePrice - priceOpen : null;
+  const changePercent = change != null && priceOpen    ? (change / priceOpen) * 100 : null;
+  const isUp = (changePercent ?? 0) >= 0;
 
   return (
     <header className="glass-bright flex items-center justify-between px-4 h-14 shrink-0 border-b border-white/5 z-30">
@@ -61,27 +59,33 @@ export function TopBar() {
         {/* Price */}
         <div className="hidden md:flex items-center gap-3">
           <span className="text-lg font-mono font-semibold text-foreground tabular-nums">
-            ${formatPrice(MOCK_STATS.price)}
+            {livePrice != null ? `$${formatPrice(livePrice)}` : <span className="text-zinc-600 text-sm">—</span>}
           </span>
-          <span
-            className={cn(
-              "flex items-center gap-0.5 text-sm font-medium tabular-nums",
-              isUp ? "text-emerald-400" : "text-red-400"
-            )}
-          >
-            {isUp ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            {formatPercent(MOCK_STATS.changePercent)}
-          </span>
+          {changePercent != null && (
+            <span
+              className={cn(
+                "flex items-center gap-0.5 text-sm font-medium tabular-nums",
+                isUp ? "text-emerald-400" : "text-red-400"
+              )}
+            >
+              {isUp ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              {formatPercent(Math.abs(changePercent))}
+            </span>
+          )}
         </div>
 
         {/* OHLC stats */}
         <div className="hidden lg:flex items-center gap-4 text-xs text-muted-foreground">
-          <Stat label="H" value={`$${formatPrice(MOCK_STATS.high24h)}`} />
-          <Stat label="L" value={`$${formatPrice(MOCK_STATS.low24h)}`} />
-          <Stat
-            label="Vol"
-            value={`${(MOCK_STATS.volume24h / 1e9).toFixed(1)}B`}
-          />
+          {high24h   != null && <Stat label="H" value={`$${formatPrice(high24h)}`} />}
+          {low24h    != null && <Stat label="L" value={`$${formatPrice(low24h)}`} />}
+          {volume24h != null && (
+            <Stat label="Vol" value={volume24h >= 1e9
+              ? `${(volume24h / 1e9).toFixed(2)}B`
+              : volume24h >= 1e6
+              ? `${(volume24h / 1e6).toFixed(2)}M`
+              : volume24h.toFixed(0)
+            } />
+          )}
         </div>
       </div>
 

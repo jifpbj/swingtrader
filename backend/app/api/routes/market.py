@@ -11,6 +11,7 @@ import time
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 
 from app.api.dependencies import (
     AnalysisEngineDep,
@@ -20,6 +21,7 @@ from app.api.dependencies import (
 from app.core.logging import get_logger
 from app.models.schemas import (
     AlphaSignal,
+    AssetSearchResult,
     MarketRegime,
     OHLCVResponse,
     PriceProbabilityForecast,
@@ -37,6 +39,47 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/market", tags=["market"])
 
 
+# ─── Asset search ─────────────────────────────────────────────────────────────
+
+@router.get(
+    "/popular",
+    response_model=list[AssetSearchResult],
+    summary="Default popular assets shown before a search query is entered",
+)
+async def get_popular(svc: MarketDataDep) -> list[AssetSearchResult]:
+    return await svc.get_popular()
+
+
+@router.get(
+    "/search",
+    response_model=list[AssetSearchResult],
+    summary="Fuzzy search tradable assets by symbol or name",
+)
+async def search_assets(
+    svc: MarketDataDep,
+    q: str = Query(min_length=1, max_length=30, description="Symbol or name fragment"),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> list[AssetSearchResult]:
+    return await svc.search_assets(q.strip().upper(), limit=limit)
+
+
+# ─── Latest price ────────────────────────────────────────────────────────────
+
+class PriceResponse(BaseModel):
+    ticker: str
+    price: float
+
+
+@router.get(
+    "/price/{ticker:path}",
+    response_model=PriceResponse,
+    summary="Latest trade price (no cache — suitable for 1-second polling)",
+)
+async def get_price(ticker: str, svc: MarketDataDep) -> PriceResponse:
+    price = await svc.get_latest_price(ticker.upper())
+    return PriceResponse(ticker=ticker.upper(), price=price)
+
+
 # ─── OHLCV ───────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -48,15 +91,16 @@ async def get_ohlcv(
     ticker: str,
     svc: MarketDataDep,
     timeframe: Timeframe = Query(default=Timeframe.M15),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=200, ge=1, le=25000),
+    end: str | None = Query(default=None, description="End datetime ISO-8601; omit for most-recent bars"),
 ) -> OHLCVResponse:
-    cache_key = f"ohlcv:{ticker}:{timeframe}:{limit}"
+    cache_key = f"ohlcv:{ticker}:{timeframe}:{limit}:{end or ''}"
     cached = await ohlcv_cache.get(cache_key)
     if cached is not None:
         return cached
 
     try:
-        bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit)
+        bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit, end)
     except Exception as exc:
         logger.error("ohlcv_fetch_failed", ticker=ticker, error=str(exc))
         raise HTTPException(

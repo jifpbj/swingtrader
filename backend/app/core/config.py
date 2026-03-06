@@ -28,9 +28,8 @@ class Settings(BaseSettings):
     # ─── Polygon ──────────────────────────────────────────────────────────────
     polygon_api_key: str = Field(default="", alias="POLYGON_API_KEY")
 
-    # ─── Feature flags ────────────────────────────────────────────────────────
-    use_mock_data: bool = True
-    mock_tick_interval_ms: int = 1000
+    # ─── Stream ───────────────────────────────────────────────────────────────
+    tick_interval_ms: int = 5000  # WebSocket tick poll interval
 
     # ─── Analysis parameters ──────────────────────────────────────────────────
     default_timeframe: str = "15Min"

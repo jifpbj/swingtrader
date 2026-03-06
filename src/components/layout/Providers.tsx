@@ -1,10 +1,18 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { ThemeProvider } from "./ThemeProvider";
+import { useAuthStore } from "@/store/useAuthStore";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const initAuth = useAuthStore(s => s.initAuth);
+
+  useEffect(() => {
+    const unsubscribe = initAuth();
+    return unsubscribe;
+  }, [initAuth]);
+
   const queryClientRef = useRef<QueryClient | null>(null);
   if (!queryClientRef.current) {
     queryClientRef.current = new QueryClient({

@@ -63,11 +63,17 @@ function BBConfig() {
   const setBbPeriod = useUIStore(s => s.setBbPeriod);
   const bbStdDev   = useUIStore(s => s.bbStdDev);
   const setBbStdDev = useUIStore(s => s.setBbStdDev);
+  const showSignalMarkers = useUIStore(s => s.showSignalMarkers);
+  const setShowSignalMarkers = useUIStore(s => s.setShowSignalMarkers);
 
   return (
     <div className="flex flex-col gap-3">
       <SliderRow label="Period"  value={bbPeriod} min={5} max={100} onChange={setBbPeriod} tab="BB" />
       <SliderRow label="Std Dev" value={bbStdDev} min={1} max={4} step={0.1} onChange={setBbStdDev} tab="BB" />
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-sky-400 size-3" />
+        <span className="text-[11px] text-zinc-300">Show BUY / SELL markers</span>
+      </label>
     </div>
   );
 }

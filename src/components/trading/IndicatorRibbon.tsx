@@ -9,9 +9,7 @@ import {
   ReferenceLine,
   Tooltip,
 } from "recharts";
-import { generateMockIndicators } from "@/hooks/useMockData";
 import { useUIStore } from "@/store/useUIStore";
-import type { Indicators } from "@/types/market";
 import { cn, formatVolume } from "@/lib/utils";
 import { Activity, TrendingUp, Cpu } from "lucide-react";
 
@@ -109,7 +107,7 @@ function MACDChart({
         </div>
       </div>
       <div className="h-14">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={56} minWidth={0}>
           <BarChart data={history} margin={{ top: 2, bottom: 2 }}>
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
             <Tooltip
@@ -195,13 +193,19 @@ function ATRDisplay({ atr, price }: { atr: number; price: number }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function IndicatorRibbon() {
-  const liveIndicators = useUIStore((s) => s.indicators);
+  const indicators = useUIStore((s) => s.indicators);
 
-  // Fall back to mock data until the first WS indicator message arrives
-  const [mockIndicators] = useState<Indicators>(() =>
-    generateMockIndicators(67_000)
-  );
-  const indicators = liveIndicators ?? mockIndicators;
+  if (!indicators) {
+    return (
+      <div className="glass-bright border-t border-white/5 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2 text-[11px] text-zinc-600">
+          <Activity className="size-4" />
+          <span className="uppercase tracking-wider font-semibold">Indicators</span>
+          <span className="text-zinc-700">— waiting for data…</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-bright border-t border-white/5 px-4 py-3 shrink-0">

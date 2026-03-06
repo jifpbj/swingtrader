@@ -1,65 +1,122 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { useUIStore } from "@/store/useUIStore";
-import { cn, formatPrice, formatPercent } from "@/lib/utils";
-import type { Asset } from "@/types/market";
+import { cn } from "@/lib/utils";
 import {
   Search,
   X,
-  TrendingUp,
-  TrendingDown,
-  Star,
   Bitcoin,
   BarChart2,
+  Loader2,
 } from "lucide-react";
 
-// ─── Mock asset list ──────────────────────────────────────────────────────────
-const ASSETS: Asset[] = [
-  { symbol: "BTC/USDT", name: "Bitcoin", price: 67843.21, change24h: 1243.5, changePercent24h: 1.86, volume24h: 42_300_000_000, type: "crypto" },
-  { symbol: "ETH/USDT", name: "Ethereum", price: 3812.44, change24h: -82.3, changePercent24h: -2.11, volume24h: 18_200_000_000, type: "crypto" },
-  { symbol: "SOL/USDT", name: "Solana", price: 178.92, change24h: 8.14, changePercent24h: 4.77, volume24h: 4_100_000_000, type: "crypto" },
-  { symbol: "BNB/USDT", name: "BNB", price: 612.3, change24h: -11.2, changePercent24h: -1.8, volume24h: 2_800_000_000, type: "crypto" },
-  { symbol: "AVAX/USDT", name: "Avalanche", price: 38.74, change24h: 1.92, changePercent24h: 5.22, volume24h: 890_000_000, type: "crypto" },
-  { symbol: "AAPL", name: "Apple Inc.", price: 192.53, change24h: 2.14, changePercent24h: 1.12, volume24h: 68_000_000, type: "equity" },
-  { symbol: "TSLA", name: "Tesla Inc.", price: 247.88, change24h: -8.34, changePercent24h: -3.25, volume24h: 92_000_000, type: "equity" },
-  { symbol: "NVDA", name: "NVIDIA Corp.", price: 875.22, change24h: 22.8, changePercent24h: 2.68, volume24h: 45_000_000, type: "equity" },
-  { symbol: "EUR/USD", name: "Euro / US Dollar", price: 1.0862, change24h: 0.0034, changePercent24h: 0.31, volume24h: 0, type: "forex" },
-  { symbol: "GBP/USD", name: "British Pound", price: 1.2713, change24h: -0.0021, changePercent24h: -0.16, volume24h: 0, type: "forex" },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AssetResult {
+  symbol:      string;
+  name:        string;
+  asset_class: "equity" | "crypto";
+  exchange:    string;
+}
 
-const ASSET_ICONS: Record<Asset["type"], React.ElementType> = {
+
+const ICON: Record<AssetResult["asset_class"], React.ElementType> = {
   crypto: Bitcoin,
   equity: BarChart2,
-  forex: TrendingUp,
 };
 
-const TYPE_COLORS: Record<Asset["type"], string> = {
+const TYPE_COLOR: Record<AssetResult["asset_class"], string> = {
   crypto: "text-amber-400 bg-amber-500/10",
   equity: "text-blue-400 bg-blue-500/10",
-  forex: "text-violet-400 bg-violet-500/10",
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export function TickerSearch() {
-  const open = useUIStore((s) => s.searchOpen);
-  const setOpen = useUIStore((s) => s.setSearchOpen);
-  const setTicker = useUIStore((s) => s.setTicker);
+  const open        = useUIStore((s) => s.searchOpen);
+  const setOpen     = useUIStore((s) => s.setSearchOpen);
+  const setTicker   = useUIStore((s) => s.setTicker);
   const currentTicker = useUIStore((s) => s.ticker);
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery]             = useState("");
+  const [results, setResults]         = useState<AssetResult[]>([]);
+  const [loading, setLoading]         = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef     = useRef<AbortController | null>(null);
+  const popularRef   = useRef<AssetResult[]>([]);
 
-  const filtered = ASSETS.filter(
-    (a) =>
-      a.symbol.toLowerCase().includes(query.toLowerCase()) ||
-      a.name.toLowerCase().includes(query.toLowerCase())
-  );
+  // ─── Fetch popular on first open ───────────────────────────────────────────
+  useEffect(() => {
+    if (!open || popularRef.current.length > 0) return;
+    setLoading(true);
+    const ctrl = new AbortController();
+    fetch(`${API_URL}/api/v1/market/popular`, { signal: ctrl.signal })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: AssetResult[]) => {
+        popularRef.current = data;
+        if (!query.trim()) setResults(data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // ─── Fetch from API with debounce ──────────────────────────────────────────
+  useEffect(() => {
+    if (!open) return;
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!query.trim()) {
+      abortRef.current?.abort();
+      setResults(popularRef.current);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
+      try {
+        const res = await fetch(
+          `${API_URL}/api/v1/market/search?q=${encodeURIComponent(query.trim())}&limit=12`,
+          { signal: abortRef.current.signal }
+        );
+        if (res.ok) {
+          const data: AssetResult[] = await res.json();
+          setResults(data);
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, open]);
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) {
+      abortRef.current?.abort();
+      setQuery("");
+      setResults(popularRef.current);
+      setActiveIndex(0);
+    }
+  }, [open]);
 
   const select = useCallback(
-    (asset: Asset) => {
+    (asset: AssetResult) => {
       setTicker(asset.symbol);
       setOpen(false);
-      setQuery("");
     },
     [setTicker, setOpen]
   );
@@ -83,23 +140,23 @@ export function TickerSearch() {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+        setActiveIndex((i) => Math.min(i + 1, results.length - 1));
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setActiveIndex((i) => Math.max(i - 1, 0));
       }
-      if (e.key === "Enter" && filtered[activeIndex]) {
-        select(filtered[activeIndex]);
+      if (e.key === "Enter" && results[activeIndex]) {
+        select(results[activeIndex]);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, activeIndex, filtered, select]);
+  }, [open, activeIndex, results, select]);
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [query]);
+  }, [results]);
 
   if (!open) return null;
 
@@ -114,6 +171,7 @@ export function TickerSearch() {
       {/* Dialog */}
       <div className="fixed inset-x-0 top-24 mx-auto max-w-xl z-50 px-4">
         <div className="glass-bright rounded-2xl overflow-hidden shadow-2xl border border-white/10 animate-fade-up">
+
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
             <Search className="size-4 text-zinc-500 shrink-0" />
@@ -124,25 +182,28 @@ export function TickerSearch() {
               placeholder="Search ticker or asset name…"
               className="flex-1 bg-transparent text-sm text-white placeholder:text-zinc-600 outline-none"
             />
-            <button
-              onClick={() => setOpen(false)}
-              className="p-1 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              <X className="size-4" />
-            </button>
+            {loading ? (
+              <Loader2 className="size-4 text-zinc-500 shrink-0 animate-spin" />
+            ) : (
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+            )}
           </div>
 
           {/* Results */}
           <div className="max-h-80 overflow-y-auto py-2">
-            {filtered.length === 0 ? (
+            {!loading && results.length === 0 ? (
               <div className="text-center py-10 text-zinc-600 text-sm">
                 No assets found for &ldquo;{query}&rdquo;
               </div>
             ) : (
-              filtered.map((asset, i) => {
-                const Icon = ASSET_ICONS[asset.type];
-                const isUp = asset.changePercent24h >= 0;
-                const isActive = i === activeIndex;
+              results.map((asset, i) => {
+                const Icon     = ICON[asset.asset_class];
+                const isActive  = i === activeIndex;
                 const isCurrent = asset.symbol === currentTicker;
 
                 return (
@@ -159,7 +220,7 @@ export function TickerSearch() {
                     <div
                       className={cn(
                         "size-8 rounded-lg flex items-center justify-center shrink-0",
-                        TYPE_COLORS[asset.type]
+                        TYPE_COLOR[asset.asset_class]
                       )}
                     >
                       <Icon className="size-4" />
@@ -182,30 +243,12 @@ export function TickerSearch() {
                       </span>
                     </div>
 
-                    {/* Price */}
-                    <div className="flex flex-col items-end shrink-0">
-                      <span className="text-sm font-mono text-white tabular-nums">
-                        {asset.type === "forex"
-                          ? asset.price.toFixed(4)
-                          : `$${formatPrice(asset.price)}`}
+                    {/* Exchange badge */}
+                    {asset.exchange && (
+                      <span className="text-[10px] font-mono text-zinc-600 shrink-0 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                        {asset.exchange}
                       </span>
-                      <span
-                        className={cn(
-                          "flex items-center gap-0.5 text-xs font-mono tabular-nums",
-                          isUp ? "text-emerald-400" : "text-red-400"
-                        )}
-                      >
-                        {isUp ? (
-                          <TrendingUp className="size-3" />
-                        ) : (
-                          <TrendingDown className="size-3" />
-                        )}
-                        {formatPercent(asset.changePercent24h)}
-                      </span>
-                    </div>
-
-                    {/* Star placeholder */}
-                    <Star className="size-3.5 text-zinc-700 shrink-0" />
+                    )}
                   </button>
                 );
               })
@@ -219,7 +262,7 @@ export function TickerSearch() {
               <span><kbd className="font-mono">↵</kbd> select</span>
               <span><kbd className="font-mono">Esc</kbd> close</span>
             </div>
-            <span>{filtered.length} assets</span>
+            <span>{loading ? "searching…" : `${results.length} results`}</span>
           </div>
         </div>
       </div>

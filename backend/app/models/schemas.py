@@ -255,4 +255,10 @@ class TickerRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"] = "ok"
     version: str = "1.0.0"
-    use_mock: bool
+
+
+class AssetSearchResult(BaseModel):
+    symbol: str
+    name: str
+    asset_class: Literal["equity", "crypto"]
+    exchange: str = ""
