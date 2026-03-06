@@ -7,9 +7,13 @@ import { ChartContainer } from "@/components/trading/ChartContainer";
 import { IndicatorRibbon } from "@/components/trading/IndicatorRibbon";
 import { BacktestPanel } from "@/components/trading/BacktestPanel";
 import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
+import { TradeStrategyWidget } from "@/components/trading/TradeStrategyWidget";
+import { PaperTradingPanel } from "@/components/trading/PaperTradingPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
+import { useLivePrice } from "@/hooks/useLivePrice";
 
 export default function TradingDashboard() {
+  useLivePrice();
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -83,9 +87,17 @@ export default function TradingDashboard() {
             className="flex flex-col gap-3 shrink-0 overflow-y-auto min-w-[300px] max-w-[65vw]"
             style={{ width: `${rightPanelWidth}px` }}
           >
+            {/* Trade CTA */}
+            <TradeStrategyWidget />
+
             {/* Indicator config + Backtest — adjacent */}
             <IndicatorPanel />
             <BacktestPanel />
+
+            {/* Paper trading */}
+            <div id="paper-trading-panel">
+              <PaperTradingPanel />
+            </div>
           </aside>
         </main>
       </div>

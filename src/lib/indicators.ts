@@ -274,6 +274,7 @@ function zeroResult(): BacktestPeriodResult {
     tradeCount: 0,
     winRate: 0,
     maxDrawdown: 0,
+    sufficientData: true,
   };
 }
 
@@ -333,6 +334,7 @@ function runLongOnlyBacktest(
     tradeCount,
     winRate: tradeCount === 0 ? 0 : wins / tradeCount,
     maxDrawdown,
+    sufficientData: true,
   };
 }
 
@@ -367,6 +369,20 @@ const BARS_PER_DAY: Record<string, number> = {
   "1m": 1440, "5m": 288, "15m": 96, "1h": 24, "4h": 6, "1d": 1,
 };
 
+/** Timeframes that use intraday periods (4H / 1D / 1W / 1M) */
+const SHORT_TIMEFRAMES = new Set(["1m", "5m", "15m"]);
+
+/** Calendar-seconds for each short-TF period window */
+const SHORT_TF_SECONDS: Record<string, number> = {
+  "4H": 4 * 3600,
+  "1D": 24 * 3600,
+  "1W": 7 * 24 * 3600,
+  "1M": 30 * 24 * 3600,
+};
+
+const SHORT_TF_KEYS: BacktestPeriodKey[] = ["4H", "1D", "1W", "1M"];
+const LONG_TF_KEYS:  BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
+
 export function computeStrategyBacktests(
   candles: Candle[],
   strategy: BacktestStrategy,
@@ -386,30 +402,6 @@ export function computeStrategyBacktests(
 ): BacktestResult {
   const n = candles.length;
   const lastTs = candles[n - 1]?.time ?? Math.floor(Date.now() / 1000);
-  const endYear = new Date(lastTs * 1000).getUTCFullYear();
-
-  // Scale trading-day counts to actual bar counts for the current timeframe.
-  // This ensures each period covers a distinct subset of candles regardless of
-  // how much history is available — e.g. for 15m data, "1M" = last 21×96 bars.
-  const bpd = BARS_PER_DAY[timeframe] ?? 96;
-
-  function periodStartTs(tradingDays: number): number {
-    const barCount = Math.round(tradingDays * bpd);
-    const idx = Math.max(0, n - 1 - Math.min(barCount, n - 1));
-    return candles[idx].time;
-  }
-
-  const ytdTs = Math.floor(Date.UTC(endYear, 0, 1) / 1000);
-  const ytdIdx = candles.findIndex((c) => c.time >= ytdTs);
-
-  const periodStarts: Record<BacktestPeriodKey, number> = {
-    "1M":  periodStartTs(21),
-    "6M":  periodStartTs(126),
-    "YTD": ytdIdx >= 0 ? candles[ytdIdx].time : candles[0].time,
-    "1Y":  periodStartTs(252),
-  };
-
-  const periods = {} as Record<BacktestPeriodKey, BacktestPeriodResult>;
 
   const buildSignals = (slice: Candle[]): CrossoverSignal[] => {
     const closes = slice.map((c) => c.close);
@@ -433,11 +425,12 @@ export function computeStrategyBacktests(
     }
   };
 
-  for (const key of ["1M", "6M", "YTD", "1Y"] as BacktestPeriodKey[]) {
-    // Keep EMA behavior requiring enough bars for the EMA period; other strategies just need 2+ bars.
-    if (strategy === "EMA") periods[key] = runBacktest(candles, params.emaPeriod, periodStarts[key]);
-    else periods[key] = runSignalBacktest(candles, periodStarts[key], buildSignals);
-  }
+  const INSUFFICIENT: BacktestPeriodResult = {
+    strategyReturn: 0, holdReturn: 0, tradeCount: 0,
+    winRate: 0, maxDrawdown: 0, sufficientData: false,
+  };
+
+  const periods: Partial<Record<BacktestPeriodKey, BacktestPeriodResult>> = {};
 
   const strategyLabel =
     strategy === "EMA"  ? `EMA(${params.emaPeriod})` :
@@ -446,10 +439,72 @@ export function computeStrategyBacktests(
     strategy === "MACD" ? `MACD(${params.macdFast},${params.macdSlow},${params.macdSignal})` :
     "TD Sequential 9";
 
-  return { ticker, strategyLabel, periods };
+  // ── Short timeframes: 1m / 5m / 15m ────────────────────────────────────────
+  // Use calendar-time windows (4H, 1D, 1W, 1M) rather than trading-day scaling.
+  if (SHORT_TIMEFRAMES.has(timeframe)) {
+    for (const key of SHORT_TF_KEYS) {
+      const windowSecs = SHORT_TF_SECONDS[key];
+      const fromTs = lastTs - windowSecs;
+      const slice = candles.filter((c) => c.time >= fromTs);
+      if (slice.length < 2) {
+        periods[key] = INSUFFICIENT;
+        continue;
+      }
+      if (strategy === "EMA") {
+        periods[key] = runBacktest(candles, params.emaPeriod, fromTs);
+      } else {
+        periods[key] = runSignalBacktest(candles, fromTs, buildSignals);
+      }
+    }
+    return { ticker, strategyLabel, periods, periodKeys: SHORT_TF_KEYS };
+  }
+
+  // ── Long timeframes: 1h / 4h / 1d ──────────────────────────────────────────
+  // Use trading-day-scaled bar counts (21, 126, YTD, 252).
+  const bpd = BARS_PER_DAY[timeframe] ?? 1;
+  const endYear = new Date(lastTs * 1000).getUTCFullYear();
+
+  const PERIOD_TRADING_DAYS: Record<string, number> = {
+    "1M": 21, "6M": 126, "1Y": 252,
+  };
+
+  function periodBarCount(tradingDays: number): number {
+    return Math.round(tradingDays * bpd);
+  }
+
+  function periodStartTs(tradingDays: number): number {
+    const barCount = periodBarCount(tradingDays);
+    const idx = Math.max(0, n - 1 - Math.min(barCount, n - 1));
+    return candles[idx].time;
+  }
+
+  const ytdTs = Math.floor(Date.UTC(endYear, 0, 1) / 1000);
+  const ytdIdx = candles.findIndex((c) => c.time >= ytdTs);
+  const ytdBarCount = ytdIdx >= 0 ? n - ytdIdx : n;
+
+  const periodStarts: Partial<Record<BacktestPeriodKey, number>> = {
+    "1M":  periodStartTs(21),
+    "6M":  periodStartTs(126),
+    "YTD": ytdIdx >= 0 ? candles[ytdIdx].time : candles[0].time,
+    "1Y":  periodStartTs(252),
+  };
+
+  for (const key of LONG_TF_KEYS) {
+    const required =
+      key === "YTD" ? ytdBarCount : periodBarCount(PERIOD_TRADING_DAYS[key] ?? 252);
+    if (required > n) {
+      periods[key] = INSUFFICIENT;
+      continue;
+    }
+    const fromTs = periodStarts[key]!;
+    if (strategy === "EMA") periods[key] = runBacktest(candles, params.emaPeriod, fromTs);
+    else periods[key] = runSignalBacktest(candles, fromTs, buildSignals);
+  }
+
+  return { ticker, strategyLabel, periods, periodKeys: LONG_TF_KEYS };
 }
 
-// Backwards-compatible wrapper (EMA)
+// Backwards-compatible wrapper (EMA, long-TF default)
 export function computeAllBacktests(
   candles: Candle[],
   period: number,
@@ -465,5 +520,5 @@ export function computeAllBacktests(
     macdFast: 12,
     macdSlow: 26,
     macdSignal: 9,
-  });
+  }, "1d");
 }

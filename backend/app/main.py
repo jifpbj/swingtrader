@@ -17,13 +17,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import market, websocket
+from app.api.routes import market, trading, websocket
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.engine.analysis import AnalysisEngine
 from app.engine.predictive import StatisticalModel
 from app.models.schemas import HealthResponse
-from app.services.market_data import AlpacaMarketDataService, MockMarketDataService
+from app.services.market_data import AlpacaMarketDataService
 
 logger = get_logger(__name__)
 
@@ -44,18 +44,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(
         "app_starting",
         env=settings.app_env,
-        use_mock=settings.use_mock_data,
         host=settings.app_host,
         port=settings.app_port,
     )
 
     # ── Market data service ───────────────────────────────────────────────────
-    if settings.use_mock_data:
-        logger.info("market_data_service", backend="mock")
-        svc = MockMarketDataService()
-    else:
-        logger.info("market_data_service", backend="alpaca")
-        svc = AlpacaMarketDataService()
+    logger.info("market_data_service", backend="alpaca")
+    svc = AlpacaMarketDataService()
 
     app.state.market_data = svc
 
@@ -106,12 +101,13 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(market.router, prefix="/api/v1")
+    app.include_router(trading.router, prefix="/api/v1")
     app.include_router(websocket.router)
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", response_model=HealthResponse, tags=["meta"])
     async def health() -> HealthResponse:
-        return HealthResponse(use_mock=settings.use_mock_data)
+        return HealthResponse()
 
     # ── Global exception handler ──────────────────────────────────────────────
     @app.exception_handler(Exception)

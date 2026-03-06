@@ -88,17 +88,73 @@ export interface CrossoverSignal {
   price: number;       // close price at crossover bar
 }
 
+// ─── Alpaca Paper Trading ─────────────────────────────────────────────────────
+export interface AlpacaAccount {
+  id: string;
+  buying_power: number;
+  portfolio_value: number;
+  equity: number;
+  cash: number;
+  long_market_value: number;
+  short_market_value: number;
+  daytrade_count: number;
+  pattern_day_trader: boolean;
+  trading_blocked: boolean;
+}
+
+export interface AlpacaPosition {
+  symbol: string;
+  qty: number;
+  side: string;
+  avg_entry_price: number;
+  current_price: number | null;
+  unrealized_pl: number;
+  unrealized_plpc: number;
+  market_value: number | null;
+}
+
+export interface AlpacaOrder {
+  id: string;
+  symbol: string;
+  side: string;
+  qty: number | null;
+  notional: number | null;
+  order_type: string;
+  status: string;
+  filled_avg_price: number | null;
+  filled_qty: number;
+  created_at: string;
+  time_in_force: string;
+  limit_price: number | null;
+}
+
+export interface PlaceOrderRequest {
+  symbol: string;
+  qty?: number;
+  notional?: number;
+  side: "buy" | "sell";
+  type: "market" | "limit" | "stop" | "stop_limit";
+  time_in_force: "day" | "gtc" | "ioc" | "fok";
+  limit_price?: number;
+  stop_price?: number;
+}
+
 // ─── Backtest ─────────────────────────────────────────────────────────────────
-export type BacktestPeriodKey = "1M" | "6M" | "YTD" | "1Y";
+// Long-TF periods (1h / 4h / 1d charts): trading-day windows
+// Short-TF periods (1m / 5m / 15m charts): calendar-time windows
+export type BacktestPeriodKey = "4H" | "1D" | "1W" | "1M" | "6M" | "YTD" | "1Y";
 export interface BacktestPeriodResult {
   strategyReturn: number; // decimal (0.14 = +14%)
   holdReturn: number;
   tradeCount: number;     // completed round-trips
   winRate: number;        // decimal (0 if tradeCount=0)
   maxDrawdown: number;    // decimal, ≤ 0 (e.g. -0.12)
+  sufficientData: boolean; // false when available bars < period requires
 }
 export interface BacktestResult {
   ticker: string;
   strategyLabel: string;
-  periods: Record<BacktestPeriodKey, BacktestPeriodResult>;
+  periods: Partial<Record<BacktestPeriodKey, BacktestPeriodResult>>;
+  /** Ordered period keys actually computed — varies by chart timeframe */
+  periodKeys: BacktestPeriodKey[];
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
-import { generateMockCandlesForTimeframe } from "@/hooks/useMockData";
 import { computeStrategyBacktests } from "@/lib/indicators";
 import type { Candle, BacktestResult, BacktestPeriodKey } from "@/types/market";
 import { formatPercent } from "@/lib/utils";
@@ -10,7 +9,8 @@ import { BarChart2, Percent, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toBackendTf } from "@/lib/timeframeConvert";
 
-const PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
+// Period keys are determined dynamically by the result; this is just a fallback
+const LONG_TF_PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
 
 export function BacktestPanel() {
   const ticker = useUIStore((s) => s.ticker);
@@ -46,7 +46,7 @@ export function BacktestPanel() {
     const BPD: Record<string, number> = {
       "1m": 1440, "5m": 288, "15m": 96, "1h": 24, "4h": 6, "1d": 1,
     };
-    const limit = Math.min(Math.ceil(252 * (BPD[timeframe] ?? 96)) + 50, 5000);
+    const limit = Math.min(Math.ceil(252 * (BPD[timeframe] ?? 96)) + 50, 25000);
 
     fetch(
       `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=${backendTimeframe}&limit=${limit}`,
@@ -57,10 +57,10 @@ export function BacktestPanel() {
       })
       .then((json) => {
         const bars = json.bars ?? [];
-        setCandles(bars.length >= 10 ? bars : generateMockCandlesForTimeframe(limit, timeframe));
+        if (bars.length >= 10) setCandles(bars);
       })
       .catch(() => {
-        setCandles(generateMockCandlesForTimeframe(limit, timeframe));
+        // leave candles empty — the table will show "Computing…" until data arrives
       });
   }, [ticker, timeframe]);
 
@@ -106,7 +106,10 @@ export function BacktestPanel() {
     macdSignalPeriod,
   ]);
 
-  const oneYearResult = result?.periods["1Y"];
+  const periodKeys = result?.periodKeys ?? LONG_TF_PERIOD_KEYS;
+  // Footer stats use the longest available period (last key)
+  const lastPeriodKey = periodKeys[periodKeys.length - 1];
+  const lastPeriodResult = result?.periods[lastPeriodKey];
 
   return (
     <div className="glass rounded-2xl px-4 py-3 flex flex-col gap-3 shrink-0">
@@ -198,11 +201,12 @@ export function BacktestPanel() {
                 </tr>
               </thead>
               <tbody>
-                {PERIOD_KEYS.map((key) => {
+                {periodKeys.map((key) => {
                   const p = result.periods[key];
-                  const strategyDollar = initialInvestment * p.strategyReturn;
-                  const holdDollar = initialInvestment * p.holdReturn;
-                  const beatsBenchmark = p.strategyReturn > p.holdReturn;
+                  const insufficient = !p || !p.sufficientData;
+                  const strategyDollar = initialInvestment * (p?.strategyReturn ?? 0);
+                  const holdDollar = initialInvestment * (p?.holdReturn ?? 0);
+                  const beatsBenchmark = (p?.strategyReturn ?? 0) > (p?.holdReturn ?? 0);
                   return (
                     <tr key={key} className="border-b border-white/3 hover:bg-white/2">
                       <td className="sticky left-0 z-10 bg-card px-2 py-1.5 font-mono text-zinc-400 border-r border-white/5">
@@ -211,27 +215,27 @@ export function BacktestPanel() {
                       <td
                         className={cn(
                           "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
-                          beatsBenchmark ? "text-emerald-400" : "text-red-400",
+                          insufficient ? "text-zinc-600" : beatsBenchmark ? "text-emerald-400" : "text-red-400",
                         )}
                       >
-                        {viewMode === "pct"
-                          ? formatPercent(p.strategyReturn * 100)
+                        {insufficient ? "—" : viewMode === "pct"
+                          ? formatPercent((p?.strategyReturn ?? 0) * 100)
                           : currencyFmt.format(strategyDollar)}
                       </td>
                       <td
                         className={cn(
                           "px-2 py-1.5 text-right font-mono tabular-nums",
-                          viewMode === "val"
+                          insufficient ? "text-zinc-600" : viewMode === "val"
                             ? holdDollar >= 0 ? "text-emerald-300" : "text-red-300"
-                            : p.holdReturn >= 0 ? "text-foreground/70" : "text-muted-foreground",
+                            : (p?.holdReturn ?? 0) >= 0 ? "text-foreground/70" : "text-muted-foreground",
                         )}
                       >
-                        {viewMode === "pct"
-                          ? formatPercent(p.holdReturn * 100)
+                        {insufficient ? "—" : viewMode === "pct"
+                          ? formatPercent((p?.holdReturn ?? 0) * 100)
                           : currencyFmt.format(holdDollar)}
                       </td>
                       <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted-foreground">
-                        {p.tradeCount}
+                        {insufficient ? "—" : p!.tradeCount}
                       </td>
                     </tr>
                   );
@@ -240,15 +244,15 @@ export function BacktestPanel() {
             </table>
           </div>
 
-          {/* Footer stats */}
-          {oneYearResult && (
+          {/* Footer stats — keyed to the longest available period */}
+          {lastPeriodResult && lastPeriodResult.sufficientData && (
             <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
               <span>
-                Win rate (1Y):{" "}
+                Win rate ({lastPeriodKey}):{" "}
                 <span className="text-zinc-300 font-mono">
-                  {oneYearResult.tradeCount === 0
+                  {lastPeriodResult.tradeCount === 0
                     ? "—"
-                    : `${(oneYearResult.winRate * 100).toFixed(0)}%`}
+                    : `${(lastPeriodResult.winRate * 100).toFixed(0)}%`}
                 </span>
               </span>
               <span>
@@ -256,16 +260,16 @@ export function BacktestPanel() {
                 <span
                   className={cn(
                     "font-mono",
-                    oneYearResult.maxDrawdown < -0.05
+                    lastPeriodResult.maxDrawdown < -0.05
                       ? "text-red-400"
                       : "text-zinc-300",
                   )}
                 >
-                  {oneYearResult.maxDrawdown === 0
+                  {lastPeriodResult.maxDrawdown === 0
                     ? "—"
                     : viewMode === "val"
-                      ? currencyFmt.format(initialInvestment * oneYearResult.maxDrawdown)
-                      : formatPercent(oneYearResult.maxDrawdown * 100)}
+                      ? currencyFmt.format(initialInvestment * lastPeriodResult.maxDrawdown)
+                      : formatPercent(lastPeriodResult.maxDrawdown * 100)}
                 </span>
               </span>
             </div>
