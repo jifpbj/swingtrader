@@ -3,13 +3,20 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AlpacaAccount, AlpacaOrder, AlpacaPosition, PlaceOrderRequest } from "@/types/market";
+import type { TradingMode } from "@/types/strategy";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-function alpacaHeaders(apiKey: string, secretKey: string): HeadersInit {
+const ALPACA_URLS: Record<TradingMode, string> = {
+  paper: "https://paper-api.alpaca.markets",
+  live:  "https://api.alpaca.markets",
+};
+
+function alpacaHeaders(apiKey: string, secretKey: string, mode: TradingMode): HeadersInit {
   return {
     "X-Alpaca-Key": apiKey,
     "X-Alpaca-Secret": secretKey,
+    "X-Alpaca-Base-Url": ALPACA_URLS[mode],
   };
 }
 
@@ -17,12 +24,13 @@ async function alpacaFetch<T>(
   path: string,
   apiKey: string,
   secretKey: string,
+  mode: TradingMode,
   init?: RequestInit,
 ): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
-      ...alpacaHeaders(apiKey, secretKey),
+      ...alpacaHeaders(apiKey, secretKey, mode),
       ...(init?.headers ?? {}),
     },
   });
@@ -38,6 +46,9 @@ interface AlpacaState {
   apiKey: string;
   secretKey: string;
 
+  // ─── Trading mode (persisted)
+  tradingMode: TradingMode;
+
   // ─── Live state (ephemeral)
   // Note: `connected` is derived — check `account !== null` instead.
   account: AlpacaAccount | null;
@@ -48,6 +59,7 @@ interface AlpacaState {
 
   // ─── Actions
   setCredentials: (apiKey: string, secretKey: string) => void;
+  setTradingMode: (mode: TradingMode) => void;
   connect: (apiKey: string, secretKey: string) => Promise<void>;
   disconnect: () => void;
   fetchAccount: () => Promise<void>;
@@ -64,6 +76,7 @@ export const useAlpacaStore = create<AlpacaState>()(
     (set, get) => ({
       apiKey: "",
       secretKey: "",
+      tradingMode: "paper",
       account: null,
       positions: [],
       orders: [],
@@ -72,6 +85,8 @@ export const useAlpacaStore = create<AlpacaState>()(
 
       setCredentials: (apiKey, secretKey) =>
         set({ apiKey, secretKey, error: null }),
+
+      setTradingMode: (tradingMode) => set({ tradingMode }),
 
       connect: async (apiKey, secretKey) => {
         if (!apiKey || !secretKey) {
@@ -84,9 +99,9 @@ export const useAlpacaStore = create<AlpacaState>()(
             "/api/v1/trading/account",
             apiKey,
             secretKey,
+            get().tradingMode,
           );
           set({ account, loading: false });
-          // Background-fetch positions and orders in parallel
           void Promise.all([get().fetchPositions(), get().fetchOrders()]);
         } catch (e) {
           set({ error: (e as Error).message, loading: false });
@@ -102,12 +117,13 @@ export const useAlpacaStore = create<AlpacaState>()(
         }),
 
       fetchAccount: async () => {
-        const { apiKey, secretKey } = get();
+        const { apiKey, secretKey, tradingMode } = get();
         try {
           const account = await alpacaFetch<AlpacaAccount>(
             "/api/v1/trading/account",
             apiKey,
             secretKey,
+            tradingMode,
           );
           set({ account });
         } catch {
@@ -116,12 +132,13 @@ export const useAlpacaStore = create<AlpacaState>()(
       },
 
       fetchPositions: async () => {
-        const { apiKey, secretKey } = get();
+        const { apiKey, secretKey, tradingMode } = get();
         try {
           const positions = await alpacaFetch<AlpacaPosition[]>(
             "/api/v1/trading/positions",
             apiKey,
             secretKey,
+            tradingMode,
           );
           set({ positions });
         } catch {
@@ -130,12 +147,13 @@ export const useAlpacaStore = create<AlpacaState>()(
       },
 
       fetchOrders: async () => {
-        const { apiKey, secretKey } = get();
+        const { apiKey, secretKey, tradingMode } = get();
         try {
           const orders = await alpacaFetch<AlpacaOrder[]>(
             "/api/v1/trading/orders",
             apiKey,
             secretKey,
+            tradingMode,
           );
           set({ orders });
         } catch {
@@ -144,11 +162,12 @@ export const useAlpacaStore = create<AlpacaState>()(
       },
 
       placeOrder: async (req) => {
-        const { apiKey, secretKey } = get();
+        const { apiKey, secretKey, tradingMode } = get();
         const order = await alpacaFetch<AlpacaOrder>(
           "/api/v1/trading/orders",
           apiKey,
           secretKey,
+          tradingMode,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -161,22 +180,24 @@ export const useAlpacaStore = create<AlpacaState>()(
       },
 
       cancelOrder: async (orderId) => {
-        const { apiKey, secretKey } = get();
+        const { apiKey, secretKey, tradingMode } = get();
         await alpacaFetch<void>(
           `/api/v1/trading/orders/${orderId}`,
           apiKey,
           secretKey,
+          tradingMode,
           { method: "DELETE" },
         );
         void get().fetchOrders();
       },
 
       cancelAllOrders: async () => {
-        const { apiKey, secretKey } = get();
+        const { apiKey, secretKey, tradingMode } = get();
         await alpacaFetch<void>(
           "/api/v1/trading/orders",
           apiKey,
           secretKey,
+          tradingMode,
           { method: "DELETE" },
         );
         void get().fetchOrders();
@@ -193,10 +214,11 @@ export const useAlpacaStore = create<AlpacaState>()(
     }),
     {
       name: "alpaca-credentials",
-      // Only persist credentials — ephemeral state is always re-fetched
+      // Persist credentials and trading mode
       partialize: (state) => ({
         apiKey: state.apiKey,
         secretKey: state.secretKey,
+        tradingMode: state.tradingMode,
       }),
     },
   ),

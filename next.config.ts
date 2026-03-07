@@ -9,6 +9,7 @@ const realNodeModules = fs.realpathSync(path.join(__dirname, "node_modules"));
 const turbopackRoot = path.dirname(realNodeModules);
 
 const nextConfig: NextConfig = {
+  output: "export",
   turbopack: {
     root: turbopackRoot,
   },

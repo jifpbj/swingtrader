@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import React, { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ChartContainer } from "@/components/trading/ChartContainer";
@@ -11,9 +11,13 @@ import { TradeStrategyWidget } from "@/components/trading/TradeStrategyWidget";
 import { PaperTradingPanel } from "@/components/trading/PaperTradingPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { useLivePrice } from "@/hooks/useLivePrice";
+import { useAutoTrader } from "@/hooks/useAutoTrader";
+import { useAuthStore } from "@/store/useAuthStore";
 
 export default function TradingDashboard() {
   useLivePrice();
+  useAutoTrader();
+  const user = useAuthStore((s) => s.user);
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -59,16 +63,17 @@ export default function TradingDashboard() {
         <Sidebar />
 
         {/* Dashboard body */}
-        <main className="flex flex-1 overflow-hidden gap-3 p-3">
+        <main className="flex flex-col md:flex-row flex-1 overflow-hidden gap-3 p-3">
           {/* ─── Left: Chart + Indicator Ribbon ─── */}
-          <div className="flex flex-col flex-1 gap-3 min-w-0 overflow-hidden">
-            {/* Chart area */}
-            <div className="glass rounded-2xl flex-1 overflow-hidden relative min-h-0">
+          {/* Mobile: shrink-0 (chart has explicit h-[50vh]). Desktop: flex-1 fills remaining height. */}
+          <div className="flex flex-col shrink-0 gap-3 min-w-0 md:flex-1 md:overflow-hidden">
+            {/* Chart area: 50vh on mobile, flex-1 on desktop */}
+            <div className="glass rounded-2xl overflow-hidden relative h-[50vh] md:flex-1 md:min-h-0">
               <ChartContainer />
             </div>
 
-            {/* Indicator ribbon */}
-            <div className="rounded-2xl shrink-0">
+            {/* Indicator ribbon — desktop only */}
+            <div className="rounded-2xl shrink-0 hidden md:block">
               <IndicatorRibbon />
             </div>
           </div>
@@ -83,9 +88,10 @@ export default function TradingDashboard() {
           </div>
 
           {/* ─── Right: Analysis Panel ─── */}
+          {/* Mobile: flex-1 takes remaining height, scrolls internally. Desktop: fixed-width side panel. */}
           <aside
-            className="flex flex-col gap-3 shrink-0 overflow-y-auto min-w-[300px] max-w-[65vw]"
-            style={{ width: `${rightPanelWidth}px` }}
+            className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto w-full md:shrink-0 md:flex-none md:min-w-[300px] md:max-w-[65vw] md:[width:var(--right-panel-w)]"
+            style={{ "--right-panel-w": `${rightPanelWidth}px` } as React.CSSProperties}
           >
             {/* Trade CTA */}
             <TradeStrategyWidget />
@@ -94,10 +100,12 @@ export default function TradingDashboard() {
             <IndicatorPanel />
             <BacktestPanel />
 
-            {/* Paper trading */}
-            <div id="paper-trading-panel">
-              <PaperTradingPanel />
-            </div>
+            {/* Paper trading — only for signed-in users */}
+            {user && (
+              <div id="paper-trading-panel">
+                <PaperTradingPanel />
+              </div>
+            )}
           </aside>
         </main>
       </div>

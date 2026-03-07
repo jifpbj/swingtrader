@@ -27,14 +27,21 @@ type OrderType = "market" | "limit";
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ConnectForm() {
-  const { apiKey, secretKey, loading, error, connect } = useAlpacaStore();
+  const { apiKey, secretKey, loading, error, connect, setCredentials } = useAlpacaStore();
   const [localKey, setLocalKey] = useState(apiKey);
   const [localSecret, setLocalSecret] = useState(secretKey);
   const [showSecret, setShowSecret] = useState(false);
+  const [credsSaved, setCredsSaved] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     connect(localKey.trim(), localSecret.trim());
+  }
+
+  function handleSaveCredentials() {
+    setCredentials(localKey.trim(), localSecret.trim());
+    setCredsSaved(true);
+    setTimeout(() => setCredsSaved(false), 2000);
   }
 
   return (
@@ -105,18 +112,31 @@ function ConnectForm() {
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={loading || !localKey || !localSecret}
-        className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold bg-amber-400 hover:bg-amber-300 text-zinc-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-amber-400/20"
-      >
-        {loading ? (
-          <span className="size-3.5 border-2 border-zinc-900/30 border-t-zinc-900 rounded-full animate-spin" />
-        ) : (
-          <Link2 className="size-3.5" />
-        )}
-        {loading ? "Connecting…" : "Connect"}
-      </button>
+      <div className="flex gap-2">
+        {/* Save credentials without connecting */}
+        <button
+          type="button"
+          onClick={handleSaveCredentials}
+          disabled={!localKey || !localSecret}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-semibold border border-white/10 text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {credsSaved ? "Saved!" : "Save"}
+        </button>
+
+        {/* Connect + verify */}
+        <button
+          type="submit"
+          disabled={loading || !localKey || !localSecret}
+          className="flex-[2] flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold bg-amber-400 hover:bg-amber-300 text-zinc-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-amber-400/20"
+        >
+          {loading ? (
+            <span className="size-3.5 border-2 border-zinc-900/30 border-t-zinc-900 rounded-full animate-spin" />
+          ) : (
+            <Link2 className="size-3.5" />
+          )}
+          {loading ? "Connecting…" : "Connect"}
+        </button>
+      </div>
     </form>
   );
 }
