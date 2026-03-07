@@ -460,6 +460,49 @@ class AlpacaMarketDataService(MarketDataService):
         if self._broker_http and not self._broker_http.is_closed:
             await self._broker_http.aclose()
 
+    async def _get_crypto_ohlcv_alpaca(
+        self,
+        ticker: str,
+        timeframe: Timeframe,
+        limit: int,
+        end: str | None = None,
+    ) -> list[Candle]:
+        client = await self._client()
+        params: dict[str, str | int] = {
+            "symbols": ticker,
+            "timeframe": _ALPACA_TIMEFRAME[timeframe],
+            "limit": limit,
+        }
+        if end:
+            params["end"] = end
+
+        try:
+            resp = await client.get("/v1beta3/crypto/us/bars", params=params)
+            resp.raise_for_status()
+            bars = resp.json().get("bars", {}).get(ticker, [])
+        except Exception as exc:
+            logger.warning("alpaca_crypto_bars_error", ticker=ticker, timeframe=timeframe, error=str(exc))
+            return []
+
+        candles: list[Candle] = []
+        for bar in bars:
+            ts = bar.get("t")
+            if not ts:
+                continue
+            t = int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+            candles.append(
+                Candle(
+                    time=t,
+                    open=round(float(bar.get("o", 0.0)), 4),
+                    high=round(float(bar.get("h", 0.0)), 4),
+                    low=round(float(bar.get("l", 0.0)), 4),
+                    close=round(float(bar.get("c", 0.0)), 4),
+                    volume=round(float(bar.get("v", 0.0)), 2),
+                )
+            )
+
+        return candles
+
     async def get_ohlcv(
         self,
         ticker: str,
@@ -473,6 +516,12 @@ class AlpacaMarketDataService(MarketDataService):
         is used for all historical chart data.  Alpaca is still used for
         real-time price polling (get_latest_price / stream_ticks).
         """
+        if "/" in ticker:
+            bars = await self._get_crypto_ohlcv_alpaca(ticker, timeframe, limit, end=end)
+            if bars:
+                logger.info("alpaca_crypto_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
+                return bars
+
         end_dt = (
             datetime.fromisoformat(end.replace("Z", "+00:00")).astimezone(timezone.utc)
             if end else datetime.now(timezone.utc)
