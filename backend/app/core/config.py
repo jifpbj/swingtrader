@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     log_level: str = "INFO"
+    cors_origins_env: str = Field(default="", alias="CORS_ORIGINS")
 
     # ─── Alpaca ───────────────────────────────────────────────────────────────
     alpaca_api_key: str = Field(default="", alias="ALPACA_API_KEY")
@@ -52,6 +53,8 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
+        if self.cors_origins_env.strip():
+            return [o.strip() for o in self.cors_origins_env.split(",") if o.strip()]
         if self.is_development:
             return ["http://localhost:3000", "http://127.0.0.1:3000"]
         return []  # Lock down in production — set explicitly via env
