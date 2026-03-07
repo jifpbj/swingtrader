@@ -58,6 +58,15 @@ _YF_MAX_LOOKBACK_DAYS: dict[Timeframe, int] = {
     Timeframe.D1:  10_000,
 }
 
+_YF_PERIOD_BY_TIMEFRAME: dict[Timeframe, str] = {
+    Timeframe.M1: "7d",
+    Timeframe.M5: "60d",
+    Timeframe.M15: "60d",
+    Timeframe.H1: "730d",
+    Timeframe.H4: "730d",
+    Timeframe.D1: "max",
+}
+
 
 def _to_yf_symbol(ticker: str) -> str:
     """BTC/USD → BTC-USD, AAPL → AAPL"""
@@ -83,10 +92,28 @@ def _yf_fetch(ticker: str, timeframe: Timeframe, limit: int, end_dt: datetime) -
             auto_adjust=True,
             raise_errors=False,
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("yf_history_exception", ticker=ticker, timeframe=timeframe, error=str(exc))
         return []
 
     if hist is None or hist.empty:
+        # Some hosted environments intermittently return empty frames for
+        # `Ticker().history(...)`; retry with the download API + period.
+        try:
+            hist = yf.download(
+                yf_sym,
+                period=_YF_PERIOD_BY_TIMEFRAME[timeframe],
+                interval=interval,
+                auto_adjust=True,
+                progress=False,
+                threads=False,
+            )
+        except Exception as exc:
+            logger.warning("yf_download_exception", ticker=ticker, timeframe=timeframe, error=str(exc))
+            return []
+
+    if hist is None or hist.empty:
+        logger.warning("yf_empty_history", ticker=ticker, timeframe=timeframe, interval=interval)
         return []
 
     # Resample 1h → 4h for the H4 timeframe
