@@ -58,6 +58,15 @@ _YF_MAX_LOOKBACK_DAYS: dict[Timeframe, int] = {
     Timeframe.D1:  10_000,
 }
 
+_YF_PERIOD_BY_TIMEFRAME: dict[Timeframe, str] = {
+    Timeframe.M1: "7d",
+    Timeframe.M5: "60d",
+    Timeframe.M15: "60d",
+    Timeframe.H1: "730d",
+    Timeframe.H4: "730d",
+    Timeframe.D1: "max",
+}
+
 
 def _to_yf_symbol(ticker: str) -> str:
     """BTC/USD → BTC-USD, AAPL → AAPL"""
@@ -83,10 +92,28 @@ def _yf_fetch(ticker: str, timeframe: Timeframe, limit: int, end_dt: datetime) -
             auto_adjust=True,
             raise_errors=False,
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("yf_history_exception", ticker=ticker, timeframe=timeframe, error=str(exc))
         return []
 
     if hist is None or hist.empty:
+        # Some hosted environments intermittently return empty frames for
+        # `Ticker().history(...)`; retry with the download API + period.
+        try:
+            hist = yf.download(
+                yf_sym,
+                period=_YF_PERIOD_BY_TIMEFRAME[timeframe],
+                interval=interval,
+                auto_adjust=True,
+                progress=False,
+                threads=False,
+            )
+        except Exception as exc:
+            logger.warning("yf_download_exception", ticker=ticker, timeframe=timeframe, error=str(exc))
+            return []
+
+    if hist is None or hist.empty:
+        logger.warning("yf_empty_history", ticker=ticker, timeframe=timeframe, interval=interval)
         return []
 
     # Resample 1h → 4h for the H4 timeframe
@@ -433,6 +460,49 @@ class AlpacaMarketDataService(MarketDataService):
         if self._broker_http and not self._broker_http.is_closed:
             await self._broker_http.aclose()
 
+    async def _get_crypto_ohlcv_alpaca(
+        self,
+        ticker: str,
+        timeframe: Timeframe,
+        limit: int,
+        end: str | None = None,
+    ) -> list[Candle]:
+        client = await self._client()
+        params: dict[str, str | int] = {
+            "symbols": ticker,
+            "timeframe": _ALPACA_TIMEFRAME[timeframe],
+            "limit": limit,
+        }
+        if end:
+            params["end"] = end
+
+        try:
+            resp = await client.get("/v1beta3/crypto/us/bars", params=params)
+            resp.raise_for_status()
+            bars = resp.json().get("bars", {}).get(ticker, [])
+        except Exception as exc:
+            logger.warning("alpaca_crypto_bars_error", ticker=ticker, timeframe=timeframe, error=str(exc))
+            return []
+
+        candles: list[Candle] = []
+        for bar in bars:
+            ts = bar.get("t")
+            if not ts:
+                continue
+            t = int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+            candles.append(
+                Candle(
+                    time=t,
+                    open=round(float(bar.get("o", 0.0)), 4),
+                    high=round(float(bar.get("h", 0.0)), 4),
+                    low=round(float(bar.get("l", 0.0)), 4),
+                    close=round(float(bar.get("c", 0.0)), 4),
+                    volume=round(float(bar.get("v", 0.0)), 2),
+                )
+            )
+
+        return candles
+
     async def get_ohlcv(
         self,
         ticker: str,
@@ -446,6 +516,12 @@ class AlpacaMarketDataService(MarketDataService):
         is used for all historical chart data.  Alpaca is still used for
         real-time price polling (get_latest_price / stream_ticks).
         """
+        if "/" in ticker:
+            bars = await self._get_crypto_ohlcv_alpaca(ticker, timeframe, limit, end=end)
+            if bars:
+                logger.info("alpaca_crypto_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
+                return bars
+
         end_dt = (
             datetime.fromisoformat(end.replace("Z", "+00:00")).astimezone(timezone.utc)
             if end else datetime.now(timezone.utc)
@@ -530,25 +606,37 @@ class AlpacaMarketDataService(MarketDataService):
         interval_seconds: float = 1.0,
     ) -> AsyncIterator[Candle]:
         """
-        Polls the latest bar on each interval.
-        For true streaming, integrate alpaca-py's DataStream client here.
+        Stream synthetic in-progress candles from latest trade prices.
+        This avoids polling Yahoo historical endpoints every second, which
+        quickly hits rate limits in hosted environments.
         """
-        last_sig: tuple[int, float, float, float, float] | None = None
+        current: Candle | None = None
+        bar_seconds = TIMEFRAME_SECONDS[timeframe]
+
         while True:
             await asyncio.sleep(interval_seconds)
             try:
-                bars = await self.get_ohlcv(ticker, timeframe, limit=1)
-                if bars:
-                    latest = bars[-1]
-                    sig = (
-                        latest.time,
-                        latest.open,
-                        latest.high,
-                        latest.low,
-                        latest.close,
+                price = await self.get_latest_price(ticker)
+                if price <= 0:
+                    continue
+
+                now = int(time.time())
+                bucket = now - (now % bar_seconds)
+
+                if current is None or current.time != bucket:
+                    current = Candle(
+                        time=bucket,
+                        open=price,
+                        high=price,
+                        low=price,
+                        close=price,
+                        volume=0.0,
                     )
-                    if sig != last_sig:
-                        last_sig = sig
-                        yield latest
+                else:
+                    current.high = max(current.high, price)
+                    current.low = min(current.low, price)
+                    current.close = price
+
+                yield current
             except Exception as exc:
                 logger.warning("alpaca_stream_error", ticker=ticker, error=str(exc))

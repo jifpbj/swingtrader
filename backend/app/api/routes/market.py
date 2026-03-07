@@ -217,7 +217,7 @@ async def get_signals(
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _require_bars(bars: list, ticker: str, min_count: int = 50) -> None:
+def _require_bars(bars: list, ticker: str, min_count: int = 20) -> None:
     """Raise 422 if bars list is too short for indicator computation."""
     if len(bars) < min_count:
         raise HTTPException(

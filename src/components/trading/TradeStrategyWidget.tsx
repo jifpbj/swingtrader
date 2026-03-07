@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
-import { Zap, CheckCircle2, LogOut, AlertCircle } from "lucide-react";
+import { useStrategyStore } from "@/store/useStrategyStore";
+import { Zap, CheckCircle2, AlertCircle, BrainCircuit, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toAlpacaSymbol, isCrypto } from "@/lib/alpaca";
-import type { PlaceOrderRequest } from "@/types/market";
 
 export function TradeStrategyWidget() {
   const ticker             = useUIStore(s => s.ticker);
@@ -16,6 +15,8 @@ export function TradeStrategyWidget() {
   const bbPeriod           = useUIStore(s => s.bbPeriod);
   const bbStdDev           = useUIStore(s => s.bbStdDev);
   const rsiPeriod          = useUIStore(s => s.rsiPeriod);
+  const rsiOverbought      = useUIStore(s => s.rsiOverbought);
+  const rsiOversold        = useUIStore(s => s.rsiOversold);
   const macdFastPeriod     = useUIStore(s => s.macdFastPeriod);
   const macdSlowPeriod     = useUIStore(s => s.macdSlowPeriod);
   const macdSignalPeriod   = useUIStore(s => s.macdSignalPeriod);
@@ -23,33 +24,28 @@ export function TradeStrategyWidget() {
 
   const user          = useAuthStore(s => s.user);
   const openAuthModal = useAuthStore(s => s.openAuthModal);
-  const signOut       = useAuthStore(s => s.signOut);
 
-  const alpacaConnected = useAlpacaStore(s => s.account !== null);
-  const placeOrder      = useAlpacaStore(s => s.placeOrder);
+  const tradingMode = useAlpacaStore(s => s.tradingMode);
 
-  const [qty, setQty] = useState("1");
+  const analyzing         = useStrategyStore(s => s.analyzing);
+  const requestAnalysis   = useStrategyStore(s => s.requestAnalysis);
+  const saveStrategy      = useStrategyStore(s => s.saveStrategy);
+  const setActiveStrategy = useStrategyStore(s => s.setActiveStrategy);
+
   const [submitting, setSubmitting] = useState(false);
-  const [fired, setFired] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const indicator = activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab as "EMA" | "BB" | "RSI" | "MACD";
   const strategyLabel =
-    activeIndicatorTab === "EMA"  ? `EMA(${emaPeriod})` :
-    activeIndicatorTab === "BB"   ? `BB(${bbPeriod}, ${bbStdDev})` :
-    activeIndicatorTab === "RSI"  ? `RSI(${rsiPeriod})` :
-    activeIndicatorTab === "MACD" ? `MACD(${macdFastPeriod},${macdSlowPeriod},${macdSignalPeriod})` :
+    indicator === "EMA"  ? `EMA(${emaPeriod})` :
+    indicator === "BB"   ? `BB(${bbPeriod}, ${bbStdDev})` :
+    indicator === "RSI"  ? `RSI(${rsiPeriod})` :
+    indicator === "MACD" ? `MACD(${macdFastPeriod},${macdSlowPeriod},${macdSignalPeriod})` :
     "TD Sequential";
 
   async function handleTrade() {
     setError(null);
-
-    if (!alpacaConnected) {
-      // Scroll to the Paper Trading panel below
-      document
-        .getElementById("paper-trading-panel")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
 
     if (!user) {
       openAuthModal();
@@ -57,18 +53,37 @@ export function TradeStrategyWidget() {
     }
 
     setSubmitting(true);
-    const req: PlaceOrderRequest = {
-      symbol: toAlpacaSymbol(ticker),
-      qty: parseFloat(qty) || 1,
-      side: "buy",
-      type: "market",
-      time_in_force: isCrypto(ticker) ? "gtc" : "day",
-    };
-
     try {
-      await placeOrder(req);
-      setFired(true);
-      setTimeout(() => setFired(false), 2500);
+      const now = Date.now();
+      const id = await saveStrategy(
+        {
+          name: `${strategyLabel} \u00B7 ${ticker} \u00B7 ${timeframe.toUpperCase()}`,
+          ticker,
+          timeframe,
+          indicator,
+          params: {
+            emaPeriod, bbPeriod, bbStdDev,
+            rsiPeriod, rsiOverbought, rsiOversold,
+            macdFast: macdFastPeriod, macdSlow: macdSlowPeriod, macdSignal: macdSignalPeriod,
+          },
+          backtestResult: { ticker, strategyLabel, periods: {}, periodKeys: [] },
+          bestPeriodKey: "",
+          bestStrategyReturn: 0,
+          bestHoldReturn: 0,
+          bestMaxDrawdown: 0,
+          initialInvestment: 100_000,
+          autoTrade: true,
+          tradingMode,
+          orderQty: 1,
+          lastExecutedSignalTime: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        user.uid,
+      );
+      setActiveStrategy(id);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -79,62 +94,13 @@ export function TradeStrategyWidget() {
   return (
     <div className="glass rounded-2xl px-4 py-4 flex flex-col gap-3 shrink-0">
       {/* Strategy summary */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Active strategy</span>
-          <span className="text-sm font-mono font-semibold text-zinc-100">
-            {ticker} · {strategyLabel}
-          </span>
-          <span className="text-[10px] text-zinc-500 font-mono">{timeframe.toUpperCase()} timeframe</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {user && (
-            <div className="flex items-center gap-1.5 bg-zinc-800/60 rounded-lg px-2 py-1 border border-zinc-700/40">
-              <span className="text-[10px] text-zinc-400 font-mono max-w-[96px] truncate">
-                {user.email?.split("@")[0]}
-              </span>
-              <button
-                onClick={() => signOut()}
-                title="Sign out"
-                className="text-zinc-600 hover:text-zinc-300 transition-colors"
-              >
-                <LogOut className="size-3" />
-              </button>
-            </div>
-          )}
-          {/* Status dot */}
-          <span className="relative flex size-2.5">
-            <span className={cn(
-              "animate-ping absolute inline-flex h-full w-full rounded-full opacity-60",
-              alpacaConnected ? "bg-emerald-400" : "bg-amber-400",
-            )} />
-            <span className={cn(
-              "relative inline-flex rounded-full size-2.5",
-              alpacaConnected ? "bg-emerald-400" : "bg-amber-400",
-            )} />
-          </span>
-        </div>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Active strategy</span>
+        <span className="text-sm font-mono font-semibold text-zinc-100">
+          {ticker} {"\u00B7"} {strategyLabel}
+        </span>
+        <span className="text-[10px] text-zinc-500 font-mono">{timeframe.toUpperCase()} timeframe</span>
       </div>
-
-      {/* Qty input — only show when Alpaca is connected */}
-      {alpacaConnected && (
-        <div className="flex items-center gap-2">
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium whitespace-nowrap">
-            Qty
-          </label>
-          <input
-            type="number"
-            value={qty}
-            onChange={e => setQty(e.target.value)}
-            min="0.0001"
-            step="any"
-            className="flex-1 bg-zinc-800/80 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-amber-400/60 focus:ring-1 focus:ring-amber-400/20 transition-all"
-          />
-          <span className="text-[10px] text-zinc-500 font-mono">
-            {ticker.includes("/") ? ticker.split("/")[0] : ticker}
-          </span>
-        </div>
-      )}
 
       {error && (
         <div className="flex items-center gap-2 text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
@@ -143,7 +109,26 @@ export function TradeStrategyWidget() {
         </div>
       )}
 
-      {/* CTA button */}
+      {/* AI Analyze — full width, above CTA */}
+      <button
+        onClick={requestAnalysis}
+        disabled={analyzing}
+        title="AI Optimize — find the best indicator config for this ticker & timeframe"
+        className={cn(
+          "w-full flex items-center justify-center gap-2.5 rounded-xl py-3.5 px-4",
+          "text-sm font-bold tracking-wide transition-all duration-200 select-none",
+          "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/40",
+          "active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed",
+        )}
+      >
+        {analyzing
+          ? <Loader2 className="size-4 animate-spin" />
+          : <BrainCircuit className="size-4 shrink-0" />
+        }
+        {analyzing ? "Analyzing\u2026" : "AI Analyze"}
+      </button>
+
+      {/* Trade CTA — always amber "Trade this Strategy" */}
       <button
         onClick={handleTrade}
         disabled={submitting}
@@ -151,29 +136,22 @@ export function TradeStrategyWidget() {
           "relative w-full flex items-center justify-center gap-2.5 rounded-xl py-3.5 px-4",
           "text-sm font-bold tracking-wide transition-all duration-200 select-none",
           "shadow-lg active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed",
-          fired
+          saved
             ? "bg-emerald-500 text-white shadow-emerald-500/30 scale-[0.98]"
-            : alpacaConnected
-            ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/30"
-            : "bg-amber-400 hover:bg-amber-300 text-zinc-900 shadow-amber-400/30 hover:shadow-amber-400/50"
+            : "bg-amber-400 hover:bg-amber-300 text-zinc-900 shadow-amber-400/30 hover:shadow-amber-400/50",
         )}
       >
         {submitting ? (
-          <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        ) : fired ? (
+          <span className="size-4 border-2 border-zinc-900/30 border-t-zinc-900 rounded-full animate-spin" />
+        ) : saved ? (
           <>
             <CheckCircle2 className="size-4 shrink-0" />
-            Order Placed!
-          </>
-        ) : alpacaConnected ? (
-          <>
-            <Zap className="size-4 shrink-0 fill-white" />
-            Buy {toAlpacaSymbol(ticker)} · Paper
+            Strategy Saved!
           </>
         ) : (
           <>
             <Zap className="size-4 shrink-0 fill-zinc-900" />
-            Connect Alpaca to Trade
+            Trade this Strategy
           </>
         )}
       </button>

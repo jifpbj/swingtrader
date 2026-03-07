@@ -24,6 +24,8 @@
 .DS_Store
 *.pem
 .claude/
+.firebase/
+.tmp-config/
 
 # debug
 npm-debug.log*

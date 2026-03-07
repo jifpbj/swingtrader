@@ -2,62 +2,68 @@
 
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  BarChart2,
-  BrainCircuit,
-  BookOpen,
-  Wallet,
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
-} from "lucide-react";
-
-const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "Dashboard", active: true },
-  { icon: BarChart2, label: "Charts" },
-  { icon: BrainCircuit, label: "AI Analysis" },
-  { icon: TrendingUp, label: "Signals" },
-  { icon: BookOpen, label: "Journal" },
-  { icon: Wallet, label: "Portfolio" },
-];
+import { ChevronLeft, ChevronRight, X, Zap } from "lucide-react";
+import { StrategyQueue } from "@/components/algo/StrategyQueue";
 
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
-  const toggle = useUIStore((s) => s.toggleSidebar);
+  const toggle    = useUIStore((s) => s.toggleSidebar);
 
   return (
-    <aside
-      className={cn(
-        "glass flex flex-col items-center py-4 shrink-0 border-r border-white/5 transition-all duration-300 z-20",
-        collapsed ? "w-14" : "w-48"
-      )}
-    >
-      <nav className="flex flex-col gap-1 flex-1 w-full px-2">
-        {NAV_ITEMS.map(({ icon: Icon, label, active }) => (
-          <button
-            key={label}
-            className={cn(
-              "flex items-center gap-3 px-2.5 py-2.5 rounded-xl w-full text-sm font-medium transition-all group",
-              active
-                ? "bg-emerald-500/15 text-emerald-400"
-                : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5"
-            )}
-          >
-            <Icon className={cn("size-5 shrink-0 transition-colors", active ? "text-emerald-400" : "text-zinc-500 group-hover:text-zinc-300")} />
-            {!collapsed && <span className="truncate">{label}</span>}
-            {!collapsed && active && <span className="ml-auto size-1.5 rounded-full bg-emerald-400 shrink-0" />}
-          </button>
-        ))}
-      </nav>
-
-      <button
+    <>
+      {/* Backdrop — mobile only, closes drawer on tap */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-black/60 md:hidden transition-opacity duration-300",
+          collapsed ? "opacity-0 pointer-events-none" : "opacity-100",
+        )}
         onClick={toggle}
-        className="mt-2 mx-2 p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all self-start"
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={cn(
+          "glass flex flex-col py-4 shrink-0 border-r border-white/5 transition-all duration-300",
+          // Mobile: fixed overlay, full height, slides in/out
+          "fixed inset-y-0 left-0 w-72 items-stretch z-50",
+          collapsed ? "-translate-x-full" : "translate-x-0",
+          // Desktop: back in document flow
+          "md:relative md:inset-y-auto md:translate-x-0 md:z-20",
+          collapsed ? "md:w-14 md:items-center" : "md:w-56 md:items-stretch",
+        )}
       >
-        {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-      </button>
-    </aside>
+        {/* Header */}
+        {!collapsed && (
+          <div className="flex items-center gap-2 px-4 pb-3 border-b border-white/5">
+            <Zap className="size-3.5 text-amber-400 shrink-0 fill-amber-400" />
+            <span className="text-[11px] font-semibold text-zinc-300 uppercase tracking-widest">
+              Active Strategies
+            </span>
+            {/* X close button: mobile only */}
+            <button
+              onClick={toggle}
+              className="ml-auto p-1 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all md:hidden"
+              aria-label="Close sidebar"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Strategy queue */}
+        <div className={cn("flex-1 overflow-y-auto", collapsed ? "hidden" : "px-3 pt-3")}>
+          <StrategyQueue />
+        </div>
+
+        {/* Collapse toggle: desktop only */}
+        <button
+          onClick={toggle}
+          className="mt-2 mx-2 p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all self-start hidden md:flex"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+        </button>
+      </aside>
+    </>
   );
 }

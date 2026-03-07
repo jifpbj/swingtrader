@@ -1,6 +1,7 @@
 "use client";
 
 import { useUIStore } from "@/store/useUIStore";
+import { useAuthStore } from "@/store/useAuthStore";
 import { formatPrice, formatPercent } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
@@ -11,17 +12,28 @@ import {
   Bell,
   ChevronUp,
   ChevronDown,
+  LogIn,
+  LogOut,
+  User,
+  Menu,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { TradingModeToggle } from "@/components/algo/TradingModeToggle";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
 export function TopBar() {
-  const ticker      = useUIStore((s) => s.ticker);
-  const timeframe   = useUIStore((s) => s.timeframe);
+  const ticker        = useUIStore((s) => s.ticker);
+  const timeframe     = useUIStore((s) => s.timeframe);
   const setTimeframe  = useUIStore((s) => s.setTimeframe);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
-  const wsConnected = useUIStore((s) => s.wsConnected);
+  const wsConnected   = useUIStore((s) => s.wsConnected);
+
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+
+  const user          = useAuthStore((s) => s.user);
+  const openAuthModal = useAuthStore((s) => s.openAuthModal);
+  const signOut       = useAuthStore((s) => s.signOut);
 
   const livePrice = useUIStore((s) => s.livePrice);
   const priceOpen = useUIStore((s) => s.priceOpen);
@@ -36,7 +48,16 @@ export function TopBar() {
   return (
     <header className="glass-bright flex items-center justify-between px-4 h-14 shrink-0 border-b border-white/5 z-30">
       {/* LEFT: Logo + Ticker info */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-3 sm:gap-6">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={toggleSidebar}
+          className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors md:hidden"
+          aria-label="Open navigation"
+        >
+          <Menu className="size-5" />
+        </button>
+
         {/* Logo */}
         <div className="flex items-center gap-2 select-none">
           <div className="size-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-900/40">
@@ -109,6 +130,11 @@ export function TopBar() {
 
       {/* RIGHT: Controls */}
       <div className="flex items-center gap-2">
+        {/* Paper / Live trading mode toggle */}
+        <div className="hidden sm:block">
+          <TradingModeToggle />
+        </div>
+
         {/* WS status */}
         <div
           className={cn(
@@ -142,14 +168,30 @@ export function TopBar() {
           <Settings className="size-4" />
         </button>
 
-        <button
-          onClick={() => setSearchOpen(true)}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 glass rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Search className="size-3.5" />
-          <span>Search</span>
-          <kbd className="ml-1 px-1.5 py-0.5 rounded bg-white/5 text-[10px] font-mono">⌘K</kbd>
-        </button>
+        {/* User auth indicator */}
+        {user ? (
+          <div className="flex items-center gap-1.5 glass rounded-lg px-2.5 py-1.5 border border-white/10">
+            <User className="size-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden sm:block text-xs font-mono text-zinc-300 max-w-[100px] truncate">
+              {user.email?.split("@")[0]}
+            </span>
+            <button
+              onClick={() => signOut()}
+              title="Sign out"
+              className="text-zinc-500 hover:text-zinc-200 transition-colors ml-0.5"
+            >
+              <LogOut className="size-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={openAuthModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs font-medium text-zinc-300 hover:text-white border border-white/10 hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all"
+          >
+            <LogIn className="size-3.5" />
+            <span className="hidden sm:block">Sign In</span>
+          </button>
+        )}
       </div>
     </header>
   );

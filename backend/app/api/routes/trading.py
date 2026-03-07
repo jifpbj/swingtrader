@@ -1,7 +1,8 @@
 """
-Paper Trading Routes — proxy to Alpaca paper trading API.
+Paper/Live Trading Routes — proxy to Alpaca trading API.
 
 All endpoints require X-Alpaca-Key and X-Alpaca-Secret request headers.
+X-Alpaca-Base-Url selects paper vs live Alpaca API (default: paper).
 The backend acts as a transparent proxy so user credentials are never
 stored server-side.
 """
@@ -20,10 +21,19 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/trading", tags=["trading"])
 
 ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
+ALPACA_LIVE_URL  = "https://api.alpaca.markets"
 
-# Shared client — connection pool is reused across all requests.
-# Credentials are supplied per-request via headers.
-_client = httpx.AsyncClient(base_url=ALPACA_PAPER_URL, timeout=15.0)
+# Allowed base URLs — reject anything else to prevent SSRF
+_ALLOWED_BASE_URLS = {ALPACA_PAPER_URL, ALPACA_LIVE_URL}
+
+# Per-base-url clients (connection pool reuse)
+_clients: dict[str, httpx.AsyncClient] = {}
+
+
+def _get_client(base_url: str) -> httpx.AsyncClient:
+    if base_url not in _clients:
+        _clients[base_url] = httpx.AsyncClient(base_url=base_url, timeout=15.0)
+    return _clients[base_url]
 
 
 def _headers(api_key: str, secret_key: str) -> dict[str, str]:
@@ -38,10 +48,17 @@ async def _request(
     path: str,
     api_key: str,
     secret_key: str,
+    base_url: str = ALPACA_PAPER_URL,
     **kwargs: Any,
 ) -> Any:
-    """Proxy a request to Alpaca paper API, raising HTTPException on error."""
-    resp = await _client.request(
+    """Proxy a request to Alpaca API, raising HTTPException on error."""
+    if base_url not in _ALLOWED_BASE_URLS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid Alpaca base URL: {base_url}",
+        )
+    client = _get_client(base_url)
+    resp = await client.request(
         method, path, headers=_headers(api_key, secret_key), **kwargs
     )
 
@@ -145,13 +162,14 @@ def _parse_order(o: dict) -> AlpacaOrder:
 @router.get(
     "/account",
     response_model=AlpacaAccount,
-    summary="Fetch Alpaca paper trading account info",
+    summary="Fetch Alpaca trading account info",
 )
 async def get_account(
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
 ) -> AlpacaAccount:
-    d = await _request("GET", "/v2/account", x_alpaca_key, x_alpaca_secret)
+    d = await _request("GET", "/v2/account", x_alpaca_key, x_alpaca_secret, x_alpaca_base_url)
     return AlpacaAccount(
         id=d["id"],
         buying_power=float(d.get("buying_power", 0)),
@@ -169,13 +187,14 @@ async def get_account(
 @router.get(
     "/positions",
     response_model=list[AlpacaPosition],
-    summary="List open paper positions",
+    summary="List open positions",
 )
 async def get_positions(
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
 ) -> list[AlpacaPosition]:
-    data = await _request("GET", "/v2/positions", x_alpaca_key, x_alpaca_secret)
+    data = await _request("GET", "/v2/positions", x_alpaca_key, x_alpaca_secret, x_alpaca_base_url)
     return [
         AlpacaPosition(
             symbol=p["symbol"],
@@ -194,17 +213,18 @@ async def get_positions(
 @router.get(
     "/orders",
     response_model=list[AlpacaOrder],
-    summary="List paper orders",
+    summary="List orders",
 )
 async def get_orders(
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
     limit: int = Query(default=25, ge=1, le=500),
     order_status: str = Query(default="all", alias="status"),
 ) -> list[AlpacaOrder]:
     data = await _request(
         "GET", "/v2/orders",
-        x_alpaca_key, x_alpaca_secret,
+        x_alpaca_key, x_alpaca_secret, x_alpaca_base_url,
         params={"limit": limit, "status": order_status},
     )
     return [_parse_order(o) for o in data]
@@ -214,12 +234,13 @@ async def get_orders(
     "/orders",
     response_model=AlpacaOrder,
     status_code=201,
-    summary="Place a paper order",
+    summary="Place an order",
 )
 async def place_order(
     req: PlaceOrderRequest,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
 ) -> AlpacaOrder:
     body: dict[str, Any] = {
         "symbol": req.symbol,
@@ -236,12 +257,13 @@ async def place_order(
     if req.stop_price is not None:
         body["stop_price"] = str(req.stop_price)
 
-    o = await _request("POST", "/v2/orders", x_alpaca_key, x_alpaca_secret, json=body)
+    o = await _request("POST", "/v2/orders", x_alpaca_key, x_alpaca_secret, x_alpaca_base_url, json=body)
     logger.info(
-        "paper_order_placed",
+        "order_placed",
         symbol=req.symbol,
         side=req.side,
         qty=req.qty,
+        mode="live" if x_alpaca_base_url == ALPACA_LIVE_URL else "paper",
         order_id=o.get("id"),
     )
     return _parse_order(o)
@@ -251,30 +273,32 @@ async def place_order(
     "/orders/{order_id}",
     status_code=204,
     response_class=Response,
-    summary="Cancel a single paper order",
+    summary="Cancel a single order",
 )
 async def cancel_order(
     order_id: str = Path(...),
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
 ) -> Response:
     await _request(
         "DELETE", f"/v2/orders/{order_id}",
-        x_alpaca_key, x_alpaca_secret,
+        x_alpaca_key, x_alpaca_secret, x_alpaca_base_url,
     )
-    logger.info("paper_order_cancelled", order_id=order_id)
+    logger.info("order_cancelled", order_id=order_id)
     return Response(status_code=204)
 
 
 @router.delete(
     "/orders",
     status_code=207,
-    summary="Cancel all open paper orders",
+    summary="Cancel all open orders",
 )
 async def cancel_all_orders(
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
 ) -> list[dict]:
-    result = await _request("DELETE", "/v2/orders", x_alpaca_key, x_alpaca_secret)
-    logger.info("paper_all_orders_cancelled")
+    result = await _request("DELETE", "/v2/orders", x_alpaca_key, x_alpaca_secret, x_alpaca_base_url)
+    logger.info("all_orders_cancelled")
     return result if isinstance(result, list) else []

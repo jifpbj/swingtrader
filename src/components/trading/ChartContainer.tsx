@@ -12,9 +12,10 @@ import {
   computeTDSequentialSetup,
 } from "@/lib/indicators";
 import type { Candle, CrossoverSignal } from "@/types/market";
-import { Maximize2, RefreshCw } from "lucide-react";
+import { Maximize2, RefreshCw, Bot } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
 import { toBackendTf, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
+import { useStrategyStore } from "@/store/useStrategyStore";
 
 import type {
   IChartApi, ISeriesApi, UTCTimestamp, Time,
@@ -210,6 +211,11 @@ export function ChartContainer() {
   const ticker              = useUIStore(s => s.ticker);
   const timeframe           = useUIStore(s => s.timeframe);
   const livePrice           = useUIStore(s => s.livePrice);
+
+  // Active algo strategy for overlay badge
+  const activeStrategyId    = useStrategyStore(s => s.activeStrategyId);
+  const strategies          = useStrategyStore(s => s.strategies);
+  const activeStrategy      = strategies.find(s => s.id === activeStrategyId) ?? null;
   const priceOpen           = useUIStore(s => s.priceOpen);
   const activeIndicatorTab  = useUIStore(s => s.activeIndicatorTab);
   const showSignalMarkers   = useUIStore(s => s.showSignalMarkers);
@@ -710,6 +716,26 @@ export function ChartContainer() {
           </div>
         );
       })()}
+
+      {/* Active strategy overlay badge */}
+      {activeStrategy && (
+        <div className="absolute top-16 left-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-xl glass-sm border border-white/10 text-[10px]">
+          {activeStrategy.autoTrade ? (
+            <span className="relative flex size-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full size-1.5 bg-emerald-400" />
+            </span>
+          ) : (
+            <Bot className="size-3 text-amber-400 shrink-0" />
+          )}
+          <span className={activeStrategy.autoTrade ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
+            {activeStrategy.autoTrade ? "Auto" : "Loaded"}:
+          </span>
+          <span className="text-zinc-400 font-mono truncate max-w-[160px]">
+            {activeStrategy.name}
+          </span>
+        </div>
+      )}
 
       {/* Legend */}
       {chartReady && (
