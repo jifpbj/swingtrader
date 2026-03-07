@@ -557,25 +557,37 @@ class AlpacaMarketDataService(MarketDataService):
         interval_seconds: float = 1.0,
     ) -> AsyncIterator[Candle]:
         """
-        Polls the latest bar on each interval.
-        For true streaming, integrate alpaca-py's DataStream client here.
+        Stream synthetic in-progress candles from latest trade prices.
+        This avoids polling Yahoo historical endpoints every second, which
+        quickly hits rate limits in hosted environments.
         """
-        last_sig: tuple[int, float, float, float, float] | None = None
+        current: Candle | None = None
+        bar_seconds = TIMEFRAME_SECONDS[timeframe]
+
         while True:
             await asyncio.sleep(interval_seconds)
             try:
-                bars = await self.get_ohlcv(ticker, timeframe, limit=1)
-                if bars:
-                    latest = bars[-1]
-                    sig = (
-                        latest.time,
-                        latest.open,
-                        latest.high,
-                        latest.low,
-                        latest.close,
+                price = await self.get_latest_price(ticker)
+                if price <= 0:
+                    continue
+
+                now = int(time.time())
+                bucket = now - (now % bar_seconds)
+
+                if current is None or current.time != bucket:
+                    current = Candle(
+                        time=bucket,
+                        open=price,
+                        high=price,
+                        low=price,
+                        close=price,
+                        volume=0.0,
                     )
-                    if sig != last_sig:
-                        last_sig = sig
-                        yield latest
+                else:
+                    current.high = max(current.high, price)
+                    current.low = min(current.low, price)
+                    current.close = price
+
+                yield current
             except Exception as exc:
                 logger.warning("alpaca_stream_error", ticker=ticker, error=str(exc))
