@@ -41,13 +41,14 @@ export function Sidebar() {
             <span className="text-[11px] font-semibold text-zinc-300 uppercase tracking-widest">
               Active Strategies
             </span>
-            {/* X close button: mobile only */}
+            {/* Close button: X on mobile, ChevronLeft on desktop */}
             <button
               onClick={toggle}
-              className="ml-auto p-1 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all md:hidden"
+              className="ml-auto p-1 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all"
               aria-label="Close sidebar"
             >
-              <X className="size-4" />
+              <X className="size-4 md:hidden" />
+              <ChevronLeft className="size-4 hidden md:block" />
             </button>
           </div>
         )}

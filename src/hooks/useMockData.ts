@@ -58,7 +58,7 @@ export function generateMockCandles(barSecs: number, count: number, seed = 42): 
  * Returns a numeric seed derived from a ticker string so different tickers
  * get different (but deterministic) price histories.
  */
-function tickerSeed(ticker: string): number {
+export function tickerSeed(ticker: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < ticker.length; i++) {
     h ^= ticker.charCodeAt(i);
@@ -104,8 +104,8 @@ export function useMockData(callbacks: MockDataCallbacks = {}) {
     const barSecs = TIMEFRAME_SECONDS[timeframe] ?? 900;
     const seed    = tickerSeed(ticker);
 
-    // Seed price from end of synthetic history
-    const history = generateMockCandles(barSecs, 20, seed);
+    // Seed price from end of synthetic history — same count & seed as ChartContainer uses
+    const history = generateMockCandles(barSecs, 300, seed);
     const last    = history[history.length - 1];
     priceRef.current = last.close;
     barRef.current   = null;
