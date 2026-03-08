@@ -115,7 +115,7 @@ export const useUIStore = create<UIState>()(
     addSignal: (signal) => set((s) => ({ signals: [signal, ...s.signals].slice(0, 50) })),
     clearSignals: () => set({ signals: [] }),
 
-    sidebarCollapsed: false,
+    sidebarCollapsed: true,
     toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
     wsConnected: false,

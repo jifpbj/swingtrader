@@ -90,7 +90,7 @@ export default function TradingDashboard() {
           {/* ─── Right: Analysis Panel ─── */}
           {/* Mobile: flex-1 takes remaining height, scrolls internally. Desktop: fixed-width side panel. */}
           <aside
-            className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto w-full md:shrink-0 md:flex-none md:min-w-[300px] md:max-w-[65vw] md:[width:var(--right-panel-w)]"
+            className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto overscroll-y-contain w-full md:shrink-0 md:flex-none md:min-w-[300px] md:max-w-[65vw] md:[width:var(--right-panel-w)]"
             style={{ "--right-panel-w": `${rightPanelWidth}px` } as React.CSSProperties}
           >
             {/* Trade CTA */}
