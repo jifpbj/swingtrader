@@ -5,8 +5,6 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { formatPrice, formatPercent } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
-  Wifi,
-  WifiOff,
   Search,
   Settings,
   Bell,
@@ -18,17 +16,11 @@ import {
   Menu,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { TradingModeToggle } from "@/components/algo/TradingModeToggle";
-
-const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
+import { DataModeToggle } from "@/components/ui/DataModeToggle";
 
 export function TopBar() {
   const ticker        = useUIStore((s) => s.ticker);
-  const timeframe     = useUIStore((s) => s.timeframe);
-  const setTimeframe  = useUIStore((s) => s.setTimeframe);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
-  const wsConnected   = useUIStore((s) => s.wsConnected);
-
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
   const user          = useAuthStore((s) => s.user);
@@ -47,8 +39,8 @@ export function TopBar() {
 
   return (
     <header className="glass-bright flex items-center justify-between px-4 h-14 shrink-0 border-b border-white/5 z-30">
-      {/* LEFT: Logo + Ticker info */}
-      <div className="flex items-center gap-3 sm:gap-6">
+      {/* LEFT: Hamburger + Logo + Mode toggle (desktop) + Ticker + Price */}
+      <div className="flex items-center gap-3 sm:gap-4">
         {/* Hamburger — mobile only */}
         <button
           onClick={toggleSidebar}
@@ -66,6 +58,11 @@ export function TopBar() {
           <span className="text-sm font-semibold tracking-tight text-foreground/80 hidden sm:block">
             Predictive<span className="text-emerald-400">Alpha</span>
           </span>
+        </div>
+
+        {/* Data mode toggle — desktop only; mobile gets it in the sidebar */}
+        <div className="hidden md:flex">
+          <DataModeToggle />
         </div>
 
         {/* Ticker button */}
@@ -110,54 +107,12 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* CENTER: Timeframe selector */}
-      <div className="flex items-center gap-1 glass rounded-xl px-1 py-1">
-        {TIMEFRAMES.map((tf) => (
-          <button
-            key={tf}
-            onClick={() => setTimeframe(tf)}
-            className={cn(
-              "px-2.5 py-1 rounded-lg text-xs font-medium transition-all",
-              timeframe === tf
-                ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {tf}
-          </button>
-        ))}
-      </div>
-
-      {/* RIGHT: Controls */}
+      {/* RIGHT: Theme (desktop only) + Notifications + Auth */}
       <div className="flex items-center gap-2">
-        {/* Paper / Live trading mode toggle */}
-        <div className="hidden sm:block">
-          <TradingModeToggle />
+        {/* Theme toggle — desktop only; mobile gets it in the sidebar */}
+        <div className="hidden md:flex">
+          <ThemeToggle />
         </div>
-
-        {/* WS status */}
-        <div
-          className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors",
-            wsConnected
-              ? "text-emerald-400 bg-emerald-500/10"
-              : "text-muted-foreground bg-muted/50"
-          )}
-        >
-          {wsConnected ? (
-            <Wifi className="size-3.5" />
-          ) : (
-            <WifiOff className="size-3.5" />
-          )}
-          <span className="hidden sm:block">
-            {wsConnected ? "Live" : "Offline"}
-          </span>
-          {wsConnected && (
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          )}
-        </div>
-
-        <ThemeToggle />
 
         <button className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors relative">
           <Bell className="size-4" />
@@ -168,7 +123,7 @@ export function TopBar() {
           <Settings className="size-4" />
         </button>
 
-        {/* User auth indicator */}
+        {/* User auth — always visible */}
         {user ? (
           <div className="flex items-center gap-1.5 glass rounded-lg px-2.5 py-1.5 border border-white/10">
             <User className="size-3.5 text-emerald-400 shrink-0" />

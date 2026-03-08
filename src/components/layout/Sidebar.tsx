@@ -4,6 +4,8 @@ import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, X, Zap } from "lucide-react";
 import { StrategyQueue } from "@/components/algo/StrategyQueue";
+import { DataModeToggle } from "@/components/ui/DataModeToggle";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
@@ -47,6 +49,24 @@ export function Sidebar() {
             >
               <X className="size-4" />
             </button>
+          </div>
+        )}
+
+        {/* Data mode + Theme — mobile only, at top below header */}
+        {!collapsed && (
+          <div className="px-4 py-3 border-b border-white/5 md:hidden space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-zinc-500 uppercase tracking-widest font-semibold">
+                Data Mode
+              </span>
+              <DataModeToggle />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-zinc-500 uppercase tracking-widest font-semibold">
+                Theme
+              </span>
+              <ThemeToggle />
+            </div>
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
 import type { IndicatorTab } from "@/store/useUIStore";
 import { useMarketData } from "@/hooks/useMarketData";
+import { useMockData, generateMockCandles } from "@/hooks/useMockData";
 import {
   computeEMA, detectCrossovers,
   computeBollingerBands, detectBollingerCrossovers,
@@ -210,6 +211,7 @@ export function ChartContainer() {
 
   const ticker              = useUIStore(s => s.ticker);
   const timeframe           = useUIStore(s => s.timeframe);
+  const demoMode            = useUIStore(s => s.demoMode);
   const livePrice           = useUIStore(s => s.livePrice);
 
   // Active algo strategy for overlay badge
@@ -327,13 +329,18 @@ export function ChartContainer() {
       const barSecs  = TIMEFRAME_SECONDS[timeframe] ?? 900;
       const fetchLimit = FETCH_LIMIT[timeframe] ?? 500;
       let rawCandles: Candle[] = [];
-      try {
-        const res = await fetch(
-          `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(ticker)}` +
-          `?timeframe=${toBackendTf(timeframe)}&limit=${fetchLimit}`
-        );
-        if (res.ok) { const json = await res.json() as { bars: Candle[] }; rawCandles = json.bars ?? []; }
-      } catch { /* fallback to mock */ }
+      if (demoMode) {
+        // Generate synthetic GBM history instead of hitting the backend
+        rawCandles = generateMockCandles(barSecs, Math.min(fetchLimit, 300));
+      } else {
+        try {
+          const res = await fetch(
+            `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(ticker)}` +
+            `?timeframe=${toBackendTf(timeframe)}&limit=${fetchLimit}`
+          );
+          if (res.ok) { const json = await res.json() as { bars: Candle[] }; rawCandles = json.bars ?? []; }
+        } catch { /* fallback to empty */ }
+      }
 
       // Normalize before use: floor timestamps, enforce OHLC integrity, deduplicate, sort
       const initialCandles = normalizeHistoricalBars(rawCandles, barSecs);
@@ -392,7 +399,7 @@ export function ChartContainer() {
       macdLineSeriesRef.current = macdSignalSeriesRef.current = macdHistSeriesRef.current = null;
       setChartReady(false);
     };
-  }, [ticker, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ticker, timeframe, demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Unified indicator update effect ──────────────────────────────────────
   // Fires whenever the active tab, any config value, or chartReady changes.
@@ -586,6 +593,7 @@ export function ChartContainer() {
   }, []);
 
   useMarketData({ onCandle: handleCandle });
+  useMockData({ onCandle: handleCandle });
 
   // ─── Load more history when scrolling left ─────────────────────────────────
   const loadMoreHistory = useCallback(async () => {
@@ -683,10 +691,30 @@ export function ChartContainer() {
     activeIndicatorTab === "RSI"  ? "solid-violet" :
     activeIndicatorTab === "MACD" ? "solid-blue" : "markers-only";
 
+  const setTimeframe = useUIStore(s => s.setTimeframe);
+
   return (
     <div className="relative flex flex-col h-full tv-chart-container">
+      {/* Timeframe selector bar */}
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/5 shrink-0">
+        {(["1m","5m","15m","1h","4h","1d"] as const).map((tf) => (
+          <button
+            key={tf}
+            onClick={() => setTimeframe(tf)}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-medium transition-all",
+              timeframe === tf
+                ? "bg-emerald-500/20 text-emerald-400"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tf}
+          </button>
+        ))}
+      </div>
+
       {/* Toolbar */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+      <div className="absolute top-12 right-3 z-10 flex items-center gap-2">
         {!chartReady && (
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-sm text-xs text-zinc-500">
             <RefreshCw className="size-3.5 animate-spin" /> Loading

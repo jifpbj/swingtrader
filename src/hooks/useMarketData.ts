@@ -92,6 +92,7 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
 
+  const demoMode = useUIStore((s) => s.demoMode);
   const ticker = useUIStore((s) => s.ticker);
   const timeframe = useUIStore((s) => s.timeframe);
   const setWsConnected = useUIStore((s) => s.setWsConnected);
@@ -105,6 +106,7 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
 
   const connect = useCallback(() => {
     if (!mounted.current) return;
+    if (demoMode) return; // demo mode — mock data hook handles all updates
 
     const encodedTicker = encodeURIComponent(ticker);
     const backendTf = toBackendTf(timeframe);
@@ -170,7 +172,7 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
         reconnectTimer.current = setTimeout(connect, 5000);
       }
     }
-  }, [ticker, timeframe, setWsConnected, addSignal, setConfidenceScore, setIndicators, setPrediction]);
+  }, [demoMode, ticker, timeframe, setWsConnected, addSignal, setConfidenceScore, setIndicators, setPrediction]);
 
   useEffect(() => {
     mounted.current = true;

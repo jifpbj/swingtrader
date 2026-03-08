@@ -91,6 +91,10 @@ interface UIState {
   macdSignalPeriod: number;
   setMacdSignalPeriod: (v: number) => void;
 
+  // ─── Demo mode (local mock data, no backend)
+  demoMode: boolean;
+  setDemoMode: (v: boolean) => void;
+
 }
 
 export const useUIStore = create<UIState>()(
@@ -167,6 +171,9 @@ export const useUIStore = create<UIState>()(
     setMacdSlowPeriod: (macdSlowPeriod) => set({ macdSlowPeriod }),
     macdSignalPeriod: 9,
     setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
+
+    demoMode: false,
+    setDemoMode: (demoMode) => set({ demoMode }),
 
   }))
 );

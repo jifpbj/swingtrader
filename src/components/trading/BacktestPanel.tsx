@@ -12,7 +12,8 @@ import type { AlgoAnalysisResult } from "@/types/strategy";
 import { formatPercent } from "@/lib/utils";
 import { BarChart2, Percent, DollarSign, BrainCircuit, Loader2, TrendingUp, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toBackendTf } from "@/lib/timeframeConvert";
+import { toBackendTf, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
+import { generateMockCandles } from "@/hooks/useMockData";
 import { StrategyResultModal } from "@/components/algo/StrategyResultModal";
 
 // Period keys are determined dynamically by the result; this is just a fallback
@@ -32,6 +33,7 @@ export function BacktestPanel() {
   const macdSlowPeriod     = useUIStore((s) => s.macdSlowPeriod);
   const macdSignalPeriod   = useUIStore((s) => s.macdSignalPeriod);
 
+  const demoMode           = useUIStore((s) => s.demoMode);
   const tradingMode        = useAlpacaStore((s) => s.tradingMode);
   const user               = useAuthStore((s) => s.user);
   const {
@@ -54,18 +56,32 @@ export function BacktestPanel() {
     maximumFractionDigits: 0,
   });
 
-  // ─── Fetch historical bars ─────────────────────────────────────────────────
+  // ─── Fetch historical bars (or generate mock in demo/offline) ─────────────
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-    const encodedTicker = encodeURIComponent(ticker);
-    const backendTimeframe = toBackendTf(timeframe);
     const BPD: Record<string, number> = {
       "1m": 1440, "5m": 288, "15m": 96, "1h": 24, "4h": 6, "1d": 1,
     };
-    const limit = Math.min(Math.ceil(252 * (BPD[timeframe] ?? 96)) + 50, 25000);
+    const count = Math.min(Math.ceil(252 * (BPD[timeframe] ?? 96)) + 50, 25000);
+    const barSecs = TIMEFRAME_SECONDS[timeframe] ?? 900;
+
+    // Derive a deterministic seed from ticker chars (same algo as useMockData)
+    function tickerToSeed(t: string): number {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+      return h;
+    }
+
+    if (demoMode) {
+      setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
+      return;
+    }
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const ctrl = new AbortController();
 
     fetch(
-      `${apiUrl}/api/v1/market/ohlcv/${encodedTicker}?timeframe=${backendTimeframe}&limit=${limit}`,
+      `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(ticker)}?timeframe=${toBackendTf(timeframe)}&limit=${count}`,
+      { signal: ctrl.signal },
     )
       .then((res) => {
         if (!res.ok) throw new Error("fetch failed");
@@ -74,11 +90,16 @@ export function BacktestPanel() {
       .then((json) => {
         const bars = json.bars ?? [];
         if (bars.length >= 10) setCandles(bars);
+        else setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
       })
-      .catch(() => {
-        // leave candles empty — the table will show "Computing…" until data arrives
+      .catch((err) => {
+        if ((err as Error).name === "AbortError") return;
+        // Backend unreachable — fall back to mock so backtest still works
+        setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
       });
-  }, [ticker, timeframe]);
+
+    return () => ctrl.abort();
+  }, [demoMode, ticker, timeframe]);
 
   // ─── Recompute backtest on indicator/candle changes ────────────────────────
   useEffect(() => {

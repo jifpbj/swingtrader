@@ -14,11 +14,13 @@ const POLL_MS = 1000;
  * Updates UIStore.setPriceStats — consumed by TopBar.
  */
 export function useLivePrice() {
+  const demoMode    = useUIStore((s) => s.demoMode);
   const ticker      = useUIStore((s) => s.ticker);
   const setPriceStats = useUIStore((s) => s.setPriceStats);
 
   // ─── Fetch daily bar (open / H / L / Vol) once per ticker ─────────────────
   useEffect(() => {
+    if (demoMode) return; // demo mode — useMockData handles price stats
     const ctrl = new AbortController();
     const tf = toBackendTf("1d");
 
@@ -41,10 +43,11 @@ export function useLivePrice() {
       .catch(() => {});
 
     return () => ctrl.abort();
-  }, [ticker, setPriceStats]);
+  }, [demoMode, ticker, setPriceStats]);
 
   // ─── Poll latest price every second ───────────────────────────────────────
   useEffect(() => {
+    if (demoMode) return;
     let active = true;
     let timeoutId: ReturnType<typeof setTimeout>;
 
@@ -73,5 +76,5 @@ export function useLivePrice() {
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [ticker, setPriceStats]);
+  }, [demoMode, ticker, setPriceStats]);
 }
