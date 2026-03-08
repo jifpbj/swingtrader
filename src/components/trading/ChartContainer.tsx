@@ -731,7 +731,7 @@ export function ChartContainer() {
         const changePct = priceOpen ? (change / priceOpen) * 100 : 0;
         const up = change >= 0;
         return (
-          <div className="absolute top-3 left-3 z-10 glass-sm rounded-xl px-3 py-2">
+          <div className="absolute top-10 left-3 z-10 glass-sm rounded-xl px-3 py-2">
             <div className={cn("text-xl font-mono font-bold tabular-nums transition-colors duration-300",
               up ? "text-emerald-400" : "text-red-400")}>
               ${formatPrice(livePrice)}
@@ -747,7 +747,7 @@ export function ChartContainer() {
 
       {/* Active strategy overlay badge */}
       {activeStrategy && (
-        <div className="absolute top-16 left-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-xl glass-sm border border-white/10 text-[10px]">
+        <div className="absolute top-[6.5rem] left-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-xl glass-sm border border-white/10 text-[10px]">
           {activeStrategy.autoTrade ? (
             <span className="relative flex size-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
