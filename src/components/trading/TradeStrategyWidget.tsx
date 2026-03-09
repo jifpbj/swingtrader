@@ -33,6 +33,29 @@ export function TradeStrategyWidget() {
   const setActiveStrategy = useStrategyStore(s => s.setActiveStrategy);
 
   const [submitting, setSubmitting] = useState(false);
+  const [wittyPhrase, setWittyPhrase] = useState<string | null>(null);
+
+  const WITTY_PHRASES = [
+    "Consulting the crystal ball…",
+    "Bribing the market gods…",
+    "Whispering to the algorithm…",
+    "Decoding chart hieroglyphics…",
+    "Summoning the quant overlords…",
+    "Asking the robots nicely…",
+    "Reverse-engineering alpha…",
+    "Staring at candles intensely…",
+    "Crunching numbers, hold tight…",
+    "Channeling Warren Buffett…",
+  ];
+
+  function handleAnalyze() {
+    const phrase = WITTY_PHRASES[Math.floor(Math.random() * WITTY_PHRASES.length)];
+    setWittyPhrase(phrase);
+    setTimeout(() => {
+      setWittyPhrase(null);
+      requestAnalysis();
+    }, 3000);
+  }
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,8 +134,8 @@ export function TradeStrategyWidget() {
 
       {/* AI Analyze — full width, above CTA */}
       <button
-        onClick={requestAnalysis}
-        disabled={analyzing}
+        onClick={handleAnalyze}
+        disabled={!!wittyPhrase || analyzing}
         title="AI Optimize — find the best indicator config for this ticker & timeframe"
         className={cn(
           "w-full flex items-center justify-center gap-2.5 rounded-xl py-3.5 px-4",
@@ -121,11 +144,11 @@ export function TradeStrategyWidget() {
           "active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed",
         )}
       >
-        {analyzing
-          ? <Loader2 className="size-4 animate-spin" />
+        {(wittyPhrase || analyzing)
+          ? <Loader2 className="size-4 animate-spin shrink-0" />
           : <BrainCircuit className="size-4 shrink-0" />
         }
-        {analyzing ? "Analyzing\u2026" : "AI Analyze"}
+        {wittyPhrase ?? (analyzing ? "Analyzing\u2026" : "AI Analyze")}
       </button>
 
       {/* Trade CTA — always amber "Trade this Strategy" */}
