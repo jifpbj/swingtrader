@@ -55,9 +55,9 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         if self.cors_origins_env.strip():
             return [o.strip() for o in self.cors_origins_env.split(",") if o.strip()]
-        if self.is_development:
-            return ["http://localhost:3000", "http://127.0.0.1:3000"]
-        return []  # Lock down in production — set explicitly via env
+        # Default: allow all origins.
+        # Lock down by setting CORS_ORIGINS=https://your-domain.com in your env.
+        return ["*"]
 
 
 @lru_cache(maxsize=1)
