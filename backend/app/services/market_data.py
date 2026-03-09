@@ -503,6 +503,92 @@ class AlpacaMarketDataService(MarketDataService):
 
         return candles
 
+    async def _get_equity_ohlcv_alpaca(
+        self,
+        ticker: str,
+        timeframe: Timeframe,
+        limit: int,
+        end: str | None = None,
+    ) -> list[Candle]:
+        """Fetch equity bars from Alpaca /v2/stocks/bars (IEX free feed).
+
+        For H4, fetches 1-hour bars and resamples to 4-hour to avoid
+        relying on yfinance which is blocked on many cloud hosting providers.
+        """
+        client = await self._client()
+
+        # H4 must be built from 1H bars on the IEX feed
+        fetch_tf = Timeframe.H1 if timeframe == Timeframe.H4 else timeframe
+        fetch_limit = limit * 4 + 10 if timeframe == Timeframe.H4 else limit
+
+        params: dict[str, str | int] = {
+            "symbols": ticker,
+            "timeframe": _ALPACA_TIMEFRAME[fetch_tf],
+            "limit": fetch_limit,
+            "feed": "iex",
+            "sort": "asc",
+        }
+        if end:
+            params["end"] = end
+
+        try:
+            resp = await client.get("/v2/stocks/bars", params=params)
+            resp.raise_for_status()
+            raw_bars = resp.json().get("bars", {}).get(ticker, [])
+        except Exception as exc:
+            logger.warning("alpaca_equity_bars_error", ticker=ticker, timeframe=timeframe, error=str(exc))
+            return []
+
+        if not raw_bars:
+            return []
+
+        candles: list[Candle] = []
+        for bar in raw_bars:
+            ts = bar.get("t")
+            if not ts:
+                continue
+            t = int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+            candles.append(
+                Candle(
+                    time=t,
+                    open=round(float(bar.get("o", 0.0)), 4),
+                    high=round(float(bar.get("h", 0.0)), 4),
+                    low=round(float(bar.get("l", 0.0)), 4),
+                    close=round(float(bar.get("c", 0.0)), 4),
+                    volume=round(float(bar.get("v", 0.0)), 2),
+                )
+            )
+
+        if timeframe != Timeframe.H4:
+            return candles[-limit:]
+
+        # Resample 1H → 4H
+        import pandas as pd
+        df = pd.DataFrame(
+            [{
+                "open": c.open, "high": c.high, "low": c.low,
+                "close": c.close, "volume": c.volume,
+            } for c in candles],
+            index=pd.to_datetime([c.time for c in candles], unit="s", utc=True),
+        )
+        df4 = (
+            df.resample("4h", origin="start_day")
+            .agg({"open": "first", "high": "max", "low": "min",
+                  "close": "last", "volume": "sum"})
+            .dropna(subset=["open"])
+        )
+        result: list[Candle] = []
+        for ts_idx, row in df4.iterrows():
+            result.append(Candle(
+                time=int(ts_idx.timestamp()),
+                open=round(float(row["open"]), 4),
+                high=round(float(row["high"]), 4),
+                low=round(float(row["low"]), 4),
+                close=round(float(row["close"]), 4),
+                volume=round(float(row["volume"]), 2),
+            ))
+        return result[-limit:]
+
     async def get_ohlcv(
         self,
         ticker: str,
@@ -511,17 +597,27 @@ class AlpacaMarketDataService(MarketDataService):
         end: str | None = None,
     ) -> list[Candle]:
         """
-        Fetches historical OHLCV via Yahoo Finance (free, multi-year history).
-        Alpaca's free plan only provides today's streaming data, so yfinance
-        is used for all historical chart data.  Alpaca is still used for
-        real-time price polling (get_latest_price / stream_ticks).
+        Fetch historical OHLCV bars.
+
+        Strategy (in priority order):
+          1. Crypto  → Alpaca /v1beta3/crypto/us/bars (key-authenticated, cloud-safe)
+          2. Equity  → Alpaca /v2/stocks/bars IEX feed (key-authenticated, cloud-safe)
+          3. Any     → yfinance fallback (works locally; blocked on many cloud hosts)
         """
-        if "/" in ticker:
+        is_crypto = "/" in ticker
+
+        if is_crypto:
             bars = await self._get_crypto_ohlcv_alpaca(ticker, timeframe, limit, end=end)
             if bars:
                 logger.info("alpaca_crypto_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
                 return bars
+        else:
+            bars = await self._get_equity_ohlcv_alpaca(ticker, timeframe, limit, end=end)
+            if bars:
+                logger.info("alpaca_equity_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
+                return bars
 
+        # Fallback: yfinance (reliable locally; may be blocked on cloud IPs)
         end_dt = (
             datetime.fromisoformat(end.replace("Z", "+00:00")).astimezone(timezone.utc)
             if end else datetime.now(timezone.utc)
