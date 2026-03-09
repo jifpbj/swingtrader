@@ -53,7 +53,7 @@ export default function TradingDashboard() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden">
       {/* Top navigation bar */}
       <TopBar />
 
@@ -61,12 +61,12 @@ export default function TradingDashboard() {
       <TickerSearch />
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 md:overflow-hidden">
         {/* Sidebar nav */}
         <Sidebar />
 
         {/* Dashboard body */}
-        <main className="flex flex-col md:flex-row flex-1 overflow-hidden gap-3 p-3">
+        <main className="flex flex-col md:flex-row flex-1 gap-3 p-3 md:overflow-hidden">
           {/* ─── Left: Chart + Indicator Ribbon ─── */}
           {/* Mobile: shrink-0 (chart has explicit h-[50vh]). Desktop: flex-1 fills remaining height. */}
           <div className="flex flex-col shrink-0 gap-3 min-w-0 md:flex-1 md:overflow-hidden">
@@ -97,10 +97,10 @@ export default function TradingDashboard() {
           {/* Mobile: flex-1 takes remaining height, scrolls internally. Desktop: fixed-width side panel. */}
           <aside
             className={cn(
-              "flex flex-col min-h-0 flex-1 overflow-y-auto overscroll-y-contain w-full",
+              "flex flex-col min-h-0 flex-1 w-full overflow-y-visible md:overflow-y-auto md:overscroll-y-contain",
               rightCollapsed
                 ? "md:flex-none md:w-10 md:overflow-hidden"
-                : "gap-3 md:shrink-0 md:flex-none md:min-w-[300px] md:max-w-[65vw] md:[width:var(--right-panel-w)]",
+                : "gap-3 md:shrink-0 md:flex-none md:min-w-[300px] md:max-w-[65vw] md:w-(--right-panel-w)",
             )}
             style={!rightCollapsed ? ({ "--right-panel-w": `${rightPanelWidth}px` } as React.CSSProperties) : undefined}
           >
