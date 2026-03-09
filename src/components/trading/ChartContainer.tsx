@@ -699,7 +699,7 @@ export function ChartContainer() {
   return (
     <div className="relative flex flex-col h-full tv-chart-container">
       {/* Timeframe selector bar */}
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/5 shrink-0">
+      <div className="flex items-center justify-center gap-0.5 px-2 py-1.5 border-b border-white/5 shrink-0">
         {(["1m","5m","15m","1h","4h","1d"] as const).map((tf) => (
           <button
             key={tf}
