@@ -5,6 +5,7 @@ import { useUIStore } from "@/store/useUIStore";
 import type { IndicatorTab } from "@/store/useUIStore";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useMockData, generateMockCandles, tickerSeed } from "@/hooks/useMockData";
+import { getDemoBasePrice } from "@/lib/demoPriceCache";
 import {
   computeEMA, detectCrossovers,
   computeBollingerBands, detectBollingerCrossovers,
@@ -330,8 +331,9 @@ export function ChartContainer() {
       const fetchLimit = FETCH_LIMIT[timeframe] ?? 500;
       let rawCandles: Candle[] = [];
       if (demoMode) {
-        // Generate synthetic GBM history — same seed & count as useMockData so live ticks continue seamlessly
-        rawCandles = generateMockCandles(barSecs, 300, tickerSeed(ticker));
+        // Fetch real price to seed GBM at realistic level (same params as useMockData)
+        const basePrice = await getDemoBasePrice(ticker);
+        rawCandles = generateMockCandles(barSecs, 300, tickerSeed(ticker), basePrice);
       } else {
         try {
           const res = await fetch(
