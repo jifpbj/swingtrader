@@ -38,7 +38,7 @@ export function TopBar() {
   const isUp = (changePercent ?? 0) >= 0;
 
   return (
-    <header className="glass-bright flex items-center justify-between px-4 h-14 shrink-0 border-b border-white/5 z-30">
+    <header className="glass-bright flex items-center justify-between px-4 h-14 shrink-0 border-b border-white/5 sticky top-0 z-30">
       {/* LEFT: Hamburger + Logo + Mode toggle (desktop) + Ticker + Price */}
       <div className="flex items-center gap-3 sm:gap-4">
         {/* Hamburger — mobile only */}
