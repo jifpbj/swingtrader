@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useUIStore } from "@/store/useUIStore";
 import type { IndicatorTab } from "@/store/useUIStore";
 import { useMarketData } from "@/hooks/useMarketData";
-import { useMockData, generateMockCandles } from "@/hooks/useMockData";
+import { useMockData, generateMockCandles, tickerSeed } from "@/hooks/useMockData";
 import {
   computeEMA, detectCrossovers,
   computeBollingerBands, detectBollingerCrossovers,
@@ -330,8 +330,8 @@ export function ChartContainer() {
       const fetchLimit = FETCH_LIMIT[timeframe] ?? 500;
       let rawCandles: Candle[] = [];
       if (demoMode) {
-        // Generate synthetic GBM history instead of hitting the backend
-        rawCandles = generateMockCandles(barSecs, Math.min(fetchLimit, 300));
+        // Generate synthetic GBM history — same seed & count as useMockData so live ticks continue seamlessly
+        rawCandles = generateMockCandles(barSecs, 300, tickerSeed(ticker));
       } else {
         try {
           const res = await fetch(
@@ -652,8 +652,9 @@ export function ChartContainer() {
   useEffect(() => { loadMoreRef.current = loadMoreHistory; }, [loadMoreHistory]);
 
   // ─── Push live price into the forming candle every second ──────────────────
+  // Skip in demo mode: useMockData drives chart updates via handleCandle directly.
   useEffect(() => {
-    if (!livePrice || !candleSeriesRef.current || !candlesRef.current.length) return;
+    if (demoMode || !livePrice || !candleSeriesRef.current || !candlesRef.current.length) return;
 
     const arr  = candlesRef.current;
     const last = arr[arr.length - 1];
