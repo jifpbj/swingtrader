@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type { AlphaSignal, Indicators, Prediction, Timeframe } from "@/types/market";
 
+
 export type IndicatorTab = "EMA" | "BB" | "RSI" | "MACD" | "TD9";
 export type Theme = "light" | "dark" | "system";
 
@@ -102,7 +103,7 @@ export const useUIStore = create<UIState>()(
     theme: "dark" as Theme,
     setTheme: (theme) => set({ theme }),
 
-    ticker: "BTC/USD",
+    ticker: "AAPL",
     setTicker: (ticker) => set({ ticker, livePrice: null, priceOpen: null, high24h: null, low24h: null, volume24h: null }),
 
     timeframe: "15m",
@@ -172,7 +173,7 @@ export const useUIStore = create<UIState>()(
     macdSignalPeriod: 9,
     setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
 
-    demoMode: false,
+    demoMode: true,
     setDemoMode: (demoMode) => set({ demoMode }),
 
   }))
