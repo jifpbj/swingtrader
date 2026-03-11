@@ -55,7 +55,13 @@ jobs:
             --image ${{ env.IMAGE }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --project ${{ env.PROJECT_ID }} \
+            --set-env-vars "APP_ENV=production" \
+            --set-secrets "ALPACA_API_KEY=ALPACA_API_KEY:latest,ALPACA_SECRET_KEY=ALPACA_SECRET_KEY:latest" \
             --quiet
+          # Firebase/Firestore auth uses Application Default Credentials (ADC) on
+          # Cloud Run — no GOOGLE_APPLICATION_CREDENTIALS secret is needed here.
+          # The runtime service account must have roles/datastore.user granted.
+          # See one-time setup instructions in the README / below.
 
   # ── Frontend: build Next.js → Firebase Hosting ───────────────────────────
   deploy-frontend:

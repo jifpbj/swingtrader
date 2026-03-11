@@ -41,38 +41,65 @@ _app: firebase_admin.App | None = None
 def init_firebase() -> bool:
     """
     Initialise the Firebase Admin SDK.
-    Returns True on success, False if credentials are missing.
+    Returns True on success, False if no credentials are available.
     Called once at server startup.
+
+    Authentication priority:
+      1. Service account JSON file — path from GOOGLE_APPLICATION_CREDENTIALS env var
+         (or default "service-account.json").  Use this for local development.
+      2. Application Default Credentials (ADC) — used automatically on Cloud Run,
+         GCE, GKE, and any other GCP-hosted environment.  No file or env var needed;
+         just grant the Cloud Run service account the required Firebase/Firestore roles.
+
+    Cloud Run setup (one-time, no secrets file required):
+      gcloud projects add-iam-policy-binding predict-alpha-4ed0c \\
+        --member="serviceAccount:<CLOUD_RUN_SA>@predict-alpha-4ed0c.iam.gserviceaccount.com" \\
+        --role="roles/datastore.user"
+      # Also grant roles/firebase.admin if you need Auth / Storage admin access.
     """
     global _app
     if _app is not None:
         return True  # Already initialised
 
+    # ── Strategy 1: explicit service account JSON file (local dev) ────────────
     cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "service-account.json")
     # Resolve relative to the backend/ directory
     if not os.path.isabs(cred_path):
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         cred_path = os.path.join(backend_dir, cred_path)
 
-    if not os.path.exists(cred_path):
-        logger.warning(
-            "firebase_credentials_missing",
-            path=cred_path,
-            hint=(
-                "Download a service account JSON from Firebase Console → "
-                "Project Settings → Service Accounts and set "
-                "GOOGLE_APPLICATION_CREDENTIALS in backend/.env"
-            ),
-        )
-        return False
+    if os.path.exists(cred_path):
+        try:
+            cred = credentials.Certificate(cred_path)
+            _app = firebase_admin.initialize_app(cred)
+            logger.info("firebase_admin_initialized", credential_path=cred_path)
+            return True
+        except Exception as exc:
+            logger.error("firebase_admin_init_failed_file", path=cred_path, error=str(exc))
+            return False
 
+    # ── Strategy 2: Application Default Credentials (Cloud Run / GCP) ─────────
+    # On Cloud Run the runtime service account is used automatically.
+    # No GOOGLE_APPLICATION_CREDENTIALS file is needed — just IAM role assignment.
+    logger.info(
+        "firebase_credentials_file_not_found",
+        path=cred_path,
+        fallback="Attempting Application Default Credentials (ADC)",
+    )
     try:
-        cred = credentials.Certificate(cred_path)
-        _app = firebase_admin.initialize_app(cred)
-        logger.info("firebase_admin_initialized", credential_path=cred_path)
+        _app = firebase_admin.initialize_app()  # ADC: picks up GCP metadata server
+        logger.info("firebase_admin_initialized_adc")
         return True
     except Exception as exc:
-        logger.error("firebase_admin_init_failed", error=str(exc))
+        logger.warning(
+            "firebase_adc_failed",
+            error=str(exc),
+            hint=(
+                "For local dev: download a service account JSON from Firebase Console → "
+                "Project Settings → Service Accounts and place it at backend/service-account.json. "
+                "On Cloud Run: grant the runtime service account roles/datastore.user."
+            ),
+        )
         return False
 
 
