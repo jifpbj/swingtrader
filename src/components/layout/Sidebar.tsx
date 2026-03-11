@@ -11,7 +11,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 480;
-const SIDEBAR_DEFAULT = 224; // md:w-56
+const SIDEBAR_DEFAULT = 360; // matches right panel default width
 
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
