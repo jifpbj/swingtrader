@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
@@ -8,9 +9,37 @@ import { StrategyQueue } from "@/components/algo/StrategyQueue";
 import { DataModeToggle } from "@/components/ui/DataModeToggle";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 224; // md:w-56
+
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggle    = useUIStore((s) => s.toggleSidebar);
+
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const onResizePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    dragStateRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const ds = dragStateRef.current;
+      if (!ds) return;
+      const next = ds.startWidth + (e.clientX - ds.startX);
+      setSidebarWidth(Math.min(Math.max(next, SIDEBAR_MIN), SIDEBAR_MAX));
+    };
+    const onUp = () => { dragStateRef.current = null; };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
 
   return (
     <>
@@ -24,15 +53,26 @@ export function Sidebar() {
         aria-hidden="true"
       />
 
+      {/* Wrapper — positions sidebar + drag handle as a unit on desktop */}
+      <div
+        className={cn(
+          "shrink-0 relative",
+          // Mobile: not in flow (the aside is fixed)
+          "md:flex md:items-stretch",
+          collapsed ? "md:w-14" : "",
+        )}
+        style={!collapsed ? { width: sidebarWidth } : undefined}
+      >
+
       <aside
         className={cn(
-          "glass flex flex-col py-4 shrink-0 border-r border-white/5 transition-all duration-300",
+          "glass flex flex-col py-4 shrink-0 border-r border-white/5 transition-[transform] duration-300",
           // Mobile: fixed overlay, full height, slides in/out
           "fixed inset-y-0 left-0 w-72 items-stretch z-50",
           collapsed ? "-translate-x-full" : "translate-x-0",
-          // Desktop: back in document flow
-          "md:relative md:inset-y-auto md:translate-x-0 md:z-20",
-          collapsed ? "md:w-14 md:items-center" : "md:w-56 md:items-stretch",
+          // Desktop: back in document flow, width driven by parent
+          "md:relative md:inset-y-auto md:translate-x-0 md:z-20 md:w-full",
+          collapsed ? "md:w-14 md:items-center" : "md:items-stretch",
         )}
       >
         {/* Header */}
@@ -104,6 +144,21 @@ export function Sidebar() {
           {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
         </button>
       </aside>
+
+      {/* Drag handle — desktop only, hidden when collapsed */}
+      {!collapsed && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          onPointerDown={onResizePointerDown}
+          className="hidden md:flex absolute right-0 top-0 bottom-0 w-1.5 -mr-0.5 cursor-col-resize items-stretch justify-center z-30 group"
+        >
+          <span className="w-px rounded-full bg-white/8 transition-colors group-hover:bg-amber-400/70" />
+        </div>
+      )}
+
+      </div>{/* end wrapper */}
     </>
   );
 }

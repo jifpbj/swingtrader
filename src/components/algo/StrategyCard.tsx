@@ -27,11 +27,11 @@ const INDICATOR_FULL: Record<IndicatorType, string> = {
 };
 
 const INDICATOR_COLORS: Record<IndicatorType, string> = {
-  EMA:  "bg-amber-500/15  text-amber-400  border-amber-500/25",
-  BB:   "bg-sky-500/15    text-sky-400    border-sky-500/25",
-  RSI:  "bg-violet-500/15 text-violet-400 border-violet-500/25",
-  MACD: "bg-rose-500/15   text-rose-400   border-rose-500/25",
-  TD9:  "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
+  EMA:  "bg-amber-500/20  text-amber-300  border-amber-500/35",
+  BB:   "bg-sky-500/20    text-sky-300    border-sky-500/35",
+  RSI:  "bg-violet-500/20 text-violet-300 border-violet-500/35",
+  MACD: "bg-rose-500/20   text-rose-300   border-rose-500/35",
+  TD9:  "bg-emerald-500/20 text-emerald-300 border-emerald-500/35",
 };
 
 const PERIOD_FULL: Record<string, string> = {
@@ -162,8 +162,8 @@ export function StrategyCard({ strategy }: Props) {
         "group relative flex flex-col gap-0 rounded-2xl cursor-pointer transition-all duration-200",
         "border",
         isActive
-          ? "border-emerald-500/40 bg-emerald-500/8 shadow-lg shadow-emerald-900/20"
-          : "border-white/8 bg-white/3 hover:bg-white/5 hover:border-white/15",
+          ? "border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-900/20"
+          : "border-white/12 bg-white/5 hover:bg-white/8 hover:border-white/20",
       )}
     >
       {/* ── Active stripe ───────────────────────────────────────────────── */}
@@ -194,16 +194,16 @@ export function StrategyCard({ strategy }: Props) {
           </div>
 
           {/* Indicator full name */}
-          <p className="text-[10px] text-zinc-500 font-medium">
+          <p className="text-[10px] text-zinc-400 font-medium">
             {INDICATOR_FULL[strategy.indicator] ?? strategy.indicator}
           </p>
 
           {/* Timeframe + period + start date */}
-          <p className="text-[10px] text-zinc-600 mt-0.5">
+          <p className="text-[10px] text-zinc-400 mt-0.5">
             {expandTimeframe(strategy.timeframe)}
             {strategy.bestPeriodKey ? ` · ${expandPeriod(strategy.bestPeriodKey)} backtest` : ""}
           </p>
-          <p className="text-[10px] text-zinc-600">
+          <p className="text-[10px] text-zinc-500">
             Started {dateFmtLg.format(startDate)}
           </p>
         </div>
@@ -214,7 +214,7 @@ export function StrategyCard({ strategy }: Props) {
           <button
             onClick={() => setShowCash((v) => !v)}
             title={showCash ? "Show as percentage" : "Show as dollar value"}
-            className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-white/8 transition-colors"
           >
             {showCash
               ? <Percent className="size-3" />
@@ -229,7 +229,7 @@ export function StrategyCard({ strategy }: Props) {
               "p-1.5 rounded-lg text-[9px] font-semibold transition-all",
               confirmDelete
                 ? "bg-red-500/20 text-red-400"
-                : "text-zinc-600 hover:text-red-400 hover:bg-red-500/10",
+                : "text-zinc-400 hover:text-red-400 hover:bg-red-500/10",
               deleting && "opacity-50 cursor-not-allowed",
             )}
           >
@@ -252,7 +252,7 @@ export function StrategyCard({ strategy }: Props) {
           )}>
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-[9px] text-zinc-500 uppercase tracking-wider font-medium mb-0.5">
+                <p className="text-[9px] text-zinc-300 uppercase tracking-wider font-semibold mb-0.5">
                   Total P/L
                 </p>
                 <div className="flex items-baseline gap-1.5">
@@ -279,10 +279,10 @@ export function StrategyCard({ strategy }: Props) {
 
             {/* vs. backtest target */}
             <div className="flex items-center gap-1 mt-1.5">
-              <span className="text-[9px] text-zinc-600">vs. backtest target</span>
+              <span className="text-[9px] text-zinc-400">vs. backtest target</span>
               <span className={cn(
                 "text-[9px] font-mono font-semibold tabular-nums",
-                btReturn >= 0 ? "text-zinc-500" : "text-red-500/70",
+                btReturn >= 0 ? "text-zinc-300" : "text-red-400/80",
               )}>
                 {btReturn >= 0 ? "+" : ""}
                 {fmtValue(btReturn, btPnlDollar)}
@@ -291,8 +291,8 @@ export function StrategyCard({ strategy }: Props) {
           </div>
         ) : (
           /* ── No trades yet — show backtested projection ──────────────── */
-          <div className="rounded-xl px-3 py-2.5 bg-zinc-800/40 border border-white/8">
-            <p className="text-[9px] text-zinc-600 uppercase tracking-wider font-medium mb-0.5">
+          <div className="rounded-xl px-3 py-2.5 bg-zinc-800/50 border border-white/15">
+            <p className="text-[9px] text-zinc-300 uppercase tracking-wider font-semibold mb-0.5">
               Backtested projection
             </p>
             <div className="flex items-baseline gap-1.5">
@@ -307,47 +307,47 @@ export function StrategyCard({ strategy }: Props) {
                 {fmtValue(btReturn, btPnlDollar)}
               </span>
             </div>
-            <p className="text-[9px] text-zinc-600 mt-1">No live trades yet</p>
+            <p className="text-[9px] text-zinc-400 mt-1">No live trades yet</p>
           </div>
         )}
       </div>
 
       {/* ════ STATS GRID ════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-4 gap-px mx-4 mb-3 rounded-xl overflow-hidden border border-white/8 bg-white/5">
+      <div className="grid grid-cols-4 gap-px mx-4 mb-3 rounded-xl overflow-hidden border border-white/15 bg-white/8">
         {/* Win rate */}
-        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/60">
-          <span className="text-[8px] text-zinc-600 uppercase tracking-wide font-medium">Win Rate</span>
-          <span className="text-[11px] font-bold tabular-nums text-zinc-300">
+        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/70">
+          <span className="text-[8px] text-zinc-400 uppercase tracking-wide font-semibold">Win Rate</span>
+          <span className="text-[11px] font-bold tabular-nums text-zinc-100">
             {actualWinRate !== null ? `${(actualWinRate * 100).toFixed(0)}%` : "—"}
           </span>
         </div>
 
         {/* Trades */}
-        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/60">
-          <span className="text-[8px] text-zinc-600 uppercase tracking-wide font-medium">Trades</span>
-          <span className="text-[11px] font-bold tabular-nums text-zinc-300">
+        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/70">
+          <span className="text-[8px] text-zinc-400 uppercase tracking-wide font-semibold">Trades</span>
+          <span className="text-[11px] font-bold tabular-nums text-zinc-100">
             {trades.length > 0 ? trades.length : "—"}
           </span>
         </div>
 
         {/* Max Drawdown */}
-        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/60">
-          <span className="text-[8px] text-zinc-600 uppercase tracking-wide font-medium flex items-center gap-0.5">
+        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/70">
+          <span className="text-[8px] text-zinc-400 uppercase tracking-wide font-semibold flex items-center gap-0.5">
             <ShieldAlert className="size-2 shrink-0" />Max DD
           </span>
-          <span className="text-[11px] font-bold tabular-nums text-red-400/70">
+          <span className="text-[11px] font-bold tabular-nums text-red-400">
             {fmtValue(btDrawdown, ddDollar)}
           </span>
         </div>
 
         {/* Backtest */}
-        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/60">
-          <span className="text-[8px] text-zinc-600 uppercase tracking-wide font-medium flex items-center gap-0.5">
+        <div className="flex flex-col gap-0.5 px-2.5 py-2 bg-zinc-900/70">
+          <span className="text-[8px] text-zinc-400 uppercase tracking-wide font-semibold flex items-center gap-0.5">
             <BarChart3 className="size-2 shrink-0" />Backtest
           </span>
           <span className={cn(
             "text-[11px] font-bold tabular-nums",
-            btReturn >= 0 ? "text-emerald-400/70" : "text-red-400/70",
+            btReturn >= 0 ? "text-emerald-400" : "text-red-400",
           )}>
             {btReturn >= 0 ? "+" : ""}{fmtValue(btReturn, btPnlDollar)}
           </span>
@@ -361,24 +361,24 @@ export function StrategyCard({ strategy }: Props) {
       >
         {/* Lot size row */}
         <div className="flex items-center gap-1 text-[9px] flex-1 min-w-0">
-          <span className="text-zinc-600 shrink-0">Lot</span>
+          <span className="text-zinc-300 shrink-0 font-medium">Lot</span>
           <div className="flex items-center gap-0.5 glass rounded-md px-0.5 py-0.5 shrink-0">
             <button
               onClick={() => { setLotSizeMode("dollars"); handleLotSave("dollars", lotSizeDollars); }}
               className={cn(
                 "px-1.5 py-0.5 rounded font-semibold transition-all",
-                lotSizeMode === "dollars" ? "bg-amber-500/20 text-amber-400" : "text-zinc-600 hover:text-zinc-400",
+                lotSizeMode === "dollars" ? "bg-amber-500/20 text-amber-300" : "text-zinc-400 hover:text-zinc-200",
               )}
             >$</button>
             <button
               onClick={() => { setLotSizeMode("units"); handleLotSave("units", lotSizeDollars); }}
               className={cn(
                 "px-1.5 py-0.5 rounded font-semibold transition-all",
-                lotSizeMode === "units" ? "bg-amber-500/20 text-amber-400" : "text-zinc-600 hover:text-zinc-400",
+                lotSizeMode === "units" ? "bg-amber-500/20 text-amber-300" : "text-zinc-400 hover:text-zinc-200",
               )}
             >qty</button>
           </div>
-          {lotSizeMode === "dollars" && <span className="text-zinc-600 font-mono shrink-0">$</span>}
+          {lotSizeMode === "dollars" && <span className="text-zinc-400 font-mono shrink-0">$</span>}
           <input
             type="number"
             min={1}
@@ -389,10 +389,10 @@ export function StrategyCard({ strategy }: Props) {
               if (Number.isFinite(v) && v > 0) setLotSizeDollars(v);
             }}
             onBlur={() => handleLotSave(lotSizeMode, lotSizeDollars)}
-            className="w-16 rounded border border-white/10 bg-black/20 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-300 outline-none focus:border-amber-500/40 transition-colors"
+            className="w-16 rounded border border-white/15 bg-black/30 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/50 transition-colors"
           />
-          <span className="text-zinc-700 shrink-0">/trade</span>
-          {savingLot && <Loader2 className="size-2.5 animate-spin text-zinc-600 shrink-0" />}
+          <span className="text-zinc-400 shrink-0">/trade</span>
+          {savingLot && <Loader2 className="size-2.5 animate-spin text-zinc-400 shrink-0" />}
         </div>
 
         {/* Auto-trade toggle */}
@@ -404,7 +404,7 @@ export function StrategyCard({ strategy }: Props) {
             "flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-semibold transition-all border shrink-0",
             strategy.autoTrade
               ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30"
-              : "bg-white/5 text-zinc-500 border-white/10 hover:text-zinc-300 hover:bg-white/10",
+              : "bg-white/8 text-zinc-300 border-white/15 hover:text-zinc-100 hover:bg-white/15",
             toggling && "opacity-50 cursor-not-allowed",
           )}
         >
@@ -425,7 +425,7 @@ export function StrategyCard({ strategy }: Props) {
         {hasActualTrades && (
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] text-zinc-500 hover:text-zinc-300 hover:bg-white/5 border border-transparent transition-all"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] text-zinc-400 hover:text-zinc-100 hover:bg-white/8 border border-white/10 transition-all"
           >
             {expanded ? <ChevronUp className="size-2.5" /> : <ChevronDown className="size-2.5" />}
             {trades.length} trade{trades.length !== 1 ? "s" : ""}
@@ -436,7 +436,7 @@ export function StrategyCard({ strategy }: Props) {
         <Link
           href="/portfolio"
           onClick={(e) => e.stopPropagation()}
-          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] text-zinc-500 hover:text-zinc-200 hover:bg-white/5 border border-transparent transition-all"
+          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] text-zinc-300 hover:text-zinc-100 hover:bg-white/8 border border-white/10 transition-all"
         >
           Full history
           <ExternalLink className="size-2.5" />
@@ -446,10 +446,10 @@ export function StrategyCard({ strategy }: Props) {
       {/* ════ EXPANDED TRADE LIST ═══════════════════════════════════════════ */}
       {expanded && hasActualTrades && (
         <div
-          className="border-t border-white/8 px-4 pt-3 pb-3 flex flex-col gap-1.5"
+          className="border-t border-white/15 px-4 pt-3 pb-3 flex flex-col gap-1.5"
           onClick={(e) => e.stopPropagation()}
         >
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wider font-medium mb-1">
+          <p className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold mb-1">
             Recent trades
           </p>
           {trades.slice(0, 6).map((trade) => (
@@ -457,7 +457,7 @@ export function StrategyCard({ strategy }: Props) {
               key={trade.id}
               className="flex items-center justify-between gap-2 text-[9px]"
             >
-              <span className="text-zinc-600 font-mono shrink-0">
+              <span className="text-zinc-400 font-mono shrink-0">
                 {dateFmtSh.format(new Date(trade.entryTime * 1000))}
                 {" → "}
                 {dateFmtSh.format(new Date(trade.exitTime * 1000))}
@@ -476,7 +476,7 @@ export function StrategyCard({ strategy }: Props) {
             <Link
               href="/portfolio"
               onClick={(e) => e.stopPropagation()}
-              className="text-[9px] text-zinc-600 hover:text-zinc-400 text-center mt-0.5 transition-colors"
+              className="text-[9px] text-zinc-400 hover:text-zinc-200 text-center mt-0.5 transition-colors"
             >
               +{trades.length - 6} more trades — view in Portfolio →
             </Link>
