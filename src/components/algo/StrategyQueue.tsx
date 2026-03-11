@@ -118,7 +118,7 @@ export function StrategyQueue() {
       )}
 
       {user && strategies.length > 0 && (
-        <div className="flex flex-col gap-1.5 overflow-y-auto max-h-[60vh] pr-0.5">
+        <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-0.5">
           {strategies.map((s) => (
             <StrategyCard key={s.id} strategy={s} />
           ))}
