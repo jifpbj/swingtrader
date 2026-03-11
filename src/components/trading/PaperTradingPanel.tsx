@@ -416,6 +416,53 @@ function TradeForm() {
 
 function PositionsTab() {
   const positions = useAlpacaStore((s) => s.positions);
+  const { placeOrder } = useAlpacaStore();
+
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [orderType, setOrderType] = useState<OrderType>("market");
+  const [qty, setQty] = useState("");
+  const [limitPrice, setLimitPrice] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  function handleSelect(symbol: string, posQty: number) {
+    if (selectedSymbol === symbol) {
+      setSelectedSymbol(null);
+      setResult(null);
+    } else {
+      setSelectedSymbol(symbol);
+      setQty(String(posQty));
+      setOrderType("market");
+      setLimitPrice("");
+      setResult(null);
+    }
+  }
+
+  async function handleSell(e: React.FormEvent, symbol: string, currentPrice: number | null) {
+    e.preventDefault();
+    setSubmitting(true);
+    setResult(null);
+    const crypto = isCrypto(symbol);
+    const req: PlaceOrderRequest = {
+      symbol: toAlpacaSymbol(symbol),
+      qty: parseFloat(qty),
+      side: "sell",
+      type: orderType,
+      time_in_force: crypto ? "gtc" : "day",
+      ...(orderType === "limit" && limitPrice
+        ? { limit_price: parseFloat(limitPrice) }
+        : {}),
+    };
+    try {
+      const order = await placeOrder(req);
+      setResult({ ok: true, msg: `Sell order placed · ${order.id.slice(0, 8)}…` });
+      setSelectedSymbol(null);
+    } catch (err) {
+      setResult({ ok: false, msg: (err as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   if (positions.length === 0) {
     return (
@@ -430,37 +477,175 @@ function PositionsTab() {
     <div className="flex flex-col gap-1 px-3 py-2">
       {positions.map((p) => {
         const isProfit = p.unrealized_pl >= 0;
+        const isSelected = selectedSymbol === p.symbol;
         return (
-          <div
-            key={p.symbol}
-            className="flex items-center justify-between rounded-lg px-3 py-2.5 bg-zinc-800/40 hover:bg-zinc-800/60 transition-colors"
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-mono font-bold text-zinc-100">
-                {p.symbol}
-              </span>
-              <span className="text-[10px] text-zinc-500 font-mono">
-                {p.qty} · avg {formatCurrency(p.avg_entry_price)}
-              </span>
-            </div>
-            <div className="flex flex-col items-end gap-0.5">
-              <span
-                className={cn(
-                  "text-xs font-mono font-semibold",
-                  isProfit ? "text-emerald-400" : "text-red-400",
-                )}
+          <div key={p.symbol} className="flex flex-col rounded-lg overflow-hidden">
+            {/* Position row — clickable to expand sell form */}
+            <button
+              type="button"
+              onClick={() => handleSelect(p.symbol, p.qty)}
+              className={cn(
+                "flex items-center justify-between px-3 py-2.5 w-full text-left transition-colors",
+                isSelected
+                  ? "bg-zinc-700/60"
+                  : "bg-zinc-800/40 hover:bg-zinc-800/70",
+              )}
+            >
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono font-bold text-zinc-100">
+                    {p.symbol}
+                  </span>
+                  <span className="text-[9px] text-zinc-500 font-medium">
+                    {isSelected ? "▲" : "▼"}
+                  </span>
+                </div>
+                <span className="text-[10px] text-zinc-500 font-mono">
+                  {p.qty} · avg {formatCurrency(p.avg_entry_price)}
+                </span>
+              </div>
+              <div className="flex flex-col items-end gap-0.5">
+                <span
+                  className={cn(
+                    "text-xs font-mono font-semibold",
+                    isProfit ? "text-emerald-400" : "text-red-400",
+                  )}
+                >
+                  {formatCurrency(p.unrealized_pl)}
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] font-mono",
+                    isProfit ? "text-emerald-500/70" : "text-red-500/70",
+                  )}
+                >
+                  {formatPercent(p.unrealized_plpc * 100)}
+                </span>
+              </div>
+            </button>
+
+            {/* Inline sell form */}
+            {isSelected && (
+              <form
+                onSubmit={(e) => handleSell(e, p.symbol, p.current_price)}
+                className="bg-zinc-800/60 border-t border-white/5 px-3 py-3 flex flex-col gap-2"
               >
-                {formatCurrency(p.unrealized_pl)}
-              </span>
-              <span
-                className={cn(
-                  "text-[10px] font-mono",
-                  isProfit ? "text-emerald-500/70" : "text-red-500/70",
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">
+                    Close Position
+                  </span>
+                  {p.current_price != null && (
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      Last: {formatCurrency(p.current_price)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Order type toggle */}
+                <div className="flex gap-1 bg-zinc-900/40 rounded-lg p-0.5">
+                  {(["market", "limit"] as OrderType[]).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setOrderType(t)}
+                      className={cn(
+                        "flex-1 py-1 rounded-md text-[11px] font-medium transition-all capitalize",
+                        orderType === t
+                          ? "bg-zinc-700 text-zinc-100 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-400",
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Qty + limit price */}
+                <div
+                  className={cn(
+                    "grid gap-2",
+                    orderType === "limit" ? "grid-cols-2" : "grid-cols-1",
+                  )}
+                >
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                      Qty
+                    </label>
+                    <input
+                      type="number"
+                      value={qty}
+                      onChange={(e) => setQty(e.target.value)}
+                      min="0.0001"
+                      step="any"
+                      required
+                      className="bg-zinc-900/60 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-red-400/60 focus:ring-1 focus:ring-red-400/20 transition-all"
+                    />
+                  </div>
+                  {orderType === "limit" && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                        Limit Price
+                      </label>
+                      <input
+                        type="number"
+                        value={limitPrice}
+                        onChange={(e) => setLimitPrice(e.target.value)}
+                        min="0"
+                        step="any"
+                        required
+                        placeholder={
+                          p.current_price != null
+                            ? p.current_price.toFixed(2)
+                            : ""
+                        }
+                        className="bg-zinc-900/60 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-red-400/60 focus:ring-1 focus:ring-red-400/20 transition-all"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {result && (
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 text-[11px] rounded-lg px-3 py-2 border",
+                      result.ok
+                        ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                        : "text-red-400 bg-red-500/10 border-red-500/20",
+                    )}
+                  >
+                    <AlertCircle className="size-3.5 shrink-0" />
+                    {result.msg}
+                  </div>
                 )}
-              >
-                {formatPercent(p.unrealized_plpc * 100)}
-              </span>
-            </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSymbol(null);
+                      setResult(null);
+                    }}
+                    className="flex-1 py-2 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 border border-white/10 hover:bg-white/5 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-[2] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-red-500 hover:bg-red-400 text-white shadow-md shadow-red-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? (
+                      <span className="size-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <TrendingDown className="size-3.5" />
+                    )}
+                    {submitting
+                      ? "Placing…"
+                      : `Sell ${orderType === "market" ? "at Market" : "Limit"}`}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         );
       })}
