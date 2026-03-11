@@ -20,7 +20,8 @@ import { DataModeToggle } from "@/components/ui/DataModeToggle";
 
 export function TopBar() {
   const ticker        = useUIStore((s) => s.ticker);
-  const setSearchOpen = useUIStore((s) => s.setSearchOpen);
+  const setSearchOpen    = useUIStore((s) => s.setSearchOpen);
+  const setSettingsOpen  = useUIStore((s) => s.setSettingsOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
   const user          = useAuthStore((s) => s.user);
@@ -119,7 +120,11 @@ export function TopBar() {
           <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400" />
         </button>
 
-        <button className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors"
+          title="API Keys & Settings"
+        >
           <Settings className="size-4" />
         </button>
 

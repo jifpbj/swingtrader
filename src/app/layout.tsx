@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/layout/Providers";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { ApiKeyModal } from "@/components/auth/ApiKeyModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,6 +40,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <AuthModal />
+          <ApiKeyModal />
         </Providers>
       </body>
     </html>

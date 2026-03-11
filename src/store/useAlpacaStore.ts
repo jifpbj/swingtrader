@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import type { AlpacaAccount, AlpacaOrder, AlpacaPosition, PlaceOrderRequest } from "@/types/market";
 import type { TradingMode } from "@/types/strategy";
 
@@ -42,15 +44,18 @@ async function alpacaFetch<T>(
 }
 
 interface AlpacaState {
-  // ─── Credentials (persisted in localStorage)
+  // ─── Credentials (persisted in localStorage + Firestore when logged in)
   apiKey: string;
   secretKey: string;
 
   // ─── Trading mode (persisted)
   tradingMode: TradingMode;
 
+  // ─── DB sync state
+  dbSaving: boolean;
+  dbSaved: boolean;   // true for 3s after a successful save
+
   // ─── Live state (ephemeral)
-  // Note: `connected` is derived — check `account !== null` instead.
   account: AlpacaAccount | null;
   positions: AlpacaPosition[];
   orders: AlpacaOrder[];
@@ -69,6 +74,11 @@ interface AlpacaState {
   cancelOrder: (orderId: string) => Promise<void>;
   cancelAllOrders: () => Promise<void>;
   refresh: () => Promise<void>;
+
+  // ─── Firestore persistence
+  saveCredentialsToDb: (uid: string) => Promise<void>;
+  loadCredentialsFromDb: (uid: string) => Promise<void>;
+  clearDbSaved: () => void;
 }
 
 export const useAlpacaStore = create<AlpacaState>()(
@@ -77,6 +87,8 @@ export const useAlpacaStore = create<AlpacaState>()(
       apiKey: "",
       secretKey: "",
       tradingMode: "paper",
+      dbSaving: false,
+      dbSaved: false,
       account: null,
       positions: [],
       orders: [],
@@ -211,10 +223,52 @@ export const useAlpacaStore = create<AlpacaState>()(
           get().fetchOrders(),
         ]);
       },
+
+      // ─── Firestore: save paper keys to users/{uid}/alpacaKeys
+      saveCredentialsToDb: async (uid) => {
+        const { apiKey, secretKey } = get();
+        set({ dbSaving: true, dbSaved: false, error: null });
+        try {
+          await setDoc(
+            doc(db, "users", uid, "private", "alpacaKeys"),
+            {
+              paperApiKey: apiKey,
+              paperSecretKey: secretKey,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+          set({ dbSaving: false, dbSaved: true });
+          // Auto-clear the "Saved!" indicator after 3s
+          setTimeout(() => get().clearDbSaved(), 3000);
+        } catch (e) {
+          set({ dbSaving: false, error: (e as Error).message });
+        }
+      },
+
+      // ─── Firestore: load paper keys on login
+      loadCredentialsFromDb: async (uid) => {
+        try {
+          const snap = await getDoc(doc(db, "users", uid, "private", "alpacaKeys"));
+          if (snap.exists()) {
+            const data = snap.data() as { paperApiKey?: string; paperSecretKey?: string };
+            if (data.paperApiKey && data.paperSecretKey) {
+              set({
+                apiKey: data.paperApiKey,
+                secretKey: data.paperSecretKey,
+              });
+            }
+          }
+        } catch {
+          // Non-fatal: user may not have saved keys yet
+        }
+      },
+
+      clearDbSaved: () => set({ dbSaved: false }),
     }),
     {
       name: "alpaca-credentials",
-      // Persist credentials and trading mode
+      // Keep localStorage as a local cache; Firestore is the source of truth when logged in
       partialize: (state) => ({
         apiKey: state.apiKey,
         secretKey: state.secretKey,
