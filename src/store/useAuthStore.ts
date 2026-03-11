@@ -5,6 +5,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useTradeStore } from "@/store/useTradeStore";
 
 interface AuthState {
   user:          User | null;
@@ -41,6 +42,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   initAuth: () => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       set({ user, loading: false });
+      if (user) {
+        useTradeStore.getState().loadTrades(user.uid);
+      } else {
+        useTradeStore.getState().unloadTrades();
+      }
     });
     return unsubscribe;
   },

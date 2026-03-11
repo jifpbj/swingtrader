@@ -172,6 +172,9 @@ export function runAIOptimize(
     autoTrade: false,
     tradingMode,
     orderQty: 1,
+    lotSizeMode: "dollars" as const,
+    lotSizeDollars: 1_000,
+    openEntry: null,
     lastExecutedSignalTime: null,
   };
 

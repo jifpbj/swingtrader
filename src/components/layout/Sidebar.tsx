@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, X, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Zap, BarChart2 } from "lucide-react";
 import { StrategyQueue } from "@/components/algo/StrategyQueue";
 import { DataModeToggle } from "@/components/ui/DataModeToggle";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -74,6 +75,24 @@ export function Sidebar() {
         {/* Strategy queue */}
         <div className={cn("flex-1 overflow-y-auto", collapsed ? "hidden" : "px-3 pt-3")}>
           <StrategyQueue />
+        </div>
+
+        {/* Portfolio link */}
+        <div className={cn(
+          "border-t border-white/5 pt-2 mt-2",
+          collapsed ? "flex items-center justify-center px-2" : "px-3",
+        )}>
+          <Link
+            href="/portfolio"
+            className={cn(
+              "flex items-center gap-2 rounded-xl text-[11px] font-semibold text-zinc-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all",
+              collapsed ? "p-2.5" : "px-3 py-2 w-full",
+            )}
+            title="Portfolio"
+          >
+            <BarChart2 className="size-4 shrink-0" />
+            {!collapsed && <span>Portfolio</span>}
+          </Link>
         </div>
 
         {/* Collapse toggle: desktop only */}

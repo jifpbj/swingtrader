@@ -33,6 +33,12 @@ export interface SerializedBacktestResult {
   periodKeys: string[];
 }
 
+export interface OpenEntry {
+  time: number;    // Unix seconds of the buy signal
+  price: number;   // price at which the buy was executed
+  qty: number;     // units bought
+}
+
 export interface SavedStrategy {
   id: string;                       // Firestore doc id
   name: string;                     // e.g. "BTC EMA Swing"
@@ -48,7 +54,10 @@ export interface SavedStrategy {
   initialInvestment: number;
   autoTrade: boolean;
   tradingMode: TradingMode;
-  orderQty: number;                 // units to trade per signal
+  orderQty: number;                 // units to trade per signal (computed from lotSizeDollars)
+  lotSizeMode: "dollars" | "units"; // how the user specified lot size
+  lotSizeDollars: number;           // capital to deploy per trade in USD
+  openEntry: OpenEntry | null;      // set on buy, cleared on sell (used for P/L tracking)
   lastExecutedSignalTime: number | null; // Unix seconds — dedup guard
   createdAt: number;                // Unix ms
   updatedAt: number;
