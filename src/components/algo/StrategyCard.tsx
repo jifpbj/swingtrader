@@ -411,7 +411,7 @@ export function StrategyCard({ strategy }: Props) {
           {toggling
             ? <Loader2 className="size-2.5 animate-spin" />
             : strategy.autoTrade
-              ? <><Bot className="size-2.5" /> On</>
+              ? <><Bot className="size-2.5" /> Server</>
               : <><PowerOff className="size-2.5" /> Off</>}
         </button>
       </div>

@@ -10,6 +10,7 @@ Or via the helper script:
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -23,6 +24,8 @@ from app.core.logging import configure_logging, get_logger
 from app.engine.analysis import AnalysisEngine
 from app.engine.predictive import StatisticalModel
 from app.models.schemas import HealthResponse
+from app.scheduler import auto_trade_loop
+from app.services.firestore_service import init_firebase
 from app.services.market_data import AlpacaMarketDataService
 
 logger = get_logger(__name__)
@@ -62,10 +65,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await pred_model.warm_up()
     app.state.predictive_model = pred_model
 
+    # ── Firebase Admin SDK (required for auto-trading scheduler) ──────────────
+    firebase_ok = init_firebase()
+    if firebase_ok:
+        logger.info("firebase_admin_ready")
+    else:
+        logger.warning(
+            "firebase_admin_unavailable",
+            hint=(
+                "Auto-trading scheduler will not run. "
+                "Set GOOGLE_APPLICATION_CREDENTIALS in backend/.env to enable it."
+            ),
+        )
+
+    # ── Auto-trade scheduler ──────────────────────────────────────────────────
+    scheduler_task: asyncio.Task | None = None
+    if firebase_ok:
+        scheduler_task = asyncio.create_task(auto_trade_loop(svc))
+        logger.info("auto_trade_scheduler_task_created")
+
     logger.info("app_ready")
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        await asyncio.gather(scheduler_task, return_exceptions=True)
+        logger.info("auto_trade_scheduler_stopped")
+
     if hasattr(svc, "close"):
         await svc.close()  # type: ignore[attr-defined]
 

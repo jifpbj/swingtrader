@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # ─── Polygon ──────────────────────────────────────────────────────────────
     polygon_api_key: str = Field(default="", alias="POLYGON_API_KEY")
 
+    # ─── Firebase / Firestore ─────────────────────────────────────────────────
+    google_application_credentials: str = Field(
+        default="service-account.json",
+        alias="GOOGLE_APPLICATION_CREDENTIALS",
+    )
+
     # ─── Stream ───────────────────────────────────────────────────────────────
     tick_interval_ms: int = 5000  # WebSocket tick poll interval
 
