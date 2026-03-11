@@ -50,3 +50,8 @@ backend/**/*.pyo
 backend/.env
 backend/.venv/
 backend/venv/
+
+# GCP service account credentials — never commit
+backend/service-account.json
+service-account.json
+*service-account*.json
