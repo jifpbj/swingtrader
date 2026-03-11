@@ -42,6 +42,25 @@ export function StrategyCard({ strategy }: Props) {
   const [deleting, setDeleting]           = useState(false);
   const [expanded, setExpanded]           = useState(false);
 
+  // Editable lot size
+  const [lotSizeDollars, setLotSizeDollars] = useState(strategy.lotSizeDollars ?? 1_000);
+  const [lotSizeMode, setLotSizeMode]       = useState<"dollars" | "units">(strategy.lotSizeMode ?? "dollars");
+  const [savingLot, setSavingLot]           = useState(false);
+
+  async function handleLotSave(mode: "dollars" | "units", amount: number) {
+    if (!user) return;
+    setSavingLot(true);
+    try {
+      await updateStrategy(strategy.id, {
+        lotSizeMode: mode,
+        lotSizeDollars: amount,
+        orderQty: mode === "units" ? amount : 1,
+      }, user.uid);
+    } finally {
+      setSavingLot(false);
+    }
+  }
+
   const isActive = activeStrategyId === strategy.id;
   const pctColor = strategy.bestStrategyReturn >= 0 ? "text-emerald-400" : "text-red-400";
   const indicatorStyle = INDICATOR_COLORS[strategy.indicator] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/20";
@@ -167,10 +186,49 @@ export function StrategyCard({ strategy }: Props) {
       {/* ── Ticker + timeframe row ──────────────────────────────────── */}
       <p className="text-[9px] text-zinc-600 font-mono">
         {strategy.ticker} · {strategy.timeframe.toUpperCase()} · {strategy.bestPeriodKey}
-        {strategy.lotSizeDollars
-          ? ` · $${strategy.lotSizeDollars.toLocaleString()} lot`
-          : ""}
       </p>
+
+      {/* ── Editable lot size ───────────────────────────────────────── */}
+      <div
+        className="flex items-center gap-1.5 text-[9px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="text-zinc-600 shrink-0">Lot</span>
+        <div className="flex items-center gap-0.5 glass rounded-md px-0.5 py-0.5 shrink-0">
+          <button
+            onClick={() => { setLotSizeMode("dollars"); handleLotSave("dollars", lotSizeDollars); }}
+            className={cn(
+              "px-1.5 py-0.5 rounded font-semibold transition-all",
+              lotSizeMode === "dollars" ? "bg-amber-500/20 text-amber-400" : "text-zinc-600 hover:text-zinc-400",
+            )}
+          >$</button>
+          <button
+            onClick={() => { setLotSizeMode("units"); handleLotSave("units", lotSizeDollars); }}
+            className={cn(
+              "px-1.5 py-0.5 rounded font-semibold transition-all",
+              lotSizeMode === "units" ? "bg-amber-500/20 text-amber-400" : "text-zinc-600 hover:text-zinc-400",
+            )}
+          >qty</button>
+        </div>
+        {lotSizeMode === "dollars" && <span className="text-zinc-600 font-mono">$</span>}
+        <input
+          type="number"
+          min={1}
+          step={lotSizeMode === "dollars" ? 100 : 1}
+          value={lotSizeDollars}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isFinite(v) && v > 0) setLotSizeDollars(v);
+          }}
+          onBlur={() => handleLotSave(lotSizeMode, lotSizeDollars)}
+          className={cn(
+            "w-16 rounded border border-white/10 bg-black/20 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-300 outline-none transition-colors",
+            "focus:border-amber-500/40",
+          )}
+        />
+        <span className="text-zinc-700 shrink-0">/trade</span>
+        {savingLot && <Loader2 className="size-2.5 animate-spin text-zinc-600 shrink-0" />}
+      </div>
 
       {/* ── Action buttons ──────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mt-0.5">

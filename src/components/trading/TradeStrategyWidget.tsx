@@ -34,8 +34,6 @@ export function TradeStrategyWidget() {
 
   const [submitting, setSubmitting] = useState(false);
   const [wittyPhrase, setWittyPhrase] = useState<string | null>(null);
-  const [lotSizeDollars, setLotSizeDollars] = useState(1_000);
-  const [lotSizeMode, setLotSizeMode] = useState<"dollars" | "units">("dollars");
 
   const WITTY_PHRASES = [
     "Consulting the crystal ball…",
@@ -99,9 +97,9 @@ export function TradeStrategyWidget() {
           initialInvestment: 100_000,
           autoTrade: true,
           tradingMode,
-          orderQty: lotSizeMode === "units" ? lotSizeDollars : 1,
-          lotSizeMode,
-          lotSizeDollars,
+          orderQty: 1,
+          lotSizeMode: "dollars" as const,
+          lotSizeDollars: 1_000,
           openEntry: null,
           lastExecutedSignalTime: null,
           createdAt: now,
@@ -155,42 +153,6 @@ export function TradeStrategyWidget() {
         }
         {wittyPhrase ?? (analyzing ? "Analyzing\u2026" : "AI Analyze")}
       </button>
-
-      {/* Lot size */}
-      <div className="flex items-center gap-2 text-[10px]">
-        <span className="text-zinc-500 font-medium shrink-0">Lot size</span>
-        <div className="flex items-center gap-0.5 glass rounded-lg px-0.5 py-0.5 shrink-0">
-          <button
-            onClick={() => setLotSizeMode("dollars")}
-            className={cn(
-              "px-2 py-0.5 rounded-md font-semibold transition-all",
-              lotSizeMode === "dollars" ? "bg-amber-500/20 text-amber-400" : "text-zinc-500 hover:text-zinc-300",
-            )}
-          >$</button>
-          <button
-            onClick={() => setLotSizeMode("units")}
-            className={cn(
-              "px-2 py-0.5 rounded-md font-semibold transition-all",
-              lotSizeMode === "units" ? "bg-amber-500/20 text-amber-400" : "text-zinc-500 hover:text-zinc-300",
-            )}
-          >qty</button>
-        </div>
-        <div className="flex items-center gap-1 flex-1">
-          {lotSizeMode === "dollars" && <span className="text-zinc-500 font-mono">$</span>}
-          <input
-            type="number"
-            min={1}
-            step={lotSizeMode === "dollars" ? 100 : 1}
-            value={lotSizeDollars}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v) && v > 0) setLotSizeDollars(v);
-            }}
-            className="flex-1 min-w-0 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
-          />
-        </div>
-        <span className="text-zinc-600 shrink-0">/ trade</span>
-      </div>
 
       {/* Trade CTA — always amber "Trade this Strategy" */}
       <button

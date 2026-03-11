@@ -49,8 +49,6 @@ export function BacktestPanel() {
   const [initialInvestment, setInitialInvestment] = useState<number>(100_000);
   const [showModal, setShowModal]           = useState(false);
   const [manualSaving, setManualSaving]     = useState(false);
-  const [lotSizeDollars, setLotSizeDollars] = useState<number>(1_000);
-  const [lotSizeMode, setLotSizeMode]       = useState<"dollars" | "units">("dollars");
 
   const currencyFmt = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -211,9 +209,9 @@ export function BacktestPanel() {
           initialInvestment,
           autoTrade: false,
           tradingMode,
-          orderQty: lotSizeMode === "units" ? lotSizeDollars : 1,
-          lotSizeMode,
-          lotSizeDollars: lotSizeMode === "dollars" ? lotSizeDollars : lotSizeDollars,
+          orderQty: 1,
+          lotSizeMode: "dollars" as const,
+          lotSizeDollars: 1_000,
           openEntry: null,
           lastExecutedSignalTime: null,
           createdAt: now,
@@ -396,41 +394,6 @@ export function BacktestPanel() {
         ) : (
           <div className="text-[11px] text-zinc-600 text-center py-4">Computing…</div>
         )}
-
-        {/* ── Lot size row ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 pt-1 border-t border-white/5 text-[10px]">
-          <span className="text-zinc-500 font-medium shrink-0">Lot size</span>
-          <div className="flex items-center gap-1 glass rounded-lg px-0.5 py-0.5 shrink-0">
-            <button
-              onClick={() => setLotSizeMode("dollars")}
-              className={cn(
-                "px-2 py-0.5 rounded-md font-semibold transition-all",
-                lotSizeMode === "dollars" ? "bg-amber-500/20 text-amber-400" : "text-zinc-500 hover:text-zinc-300",
-              )}
-            >$</button>
-            <button
-              onClick={() => setLotSizeMode("units")}
-              className={cn(
-                "px-2 py-0.5 rounded-md font-semibold transition-all",
-                lotSizeMode === "units" ? "bg-amber-500/20 text-amber-400" : "text-zinc-500 hover:text-zinc-300",
-              )}
-            >qty</button>
-          </div>
-          <div className="flex items-center gap-1 flex-1">
-            {lotSizeMode === "dollars" && <span className="text-zinc-500 font-mono">$</span>}
-            <input
-              type="number"
-              min={1}
-              step={lotSizeMode === "dollars" ? 100 : 1}
-              value={lotSizeDollars}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v) && v > 0) setLotSizeDollars(v);
-              }}
-              className="flex-1 min-w-0 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
-            />
-          </div>
-        </div>
 
         {/* ── Algo Trading action row ──────────────────────────────── */}
         <div className="flex items-center gap-2 border-t border-white/5 pt-1">
