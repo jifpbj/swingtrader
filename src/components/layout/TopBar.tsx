@@ -15,6 +15,7 @@ import {
   User,
   Menu,
 } from "lucide-react";
+import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { DataModeToggle } from "@/components/ui/DataModeToggle";
 
@@ -60,6 +61,14 @@ export function TopBar() {
             Predictive<span className="text-emerald-400">Alpha</span>
           </span>
         </div>
+
+        {/* Pricing nav link — desktop only */}
+        <Link
+          href="/pricing"
+          className="hidden md:block text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium"
+        >
+          Pricing
+        </Link>
 
         {/* Data mode toggle — desktop only; mobile gets it in the sidebar */}
         <div className="hidden md:flex">
