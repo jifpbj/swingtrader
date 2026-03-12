@@ -45,7 +45,7 @@ export default function PortfolioPage() {
       <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
           <p className="text-zinc-400 mb-4">Please sign in to view your portfolio.</p>
-          <Link href="/" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
+          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
             Go to Dashboard
           </Link>
         </div>
@@ -58,7 +58,7 @@ export default function PortfolioPage() {
       {/* ── Top bar ──────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 glass border-b border-white/5 px-4 py-3 flex items-center gap-3">
         <Link
-          href="/"
+          href="/dashboard"
           className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all"
           title="Back to Dashboard"
         >

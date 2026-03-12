@@ -64,7 +64,7 @@ export function TopBar() {
 
         {/* Pricing nav link — desktop only */}
         <Link
-          href="/pricing"
+          href="/#pricing"
           className="hidden md:block text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium"
         >
           Pricing
