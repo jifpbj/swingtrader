@@ -16,7 +16,9 @@ import { cn } from "@/lib/utils";
 import { toBackendTf, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
 import { generateMockCandles } from "@/hooks/useMockData";
 import { StrategyResultModal } from "@/components/algo/StrategyResultModal";
-import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
+import {
+  ComposedChart, Area, Line, ResponsiveContainer, Tooltip, ReferenceLine, YAxis,
+} from "recharts";
 
 // Period keys are determined dynamically by the result; this is just a fallback
 const LONG_TF_PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
@@ -266,6 +268,42 @@ export function BacktestPanel() {
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
   ]);
 
+  // ─── Y-axis domain: ±10% padding around the data range ─────────────────────
+  const yDomain = useMemo<[number, number]>(() => {
+    if (!equityCurve.length) return [90, 110];
+    let lo = Infinity, hi = -Infinity;
+    for (const p of equityCurve) {
+      lo = Math.min(lo, p.strategy, p.hold);
+      hi = Math.max(hi, p.strategy, p.hold);
+    }
+    const pad = Math.max((hi - lo) * 0.1, 1);
+    return [lo - pad, hi + pad];
+  }, [equityCurve]);
+
+  // ─── Stacked fill data: offset values relative to yMin ──────────────────────
+  // Stacking 3 area bands gives us:
+  //   grayBand  = from 0 → min(strategy, hold)       always grey
+  //   redBand   = from min(s,h) → hold                red when strategy < hold
+  //   greenBand = from hold → strategy                green when strategy > hold
+  const chartData = useMemo(() => {
+    const yMin = yDomain[0];
+    return equityCurve.map((p) => {
+      const s = p.strategy - yMin;
+      const h = p.hold     - yMin;
+      return {
+        ...p,                              // keep original strategy/hold for tooltip
+        adjStrategy: s,
+        adjHold:     h,
+        grayBand:    Math.min(s, h),
+        redBand:     Math.max(0, h - s),  // hold above strategy → red
+        greenBand:   Math.max(0, s - h),  // strategy above hold → green
+      };
+    });
+  }, [equityCurve, yDomain]);
+
+  // Reference line at 100 (start value) shifted to the adjusted domain
+  const refY100 = 100 - yDomain[0];
+
   return (
     <>
       <div className="glass rounded-2xl px-4 py-3 flex flex-col gap-3 shrink-0">
@@ -361,10 +399,44 @@ export function BacktestPanel() {
 
               {/* Chart */}
               {equityCurve.length >= 2 ? (
-                <div className="h-[88px] w-full">
-                  <ResponsiveContainer width="100%" height={88} minHeight={88} debounce={50}>
-                    <LineChart data={equityCurve} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
-                      <ReferenceLine y={100} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
+                <div className="h-[120px] w-full">
+                  <ResponsiveContainer width="100%" height={120} minHeight={120} debounce={50}>
+                    <ComposedChart data={chartData} margin={{ top: 6, right: 2, bottom: 2, left: 2 }}>
+                      {/* Y-axis domain is [0, yMax-yMin] matching the offset data */}
+                      <YAxis domain={[0, yDomain[1] - yDomain[0]]} hide />
+
+                      {/* ── Stacked fill areas ───────────────────────────── */}
+                      {/* Layer 1: grey — always fills from 0 up to min(strategy,hold) */}
+                      <Area
+                        type="monotone"
+                        dataKey="grayBand"
+                        stackId="fills"
+                        fill="rgba(113,113,122,0.22)"
+                        stroke="none"
+                        isAnimationActive={false}
+                      />
+                      {/* Layer 2: red — from min(s,h) up to hold (strategy below hold) */}
+                      <Area
+                        type="monotone"
+                        dataKey="redBand"
+                        stackId="fills"
+                        fill="rgba(239,68,68,0.38)"
+                        stroke="none"
+                        isAnimationActive={false}
+                      />
+                      {/* Layer 3: green — from hold up to strategy (strategy above hold) */}
+                      <Area
+                        type="monotone"
+                        dataKey="greenBand"
+                        stackId="fills"
+                        fill="rgba(52,211,153,0.38)"
+                        stroke="none"
+                        isAnimationActive={false}
+                      />
+
+                      {/* Start-of-period reference line */}
+                      <ReferenceLine y={refY100} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+
                       <Tooltip
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         content={({ active, payload }: any) => {
@@ -390,28 +462,32 @@ export function BacktestPanel() {
                         }}
                         isAnimationActive={false}
                       />
+
+                      {/* ── Line overlays (drawn on top of fills) ────────── */}
+                      {/* Strategy — solid emerald */}
                       <Line
                         type="monotone"
-                        dataKey="strategy"
+                        dataKey="adjStrategy"
                         stroke="#34d399"
-                        strokeWidth={1.5}
+                        strokeWidth={2}
                         dot={false}
                         isAnimationActive={false}
                       />
+                      {/* Hold — dashed zinc */}
                       <Line
                         type="monotone"
-                        dataKey="hold"
-                        stroke="rgb(113 113 122)"
-                        strokeWidth={1}
+                        dataKey="adjHold"
+                        stroke="#71717a"
+                        strokeWidth={1.25}
                         strokeDasharray="4 3"
                         dot={false}
                         isAnimationActive={false}
                       />
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[88px] flex items-center justify-center text-[10px] text-zinc-600">
+                <div className="h-[120px] flex items-center justify-center text-[10px] text-zinc-600">
                   Insufficient data for {chartPeriod}
                 </div>
               )}
@@ -429,48 +505,42 @@ export function BacktestPanel() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-white/5">
-              <table className={cn("w-full text-[11px]", viewMode === "pct" ? "min-w-[240px]" : "min-w-[360px]")}>
-                <thead>
-                  <tr className="border-b border-white/5">
-                    <th className="sticky left-0 z-10 bg-card text-left px-2 py-1 text-zinc-500 font-medium border-r border-white/5">
-                      Period
-                    </th>
-                    <th className="text-right px-2 py-1 text-zinc-500 font-medium">Strategy</th>
-                    <th className="text-right px-2 py-1 text-zinc-500 font-medium">Hold</th>
-                    <th className="text-right px-2 py-1 text-zinc-500 font-medium">Trades</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {periodKeys.map((key) => {
-                    const p = result.periods[key];
-                    const insufficient = !p || !p.sufficientData;
-                    const strategyDollar = initialInvestment * (p?.strategyReturn ?? 0);
-                    const holdDollar = initialInvestment * (p?.holdReturn ?? 0);
-                    const beatsBenchmark = (p?.strategyReturn ?? 0) > (p?.holdReturn ?? 0);
-                    return (
-                      <tr key={key} className="border-b border-white/3 hover:bg-white/2">
+            {(() => {
+              const p            = result.periods[chartPeriod];
+              const insufficient = !p || !p.sufficientData;
+              const stratDollar  = initialInvestment * (p?.strategyReturn ?? 0);
+              const holdDollar   = initialInvestment * (p?.holdReturn     ?? 0);
+              const beats        = (p?.strategyReturn ?? 0) > (p?.holdReturn ?? 0);
+              return (
+                <div className="rounded-lg border border-white/5 overflow-hidden">
+                  <table className={cn("w-full text-[11px]", viewMode === "pct" ? "min-w-[240px]" : "min-w-[360px]")}>
+                    <thead>
+                      <tr className="border-b border-white/5">
+                        <th className="sticky left-0 z-10 bg-card text-left px-2 py-1 text-zinc-500 font-medium border-r border-white/5">Period</th>
+                        <th className="text-right px-2 py-1 text-zinc-500 font-medium">Strategy</th>
+                        <th className="text-right px-2 py-1 text-zinc-500 font-medium">Hold</th>
+                        <th className="text-right px-2 py-1 text-zinc-500 font-medium">Trades</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
                         <td className="sticky left-0 z-10 bg-card px-2 py-1.5 font-mono text-zinc-400 border-r border-white/5">
-                          {key}
+                          {chartPeriod}
                         </td>
-                        <td
-                          className={cn(
-                            "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
-                            insufficient ? "text-zinc-600" : beatsBenchmark ? "text-emerald-400" : "text-red-400",
-                          )}
-                        >
+                        <td className={cn(
+                          "px-2 py-1.5 text-right font-mono tabular-nums font-semibold",
+                          insufficient ? "text-zinc-600" : beats ? "text-emerald-400" : "text-red-400",
+                        )}>
                           {insufficient ? "—" : viewMode === "pct"
                             ? formatPercent((p?.strategyReturn ?? 0) * 100)
-                            : currencyFmt.format(strategyDollar)}
+                            : currencyFmt.format(stratDollar)}
                         </td>
-                        <td
-                          className={cn(
-                            "px-2 py-1.5 text-right font-mono tabular-nums",
-                            insufficient ? "text-zinc-600" : viewMode === "val"
-                              ? holdDollar >= 0 ? "text-emerald-300" : "text-red-300"
-                              : (p?.holdReturn ?? 0) >= 0 ? "text-foreground/70" : "text-muted-foreground",
-                          )}
-                        >
+                        <td className={cn(
+                          "px-2 py-1.5 text-right font-mono tabular-nums",
+                          insufficient ? "text-zinc-600" : viewMode === "val"
+                            ? holdDollar >= 0 ? "text-emerald-300" : "text-red-300"
+                            : (p?.holdReturn ?? 0) >= 0 ? "text-foreground/70" : "text-muted-foreground",
+                        )}>
                           {insufficient ? "—" : viewMode === "pct"
                             ? formatPercent((p?.holdReturn ?? 0) * 100)
                             : currencyFmt.format(holdDollar)}
@@ -479,40 +549,39 @@ export function BacktestPanel() {
                           {insufficient ? "—" : p!.tradeCount}
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
 
-            {/* Footer stats */}
-            {lastPeriodResult && lastPeriodResult.sufficientData && (
+            {/* Footer stats — scoped to selected period */}
+            {(() => {
+              const p = result.periods[chartPeriod];
+              if (!p?.sufficientData) return null;
+              return (
               <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
                 <span>
-                  Win rate ({lastPeriodKey}):{" "}
+                  Win rate ({chartPeriod}):{" "}
                   <span className="text-zinc-300 font-mono">
-                    {lastPeriodResult.tradeCount === 0
+                    {p.tradeCount === 0
                       ? "—"
-                      : `${(lastPeriodResult.winRate * 100).toFixed(0)}%`}
+                      : `${(p.winRate * 100).toFixed(0)}%`}
                   </span>
                 </span>
                 <span>
                   Max DD:{" "}
-                  <span
-                    className={cn(
-                      "font-mono",
-                      lastPeriodResult.maxDrawdown < -0.05 ? "text-red-400" : "text-zinc-300",
-                    )}
-                  >
-                    {lastPeriodResult.maxDrawdown === 0
+                  <span className={cn("font-mono", p.maxDrawdown < -0.05 ? "text-red-400" : "text-zinc-300")}>
+                    {p.maxDrawdown === 0
                       ? "—"
                       : viewMode === "val"
-                        ? currencyFmt.format(initialInvestment * lastPeriodResult.maxDrawdown)
-                        : formatPercent(lastPeriodResult.maxDrawdown * 100)}
+                        ? currencyFmt.format(initialInvestment * p.maxDrawdown)
+                        : formatPercent(p.maxDrawdown * 100)}
                   </span>
                 </span>
               </div>
-            )}
+              );
+            })()}
 
           </>
         ) : (
