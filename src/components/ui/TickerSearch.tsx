@@ -32,6 +32,22 @@ const TYPE_COLOR: Record<AssetResult["asset_class"], string> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// Fallback catalog shown when backend is unreachable
+const POPULAR_FALLBACK: AssetResult[] = [
+  { symbol: "AAPL",    name: "Apple Inc.",                  asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "NVDA",    name: "NVIDIA Corp.",                asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "TSLA",    name: "Tesla Inc.",                  asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "MSFT",    name: "Microsoft Corp.",             asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "AMZN",    name: "Amazon.com Inc.",             asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "GOOGL",   name: "Alphabet Inc.",               asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "META",    name: "Meta Platforms Inc.",         asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "SPY",     name: "SPDR S&P 500 ETF",           asset_class: "equity", exchange: "NYSE"   },
+  { symbol: "QQQ",     name: "Invesco QQQ Trust",           asset_class: "equity", exchange: "NASDAQ" },
+  { symbol: "BTC/USD", name: "Bitcoin",                     asset_class: "crypto", exchange: "CRYPTO" },
+  { symbol: "ETH/USD", name: "Ethereum",                    asset_class: "crypto", exchange: "CRYPTO" },
+  { symbol: "SOL/USD", name: "Solana",                      asset_class: "crypto", exchange: "CRYPTO" },
+];
+
 export function TickerSearch() {
   const open        = useUIStore((s) => s.searchOpen);
   const setOpen     = useUIStore((s) => s.setSearchOpen);
@@ -52,12 +68,16 @@ export function TickerSearch() {
     setLoading(true);
     const ctrl = new AbortController();
     fetch(`${API_URL}/api/v1/market/popular`, { signal: ctrl.signal })
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: AssetResult[]) => {
-        popularRef.current = data;
-        if (!query.trim()) setResults(data);
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: AssetResult[] | null) => {
+        const list = data && data.length > 0 ? data : POPULAR_FALLBACK;
+        popularRef.current = list;
+        if (!query.trim()) setResults(list);
       })
-      .catch(() => {})
+      .catch(() => {
+        popularRef.current = POPULAR_FALLBACK;
+        if (!query.trim()) setResults(POPULAR_FALLBACK);
+      })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,10 +109,23 @@ export function TickerSearch() {
         );
         if (res.ok) {
           const data: AssetResult[] = await res.json();
-          setResults(data);
+          if (data.length > 0) {
+            setResults(data);
+          } else {
+            // Backend returned empty — filter fallback catalog locally
+            const q = query.trim().toUpperCase();
+            setResults(POPULAR_FALLBACK.filter(a => a.symbol.includes(q) || a.name.toUpperCase().includes(q)));
+          }
+        } else {
+          // Non-OK — filter fallback locally
+          const q = query.trim().toUpperCase();
+          setResults(POPULAR_FALLBACK.filter(a => a.symbol.includes(q) || a.name.toUpperCase().includes(q)));
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
+        // Network error — filter fallback locally
+        const q = query.trim().toUpperCase();
+        setResults(POPULAR_FALLBACK.filter(a => a.symbol.includes(q) || a.name.toUpperCase().includes(q)));
       } finally {
         setLoading(false);
       }

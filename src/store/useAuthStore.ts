@@ -7,6 +7,7 @@ import {
 import { auth } from "@/lib/firebase";
 import { useTradeStore } from "@/store/useTradeStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
+import { useBrokerStore } from "@/store/useBrokerStore";
 
 interface AuthState {
   user:          User | null;
@@ -46,6 +47,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (user) {
         useTradeStore.getState().loadTrades(user.uid);
         void useAlpacaStore.getState().loadCredentialsFromDb(user.uid);
+        void useBrokerStore.getState().loadFromFirestore(user.uid);
       } else {
         useTradeStore.getState().unloadTrades();
       }

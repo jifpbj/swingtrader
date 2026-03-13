@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useUIStore } from "@/store/useUIStore";
 import { useStrategyStore } from "@/store/useStrategyStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
-import { computeStrategyBacktests } from "@/lib/indicators";
+import { computeStrategyBacktests, computeStrategyEquityCurve } from "@/lib/indicators";
+import type { EquityCurvePoint } from "@/lib/indicators";
 import { runAIOptimize } from "@/lib/strategyOptimizer";
 import type { Candle, BacktestResult, BacktestPeriodKey } from "@/types/market";
 import type { AlgoAnalysisResult } from "@/types/strategy";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { toBackendTf, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
 import { generateMockCandles } from "@/hooks/useMockData";
 import { StrategyResultModal } from "@/components/algo/StrategyResultModal";
+import { LineChart, Line, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts";
 
 // Period keys are determined dynamically by the result; this is just a fallback
 const LONG_TF_PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
@@ -49,6 +51,7 @@ export function BacktestPanel() {
   const [initialInvestment, setInitialInvestment] = useState<number>(100_000);
   const [showModal, setShowModal]           = useState(false);
   const [manualSaving, setManualSaving]     = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<BacktestPeriodKey | null>(null);
 
   const currencyFmt = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -58,10 +61,8 @@ export function BacktestPanel() {
 
   // ─── Fetch historical bars (or generate mock in demo/offline) ─────────────
   useEffect(() => {
-    const BPD: Record<string, number> = {
-      "1m": 1440, "5m": 288, "15m": 96, "1h": 24, "4h": 6, "1d": 1,
-    };
-    const count = Math.min(Math.ceil(252 * (BPD[timeframe] ?? 96)) + 50, 25000);
+    // Cap at 1000 bars — sufficient for all backtest periods and avoids API timeouts
+    const count = 1000;
     const barSecs = TIMEFRAME_SECONDS[timeframe] ?? 900;
 
     // Derive a deterministic seed from ticker chars (same algo as useMockData)
@@ -234,6 +235,37 @@ export function BacktestPanel() {
   const lastPeriodKey = periodKeys[periodKeys.length - 1];
   const lastPeriodResult = result?.periods[lastPeriodKey];
 
+  // Default selected period to the last (longest) available period
+  const chartPeriod: BacktestPeriodKey = selectedPeriod ?? lastPeriodKey;
+
+  const equityCurve = useMemo<EquityCurvePoint[]>(() => {
+    if (!candles.length || !result) return [];
+    const p = result.periods[chartPeriod];
+    if (!p?.sufficientData) return [];
+    return computeStrategyEquityCurve(
+      candles,
+      (activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab) as
+        "EMA" | "BB" | "RSI" | "MACD" | "TD9",
+      {
+        emaPeriod,
+        bbPeriod,
+        bbStdDev,
+        rsiPeriod,
+        rsiOverbought,
+        rsiOversold,
+        macdFast: macdFastPeriod,
+        macdSlow: macdSlowPeriod,
+        macdSignal: macdSignalPeriod,
+      },
+      timeframe,
+      chartPeriod,
+    );
+  }, [
+    candles, result, chartPeriod, activeIndicatorTab, timeframe,
+    emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
+    macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
+  ]);
+
   return (
     <>
       <div className="glass rounded-2xl px-4 py-3 flex flex-col gap-3 shrink-0">
@@ -306,6 +338,97 @@ export function BacktestPanel() {
         {/* ── Results table ────────────────────────────────────────── */}
         {result ? (
           <>
+            {/* ── Equity curve chart ──────────────────────────────── */}
+            <div className="flex flex-col gap-1.5">
+              {/* Period picker */}
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] text-zinc-500 font-medium">Performance curve</span>
+                <select
+                  value={chartPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value as BacktestPeriodKey)}
+                  className="rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 outline-none focus:border-emerald-500/40 cursor-pointer"
+                >
+                  {periodKeys.map((k) => {
+                    const p = result?.periods[k];
+                    return (
+                      <option key={k} value={k} disabled={!p?.sufficientData}>
+                        {k}{!p?.sufficientData ? " (n/a)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Chart */}
+              {equityCurve.length >= 2 ? (
+                <div className="h-[88px] w-full">
+                  <ResponsiveContainer width="100%" height={88} minHeight={88} debounce={50}>
+                    <LineChart data={equityCurve} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
+                      <ReferenceLine y={100} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
+                      <Tooltip
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        content={({ active, payload }: any) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0]?.payload as EquityCurvePoint;
+                          const stratDelta = d.strategy - 100;
+                          const holdDelta  = d.hold - 100;
+                          const date = new Date(d.time * 1000);
+                          const label = ["1m","5m","15m"].includes(timeframe)
+                            ? date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                            : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+                          return (
+                            <div style={{ background: "rgba(9,9,11,0.92)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px", fontSize: 10, lineHeight: 1.6 }}>
+                              <div style={{ color: "#71717a", marginBottom: 2 }}>{label}</div>
+                              <div style={{ color: stratDelta >= 0 ? "#34d399" : "rgb(248 113 113)" }}>
+                                Strat: {stratDelta >= 0 ? "+" : ""}{stratDelta.toFixed(1)}%
+                              </div>
+                              <div style={{ color: holdDelta >= 0 ? "#e4e4e7" : "#71717a" }}>
+                                Hold: {holdDelta >= 0 ? "+" : ""}{holdDelta.toFixed(1)}%
+                              </div>
+                            </div>
+                          );
+                        }}
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="strategy"
+                        stroke="#34d399"
+                        strokeWidth={1.5}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="hold"
+                        stroke="rgb(113 113 122)"
+                        strokeWidth={1}
+                        strokeDasharray="4 3"
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[88px] flex items-center justify-center text-[10px] text-zinc-600">
+                  Insufficient data for {chartPeriod}
+                </div>
+              )}
+
+              {/* Legend */}
+              <div className="flex items-center gap-3 px-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="w-4 h-px bg-emerald-400 inline-block" />
+                  <span className="text-[9px] text-zinc-500">Strategy</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-4 h-px bg-zinc-500 inline-block border-dashed border-t border-zinc-500" style={{ background: "none", borderBottom: "none", borderLeft: "none", borderRight: "none" }} />
+                  <span className="text-[9px] text-zinc-500">Hold</span>
+                </div>
+              </div>
+            </div>
+
             <div className="overflow-x-auto rounded-lg border border-white/5">
               <table className={cn("w-full text-[11px]", viewMode === "pct" ? "min-w-[240px]" : "min-w-[360px]")}>
                 <thead>
@@ -390,6 +513,7 @@ export function BacktestPanel() {
                 </span>
               </div>
             )}
+
           </>
         ) : (
           <div className="text-[11px] text-zinc-600 text-center py-4">Computing…</div>

@@ -181,7 +181,7 @@ export const useUIStore = create<UIState>()(
     macdSignalPeriod: 9,
     setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
 
-    demoMode: true,
+    demoMode: false,
     setDemoMode: (demoMode) => set({ demoMode }),
 
   }))

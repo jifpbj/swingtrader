@@ -20,11 +20,18 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins_env: str = Field(default="", alias="CORS_ORIGINS")
 
-    # ─── Alpaca ───────────────────────────────────────────────────────────────
+    # ─── Alpaca Trading API (per-user paper/live keys) ────────────────────────
     alpaca_api_key: str = Field(default="", alias="ALPACA_API_KEY")
     alpaca_secret_key: str = Field(default="", alias="ALPACA_SECRET_KEY")
     alpaca_base_url: str = "https://paper-api.alpaca.markets"
     alpaca_data_url: str = "https://data.alpaca.markets"
+
+    # ─── Alpaca Broker API (server-side, manages end-user accounts) ───────────
+    alpaca_broker_key: str = Field(default="", alias="ALPACA_BROKER_KEY")
+    alpaca_broker_secret: str = Field(default="", alias="ALPACA_BROKER_SECRET")
+    alpaca_broker_url: str = "https://broker-api.sandbox.alpaca.markets"
+    alpaca_broker_data_url: str = "https://data.sandbox.alpaca.markets"
+    use_broker_data: bool = Field(default=False, alias="USE_BROKER_DATA")
 
     # ─── Polygon ──────────────────────────────────────────────────────────────
     polygon_api_key: str = Field(default="", alias="POLYGON_API_KEY")

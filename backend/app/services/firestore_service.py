@@ -193,6 +193,73 @@ def invalidate_key_cache(uid: str) -> None:
     _key_cache.pop(uid, None)
 
 
+# ─── Broker account ───────────────────────────────────────────────────────────
+
+async def save_broker_account(uid: str, alpaca_account_id: str, status: str) -> None:
+    """
+    Persist the Alpaca Broker account ID and status under users/{uid}/broker/account.
+    Called after POST /v1/accounts succeeds.
+    """
+    db = _db()
+    try:
+        ref = db.document(f"users/{uid}/broker/account")
+        now_ms = int(time.time() * 1000)
+        await ref.set(
+            {
+                "alpacaAccountId": alpaca_account_id,
+                "status": status,
+                "updatedAt": now_ms,
+                "createdAt": now_ms,
+            },
+            merge=True,
+        )
+        logger.info("broker_account_saved", uid=uid, account_id=alpaca_account_id, status=status)
+    except Exception as exc:
+        logger.error("save_broker_account_failed", uid=uid, error=str(exc))
+        raise
+
+
+async def update_broker_account_status(uid: str, status: str) -> None:
+    """Update just the status field (called when polling for KYC completion)."""
+    db = _db()
+    try:
+        ref = db.document(f"users/{uid}/broker/account")
+        await ref.set({"status": status, "updatedAt": int(time.time() * 1000)}, merge=True)
+    except Exception as exc:
+        logger.error("update_broker_status_failed", uid=uid, error=str(exc))
+        raise
+
+
+_broker_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_BROKER_CACHE_TTL = 10  # seconds — short TTL since status changes during KYC
+
+
+async def get_broker_account(uid: str, *, bypass_cache: bool = False) -> dict[str, Any]:
+    """
+    Return {"alpacaAccountId": ..., "status": ..., ...} for the user.
+    Returns an empty dict if no broker account has been created yet.
+    """
+    now = time.monotonic()
+    if not bypass_cache and uid in _broker_cache:
+        ts, cached = _broker_cache[uid]
+        if now - ts < _BROKER_CACHE_TTL:
+            return cached
+
+    db = _db()
+    try:
+        snap = await db.document(f"users/{uid}/broker/account").get()
+        data = snap.to_dict() if snap.exists else {}
+        _broker_cache[uid] = (now, data)
+        return data
+    except Exception as exc:
+        logger.warning("get_broker_account_failed", uid=uid, error=str(exc))
+        return {}
+
+
+def invalidate_broker_cache(uid: str) -> None:
+    _broker_cache.pop(uid, None)
+
+
 # ─── Strategy mutations ───────────────────────────────────────────────────────
 
 async def update_strategy(uid: str, strategy_id: str, patch: dict[str, Any]) -> None:

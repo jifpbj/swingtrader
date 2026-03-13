@@ -504,6 +504,109 @@ export function computeStrategyBacktests(
   return { ticker, strategyLabel, periods, periodKeys: LONG_TF_KEYS };
 }
 
+// ─── Equity curve ─────────────────────────────────────────────────────────────
+
+export interface EquityCurvePoint {
+  time: number;     // unix timestamp
+  strategy: number; // portfolio value normalised to 100 at period start
+  hold: number;     // buy-and-hold normalised to 100 at period start
+}
+
+function downsample<T>(arr: T[], max: number): T[] {
+  if (arr.length <= max) return arr;
+  const step = Math.ceil(arr.length / max);
+  const out: T[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    if (i % step === 0 || i === arr.length - 1) out.push(arr[i]);
+  }
+  return out;
+}
+
+function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[]): EquityCurvePoint[] {
+  if (slice.length < 2) return [];
+  const startPrice = slice[0].close;
+  const orderedSignals = [...signals].sort((a, b) => a.time - b.time);
+  let signalIdx = 0;
+  let inTrade = false;
+  let entryPrice = 0;
+  let cash = 1;
+  let units = 0;
+  const out: EquityCurvePoint[] = [];
+  for (const candle of slice) {
+    while (signalIdx < orderedSignals.length && orderedSignals[signalIdx].time <= candle.time) {
+      const sig = orderedSignals[signalIdx];
+      if (sig.direction === "entry" && !inTrade) {
+        inTrade = true;
+        entryPrice = sig.price;
+        units = cash / sig.price;
+        cash = 0;
+      } else if (sig.direction === "sell" && inTrade) {
+        cash = units * sig.price;
+        units = 0;
+        inTrade = false;
+      }
+      signalIdx++;
+    }
+    const equity = inTrade ? units * candle.close : cash;
+    out.push({ time: candle.time, strategy: equity * 100, hold: (candle.close / startPrice) * 100 });
+  }
+  return out;
+}
+
+/**
+ * Compute strategy vs buy-and-hold equity curves for a single period.
+ * Returns up to 200 downsampled points; both lines start at 100.
+ */
+export function computeStrategyEquityCurve(
+  candles: Candle[],
+  strategy: BacktestStrategy,
+  params: {
+    emaPeriod: number; bbPeriod: number; bbStdDev: number;
+    rsiPeriod: number; rsiOverbought: number; rsiOversold: number;
+    macdFast: number; macdSlow: number; macdSignal: number;
+  },
+  timeframe: string,
+  periodKey: BacktestPeriodKey,
+): EquityCurvePoint[] {
+  const n = candles.length;
+  if (n < 2) return [];
+  const lastTs = candles[n - 1].time;
+
+  const buildSignals = (slice: Candle[]): CrossoverSignal[] => {
+    const closes = slice.map((c) => c.close);
+    switch (strategy) {
+      case "EMA": return detectCrossovers(slice, computeEMA(closes, params.emaPeriod));
+      case "RSI": return detectRSICrossovers(slice, computeRSI(closes, params.rsiPeriod), params.rsiOverbought, params.rsiOversold);
+      case "MACD": return detectMACDCrossovers(slice, computeMACDValues(closes, params.macdFast, params.macdSlow, params.macdSignal));
+      case "TD9":  return detectTDSequentialSetupSignals(slice, 9, 4);
+      case "BB":   return detectBollingerCrossovers(slice, params.bbPeriod, params.bbStdDev);
+    }
+  };
+
+  let fromTs: number;
+  if (SHORT_TIMEFRAMES.has(timeframe)) {
+    const windowSecs = SHORT_TF_SECONDS[periodKey];
+    if (!windowSecs) return [];
+    fromTs = lastTs - windowSecs;
+  } else {
+    const bpd = BARS_PER_DAY[timeframe] ?? 1;
+    const endYear = new Date(lastTs * 1000).getUTCFullYear();
+    if (periodKey === "YTD") {
+      const ytdTs = Math.floor(Date.UTC(endYear, 0, 1) / 1000);
+      const ytdIdx = candles.findIndex((c) => c.time >= ytdTs);
+      fromTs = ytdIdx >= 0 ? candles[ytdIdx].time : candles[0].time;
+    } else {
+      const PERIOD_BAR_DAYS: Record<string, number> = { "4H": 0.167, "1D": 1, "1W": 5, "1M": 21, "6M": 126, "1Y": 252 };
+      const barCount = Math.round((PERIOD_BAR_DAYS[periodKey] ?? 252) * bpd);
+      fromTs = candles[Math.max(0, n - 1 - Math.min(barCount, n - 1))].time;
+    }
+  }
+
+  const slice = candles.filter((c) => c.time >= fromTs);
+  if (slice.length < 2) return [];
+  return downsample(buildEquityCurve(slice, buildSignals(slice)), 200);
+}
+
 // Backwards-compatible wrapper (EMA, long-TF default)
 export function computeAllBacktests(
   candles: Candle[],

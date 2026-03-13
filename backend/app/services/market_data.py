@@ -11,6 +11,7 @@ Inject via app/api/dependencies.py — callers never instantiate directly.
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
@@ -318,25 +319,33 @@ def _fuzzy_score(asset: AssetSearchResult, q: str) -> float:
     Returns a float in [0, 100]; higher = better match.
 
     Priority order:
-      1. Exact symbol prefix  (e.g. "BTC" → "BTC/USD")
-      2. Fuzzy symbol match   (e.g. "APPL" → "AAPL")
-      3. Partial name match   (e.g. "apple" → "Apple Inc.")
-      4. Token set name match (e.g. "nvidia corp" → "NVIDIA Corp.")
+      1. Exact symbol match   (e.g. "MSFT" → "MSFT")  → 100
+      2. Exact symbol prefix  (e.g. "BTC" → "BTC/USD") → 95
+      3. Fuzzy symbol match   (e.g. "APPL" → "AAPL")
+      4. Partial name match   (e.g. "apple" → "Apple Inc.")
+      5. Token set name match (e.g. "nvidia corp" → "NVIDIA Corp.")
     """
-    sym  = asset.symbol.lower()
-    name = asset.name.lower()
+    sym      = asset.symbol.lower()
+    sym_bare = sym.replace("/", "")  # "btc/usd" → "btcusd"
+    name     = asset.name.lower()
+
+    # Exact symbol match — highest priority
+    if q == sym or q == sym_bare:
+        return 100.0
 
     # Symbol: exact prefix gives a guaranteed high score
-    if sym.startswith(q) or sym.replace("/", "").startswith(q):
+    if sym.startswith(q) or sym_bare.startswith(q):
         sym_prefix = 95 - len(sym) * 0.3  # shorter symbol → higher rank
     else:
         sym_prefix = 0.0
 
+    # Directional ratio: only use ratio() (full-string edit distance), not
+    # partial_ratio() for the symbol.  partial_ratio("msft", "t") == 100
+    # because "t" is a substring of "msft" — that's misleading.
     sym_score = max(
         sym_prefix,
         fuzz.ratio(q, sym),
-        fuzz.partial_ratio(q, sym),
-        fuzz.ratio(q, sym.replace("/", "")),  # "btcusd" vs "btcusd"
+        fuzz.ratio(q, sym_bare),
     )
 
     name_score = max(
@@ -427,10 +436,29 @@ class AlpacaMarketDataService(MarketDataService):
 
     def __init__(self) -> None:
         self._settings = get_settings()
-        self._headers = {
-            "APCA-API-KEY-ID": self._settings.alpaca_api_key,
-            "APCA-API-SECRET-KEY": self._settings.alpaca_secret_key,
-        }
+
+        if self._settings.use_broker_data and self._settings.alpaca_broker_key:
+            # Use Broker API Basic auth for all market data requests.
+            # This allows market data access without per-user Alpaca keys.
+            token = base64.b64encode(
+                f"{self._settings.alpaca_broker_key}:{self._settings.alpaca_broker_secret}".encode()
+            ).decode()
+            self._headers = {
+                "Authorization": f"Basic {token}",
+                "Content-Type": "application/json",
+            }
+            self._data_url = self._settings.alpaca_broker_data_url
+            self._asset_url = self._settings.alpaca_broker_url
+            logger.info("market_data_service_mode", mode="broker", data_url=self._data_url)
+        else:
+            self._headers = {
+                "APCA-API-KEY-ID": self._settings.alpaca_api_key,
+                "APCA-API-SECRET-KEY": self._settings.alpaca_secret_key,
+            }
+            self._data_url = self._settings.alpaca_data_url
+            self._asset_url = self._settings.alpaca_base_url
+            logger.info("market_data_service_mode", mode="trading_api", data_url=self._data_url)
+
         self._http: httpx.AsyncClient | None = None
         self._broker_http: httpx.AsyncClient | None = None
         self._assets_cache: list[AssetSearchResult] = []
@@ -439,7 +467,7 @@ class AlpacaMarketDataService(MarketDataService):
     async def _client(self) -> httpx.AsyncClient:
         if self._http is None or self._http.is_closed:
             self._http = httpx.AsyncClient(
-                base_url=self._settings.alpaca_data_url,
+                base_url=self._data_url,
                 headers=self._headers,
                 timeout=10.0,
             )
@@ -448,7 +476,7 @@ class AlpacaMarketDataService(MarketDataService):
     async def _broker_client(self) -> httpx.AsyncClient:
         if self._broker_http is None or self._broker_http.is_closed:
             self._broker_http = httpx.AsyncClient(
-                base_url=self._settings.alpaca_base_url,
+                base_url=self._asset_url,
                 headers=self._headers,
                 timeout=15.0,
             )
@@ -672,11 +700,17 @@ class AlpacaMarketDataService(MarketDataService):
 
     async def _fetch_all_assets(self) -> list[AssetSearchResult]:
         client = await self._broker_client()
+        # Broker API uses /v1/assets; Trading API uses /v2/assets
+        assets_path = (
+            "/v1/assets"
+            if self._settings.use_broker_data and self._settings.alpaca_broker_key
+            else "/v2/assets"
+        )
         results: list[AssetSearchResult] = []
         try:
             for asset_class, class_label in [("us_equity", "equity"), ("crypto", "crypto")]:
                 resp = await client.get(
-                    "/v2/assets",
+                    assets_path,
                     params={"status": "active", "asset_class": asset_class},
                 )
                 resp.raise_for_status()
