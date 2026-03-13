@@ -73,6 +73,17 @@ export function BacktestPanel() {
   const macdSlowPeriod     = useUIStore((s) => s.macdSlowPeriod);
   const macdSignalPeriod   = useUIStore((s) => s.macdSignalPeriod);
 
+  const setActiveIndicatorTab = useUIStore((s) => s.setActiveIndicatorTab);
+  const setEmaPeriod          = useUIStore((s) => s.setEmaPeriod);
+  const setBbPeriod           = useUIStore((s) => s.setBbPeriod);
+  const setBbStdDev           = useUIStore((s) => s.setBbStdDev);
+  const setRsiPeriod          = useUIStore((s) => s.setRsiPeriod);
+  const setRsiOverbought      = useUIStore((s) => s.setRsiOverbought);
+  const setRsiOversold        = useUIStore((s) => s.setRsiOversold);
+  const setMacdFastPeriod     = useUIStore((s) => s.setMacdFastPeriod);
+  const setMacdSlowPeriod     = useUIStore((s) => s.setMacdSlowPeriod);
+  const setMacdSignalPeriod   = useUIStore((s) => s.setMacdSignalPeriod);
+
   const demoMode           = useUIStore((s) => s.demoMode);
   const tradingMode        = useAlpacaStore((s) => s.tradingMode);
   const user               = useAuthStore((s) => s.user);
@@ -214,6 +225,22 @@ export function BacktestPanel() {
       );
       if (optimResult) {
         setAnalysisResult(optimResult);
+
+        // Apply the optimised indicator + params immediately so the chart,
+        // indicator ribbon, and backtest panel all reflect the best strategy
+        // without requiring the user to save or trade it first.
+        const { indicator, params } = optimResult.strategy;
+        setActiveIndicatorTab(indicator);
+        setEmaPeriod(params.emaPeriod);
+        setBbPeriod(params.bbPeriod);
+        setBbStdDev(params.bbStdDev);
+        setRsiPeriod(params.rsiPeriod);
+        setRsiOverbought(params.rsiOverbought);
+        setRsiOversold(params.rsiOversold);
+        setMacdFastPeriod(params.macdFast);
+        setMacdSlowPeriod(params.macdSlow);
+        setMacdSignalPeriod(params.macdSignal);
+
         setShowModal(true);
       }
     } finally {
@@ -224,6 +251,9 @@ export function BacktestPanel() {
     emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
     setAnalyzing, setAnalysisResult,
+    setActiveIndicatorTab, setEmaPeriod, setBbPeriod, setBbStdDev,
+    setRsiPeriod, setRsiOverbought, setRsiOversold,
+    setMacdFastPeriod, setMacdSlowPeriod, setMacdSignalPeriod,
   ]);
 
   // ─── Respond to external analysis requests (e.g. from TradeStrategyWidget) ──
