@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timezone
+from math import ceil
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
@@ -29,9 +31,10 @@ from app.models.schemas import (
     SignalDirection,
     SignalStrength,
     TechnicalIndicators,
+    TIMEFRAME_SECONDS,
     Timeframe,
 )
-from app.services.cache import indicator_cache, ohlcv_cache, prediction_cache
+from app.services.cache import backtest_cache, indicator_cache, ohlcv_cache, prediction_cache
 
 import pandas as pd
 
@@ -110,6 +113,104 @@ async def get_ohlcv(
 
     result = OHLCVResponse(ticker=ticker.upper(), timeframe=timeframe, bars=bars)
     await ohlcv_cache.set(cache_key, result)
+    return result
+
+
+# ─── Backtest History ─────────────────────────────────────────────────────────
+
+# These mirror the constants in src/lib/indicators.ts so bar counts are identical.
+_SHORT_TIMEFRAMES = {Timeframe.M1, Timeframe.M5, Timeframe.M15}
+
+# Calendar seconds per period (used for short timeframes where each bar = fixed secs)
+_SHORT_TF_PERIOD_SECS: dict[str, int] = {
+    "4H": 4 * 3_600,
+    "1D": 86_400,
+    "1W": 604_800,
+    "1M": 2_592_000,
+}
+
+# Trading-day counts for long-timeframe periods
+_LONG_TF_PERIOD_TRADING_DAYS: dict[str, float] = {
+    "1M": 21,
+    "6M": 126,
+    "1Y": 252,
+}
+
+# Trading bars per calendar day for each long timeframe
+_BARS_PER_DAY: dict[Timeframe, float] = {
+    Timeframe.H1: 6.5,
+    Timeframe.H4: 1.625,
+    Timeframe.D1: 1.0,
+}
+
+def _backtest_bar_count(timeframe: Timeframe, period: str) -> int:
+    """
+    Return the number of OHLCV bars needed to fully cover *period* at *timeframe*.
+
+    Adds:
+      - 60-bar indicator warmup buffer (EMA/RSI/MACD need ~20-50 bars to prime)
+      - 1.5× calendar multiplier to absorb weekends + public holidays
+    Result is capped at 25 000 (Alpaca's max-limit per request).
+    """
+    WARMUP = 60
+    BUFFER = 1.5
+    bar_secs = TIMEFRAME_SECONDS.get(timeframe, 900)
+
+    if timeframe in _SHORT_TIMEFRAMES:
+        period_secs = _SHORT_TF_PERIOD_SECS.get(period, _SHORT_TF_PERIOD_SECS["1M"])
+        raw = period_secs / bar_secs
+    elif period == "YTD":
+        now = datetime.now(timezone.utc)
+        ytd_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        calendar_days = max(1, (now - ytd_start).days + 1)
+        trading_days = round(calendar_days * 252 / 365)
+        raw = trading_days * _BARS_PER_DAY.get(timeframe, 1.0)
+    else:
+        trading_days = _LONG_TF_PERIOD_TRADING_DAYS.get(period, 252)
+        raw = trading_days * _BARS_PER_DAY.get(timeframe, 1.0)
+
+    return min(ceil(raw * BUFFER) + WARMUP, 25_000)
+
+
+@router.get(
+    "/backtest-history/{ticker:path}",
+    response_model=OHLCVResponse,
+    summary="Full OHLCV history sized exactly for one backtest period + indicator warmup",
+)
+async def get_backtest_history(
+    ticker: str,
+    svc: MarketDataDep,
+    timeframe: Timeframe = Query(default=Timeframe.M15),
+    period: str = Query(
+        default="1M",
+        description="Period key: 4H | 1D | 1W | 1M | 6M | YTD | 1Y",
+    ),
+) -> OHLCVResponse:
+    ticker = ticker.upper()
+    period = period.upper()
+    cache_key = f"backtest:{ticker}:{timeframe}:{period}"
+
+    cached = await backtest_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    limit = _backtest_bar_count(timeframe, period)
+    logger.info(
+        "backtest_history_fetch",
+        ticker=ticker, timeframe=timeframe, period=period, limit=limit,
+    )
+
+    try:
+        bars = await svc.get_ohlcv(ticker, timeframe, limit)
+    except Exception as exc:
+        logger.error("backtest_history_failed", ticker=ticker, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch backtest history for {ticker}: {exc}",
+        ) from exc
+
+    result = OHLCVResponse(ticker=ticker, timeframe=timeframe, bars=bars)
+    await backtest_cache.set(cache_key, result)
     return result
 
 

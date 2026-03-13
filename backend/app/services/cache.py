@@ -54,3 +54,6 @@ indicator_cache: AsyncTTLCache[str, Any] = AsyncTTLCache(maxsize=256, ttl=60.0)
 
 # Predictions: 120s TTL — expensive to compute, acceptable staleness
 prediction_cache: AsyncTTLCache[str, Any] = AsyncTTLCache(maxsize=128, ttl=120.0)
+
+# Backtest history: 300s TTL — full period bars for strategy computation; changes slowly
+backtest_cache: AsyncTTLCache[str, Any] = AsyncTTLCache(maxsize=128, ttl=300.0)

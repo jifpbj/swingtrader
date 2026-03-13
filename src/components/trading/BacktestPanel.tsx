@@ -19,9 +19,45 @@ import { StrategyResultModal } from "@/components/algo/StrategyResultModal";
 import {
   ComposedChart, Area, Line, ResponsiveContainer, Tooltip, ReferenceLine, YAxis,
 } from "recharts";
+import type { Timeframe } from "@/types/market";
 
-// Period keys are determined dynamically by the result; this is just a fallback
-const LONG_TF_PERIOD_KEYS: BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
+// ─── Period keys by timeframe ─────────────────────────────────────────────────
+// Short timeframes (1m / 5m / 15m) use calendar windows.
+// Long timeframes (1h / 4h / 1d) use trading-day windows.
+const SHORT_TIMEFRAMES = new Set<string>(["1m", "5m", "15m"]);
+
+function periodKeysForTimeframe(tf: string): BacktestPeriodKey[] {
+  return SHORT_TIMEFRAMES.has(tf)
+    ? ["4H", "1D", "1W", "1M"]
+    : ["1M", "6M", "YTD", "1Y"];
+}
+
+// Calendar seconds per short-TF period (mirrors indicators.ts SHORT_TF_SECONDS)
+const SHORT_TF_PERIOD_SECS: Record<string, number> = {
+  "4H": 14_400, "1D": 86_400, "1W": 604_800, "1M": 2_592_000,
+};
+// Trading days per long-TF period
+const LONG_TF_PERIOD_DAYS: Record<string, number> = {
+  "1M": 21, "6M": 126, "YTD": 180, "1Y": 252,
+};
+const BARS_PER_TRADING_DAY: Record<string, number> = {
+  "1h": 6.5, "4h": 1.625, "1d": 1,
+};
+
+/** Mock bar count for demo mode — enough to cover the period + indicator warmup. */
+function mockBarCount(tf: string, period: BacktestPeriodKey): number {
+  const WARMUP = 60;
+  const BUFFER = 1.5;
+  const barSecs = TIMEFRAME_SECONDS[tf as Timeframe] ?? 900;
+  let raw: number;
+  if (SHORT_TIMEFRAMES.has(tf)) {
+    raw = (SHORT_TF_PERIOD_SECS[period] ?? 86_400) / barSecs;
+  } else {
+    const days = LONG_TF_PERIOD_DAYS[period] ?? 252;
+    raw = days * (BARS_PER_TRADING_DAY[tf] ?? 1) * BUFFER;
+  }
+  return Math.min(Math.ceil(raw * BUFFER) + WARMUP, 10_000);
+}
 
 export function BacktestPanel() {
   const ticker             = useUIStore((s) => s.ticker);
@@ -53,7 +89,15 @@ export function BacktestPanel() {
   const [initialInvestment, setInitialInvestment] = useState<number>(100_000);
   const [showModal, setShowModal]           = useState(false);
   const [manualSaving, setManualSaving]     = useState(false);
+  const [backtestLoading, setBacktestLoading] = useState(false);
+
+  // Period is statically derived from timeframe — not from API result
+  const periodKeys = useMemo(() => periodKeysForTimeframe(timeframe), [timeframe]);
+  const defaultPeriod = periodKeys[periodKeys.length - 1];
   const [selectedPeriod, setSelectedPeriod] = useState<BacktestPeriodKey | null>(null);
+  // Reset period when timeframe changes (new period list)
+  useEffect(() => { setSelectedPeriod(null); }, [timeframe]);
+  const chartPeriod: BacktestPeriodKey = selectedPeriod ?? defaultPeriod;
 
   const currencyFmt = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -61,13 +105,12 @@ export function BacktestPanel() {
     maximumFractionDigits: 0,
   });
 
-  // ─── Fetch historical bars (or generate mock in demo/offline) ─────────────
+  // ─── Fetch historical bars sized for the selected period ──────────────────
+  // Uses the dedicated /backtest-history endpoint so the backend fetches exactly
+  // the right number of bars from Alpaca for the chosen period + indicator warmup.
   useEffect(() => {
-    // Cap at 1000 bars — sufficient for all backtest periods and avoids API timeouts
-    const count = 1000;
-    const barSecs = TIMEFRAME_SECONDS[timeframe] ?? 900;
+    const barSecs = TIMEFRAME_SECONDS[timeframe as Timeframe] ?? 900;
 
-    // Derive a deterministic seed from ticker chars (same algo as useMockData)
     function tickerToSeed(t: string): number {
       let h = 0x811c9dc5;
       for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
@@ -75,34 +118,44 @@ export function BacktestPanel() {
     }
 
     if (demoMode) {
+      const count = mockBarCount(timeframe, chartPeriod);
       setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
       return;
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const ctrl = new AbortController();
+    setBacktestLoading(true);
+    setCandles([]);   // clear stale candles immediately so chart doesn't show old data
 
     fetch(
-      `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(ticker)}?timeframe=${toBackendTf(timeframe)}&limit=${count}`,
+      `${apiUrl}/api/v1/market/backtest-history/${encodeURIComponent(ticker)}` +
+      `?timeframe=${toBackendTf(timeframe)}&period=${chartPeriod}`,
       { signal: ctrl.signal },
     )
       .then((res) => {
-        if (!res.ok) throw new Error("fetch failed");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<{ bars: Candle[] }>;
       })
       .then((json) => {
         const bars = json.bars ?? [];
-        if (bars.length >= 10) setCandles(bars);
-        else setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
+        if (bars.length >= 10) {
+          setCandles(bars);
+        } else {
+          // Fewer bars than expected — fall back to mock so the chart still works
+          const count = mockBarCount(timeframe, chartPeriod);
+          setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
+        }
       })
       .catch((err) => {
         if ((err as Error).name === "AbortError") return;
-        // Backend unreachable — fall back to mock so backtest still works
+        const count = mockBarCount(timeframe, chartPeriod);
         setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
-      });
+      })
+      .finally(() => setBacktestLoading(false));
 
     return () => ctrl.abort();
-  }, [demoMode, ticker, timeframe]);
+  }, [demoMode, ticker, timeframe, chartPeriod]);
 
   // ─── Recompute backtest on indicator/candle changes ────────────────────────
   useEffect(() => {
@@ -232,13 +285,6 @@ export function BacktestPanel() {
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
     saveStrategy, setActiveStrategy,
   ]);
-
-  const periodKeys = result?.periodKeys ?? LONG_TF_PERIOD_KEYS;
-  const lastPeriodKey = periodKeys[periodKeys.length - 1];
-  const lastPeriodResult = result?.periods[lastPeriodKey];
-
-  // Default selected period to the last (longest) available period
-  const chartPeriod: BacktestPeriodKey = selectedPeriod ?? lastPeriodKey;
 
   const equityCurve = useMemo<EquityCurvePoint[]>(() => {
     if (!candles.length || !result) return [];
@@ -585,7 +631,11 @@ export function BacktestPanel() {
 
           </>
         ) : (
-          <div className="text-[11px] text-zinc-600 text-center py-4">Computing…</div>
+          <div className="text-[11px] text-zinc-600 text-center py-4 flex items-center justify-center gap-2">
+            {backtestLoading
+              ? <><Loader2 className="size-3.5 animate-spin text-zinc-500" /> Fetching data…</>
+              : "Computing…"}
+          </div>
         )}
 
         {/* ── Algo Trading action row ──────────────────────────────── */}
