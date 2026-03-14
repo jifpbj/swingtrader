@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -51,6 +51,76 @@ const EXEC_FEATURES = [
   "Kelly Criterion position sizing",
   "Priority Customer Support — < 4h response",
 ];
+
+/* ── Try-Now CTA button with cycling witty labels ───────────── */
+const TRY_NOW_LABELS = [
+  "Start Making Money →",
+  "Let the Algo Do It →",
+  "Launch the Dashboard →",
+  "Put Your Money to Work →",
+  "Trade Smarter, Not Harder →",
+  "See the Signals Live →",
+  "Automate Your Alpha →",
+  "Beat the Market Today →",
+  "Your Bot Is Waiting →",
+  "Free Money (almost) →",
+];
+
+function TryNowButton() {
+  const [idx, setIdx] = useState(0);
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFading(true);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % TRY_NOW_LABELS.length);
+        setFading(false);
+      }, 500);
+    }, 6000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="flex justify-center mb-14">
+      {/* soft outer halo — large blur, very low opacity, slow pulse */}
+      <div className="relative">
+        <div
+          className="absolute inset-0 rounded-2xl pointer-events-none"
+          style={{
+            boxShadow:
+              "0 0 40px 18px rgba(52,211,153,0.22), 0 0 100px 40px rgba(52,211,153,0.09)",
+            animation: "tryCTAPulse 4s ease-in-out infinite",
+          }}
+        />
+        <style>{`
+          @keyframes tryCTAPulse {
+            0%, 100% { opacity: 0.7; }
+            50%       { opacity: 1;   }
+          }
+        `}</style>
+        <Link
+          href="/dashboard"
+          className={cn(
+            "relative inline-flex items-center justify-center px-8 py-3.5 rounded-2xl",
+            "text-sm font-bold text-white tracking-wide",
+            "bg-emerald-500 hover:bg-emerald-400 transition-colors duration-300",
+            // tight inner glow on the button itself — feathered, not harsh
+            "shadow-[0_0_18px_8px_rgba(52,211,153,0.28),0_0_50px_18px_rgba(52,211,153,0.10)]",
+            "hover:shadow-[0_0_24px_10px_rgba(52,211,153,0.38),0_0_70px_24px_rgba(52,211,153,0.14)]",
+          )}
+        >
+          <span
+            className="relative transition-opacity duration-500"
+            style={{ opacity: fading ? 0 : 1 }}
+          >
+            {TRY_NOW_LABELS[idx]}
+          </span>
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 /* ── Reusable check-mark list ────────────────────────────────── */
 function FeatureList({ items, accent }: { items: string[]; accent: string }) {
@@ -126,11 +196,14 @@ export default function HomePage() {
           </h1>
 
           {/* Subheadline */}
-          <p className="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-14">
+          <p className="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-8">
             Predictive Alpha pairs AI-driven signals with battle-tested indicators and fully automated
             robo-trading — so you configure a strategy once and let the algorithms work around the
             clock. No finance degree, no babysitting required.
           </p>
+
+          {/* CTA button */}
+          <TryNowButton />
 
           {/* Value-prop bullets */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-16 text-left">
