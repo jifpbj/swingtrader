@@ -372,7 +372,7 @@ export default function HomePage() {
               <span
                 className={cn(
                   "absolute top-0.5 size-5 rounded-full bg-white transition-transform shadow",
-                  annual ? "translate-x-6" : "translate-x-0.5"
+                  annual ? "translate-x-[26px]" : "translate-x-0.5"
                 )}
               />
             </button>
