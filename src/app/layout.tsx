@@ -35,7 +35,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased gradient-zinc h-screen overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased gradient-zinc`}
       >
         <Providers>
           {children}

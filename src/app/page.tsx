@@ -147,7 +147,7 @@ export default function HomePage() {
   return (
     /* h-screen + overflow-y-auto: body is h-screen overflow-hidden, so the child
        needs a fixed height (not min-height) to create a scrollable inner container */
-    <main className="h-screen overflow-y-auto scroll-smooth bg-zinc-950 text-zinc-100">
+    <main className="min-h-screen scroll-smooth bg-zinc-950 text-zinc-100">
 
       {/* ── Marketing nav ── */}
       <header className="sticky top-0 z-30 glass-bright border-b border-white/5 px-4 sm:px-6 h-14 flex items-center justify-between">
