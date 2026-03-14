@@ -443,7 +443,7 @@ export function BacktestPanel() {
                   const parsed = Number(e.target.value);
                   setInitialInvestment(Number.isFinite(parsed) ? Math.max(0, parsed) : 0);
                 }}
-                className="w-28 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
+                className="w-24 min-w-0 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/40"
               />
             </div>
           </div>

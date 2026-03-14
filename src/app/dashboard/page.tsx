@@ -125,9 +125,9 @@ export default function TradingDashboard() {
               {/* Trade CTA */}
               <TradeStrategyWidget />
 
-              {/* Indicator config + Backtest — adjacent */}
-              <IndicatorPanel />
+              {/* Backtest + Indicator config — adjacent */}
               <BacktestPanel />
+              <IndicatorPanel />
 
               {/* Paper trading — only for signed-in users */}
               {user && (

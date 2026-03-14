@@ -389,7 +389,7 @@ export function StrategyCard({ strategy }: Props) {
               if (Number.isFinite(v) && v > 0) setLotSizeDollars(v);
             }}
             onBlur={() => handleLotSave(lotSizeMode, lotSizeDollars)}
-            className="w-16 rounded border border-white/15 bg-black/30 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/50 transition-colors"
+            className="min-w-0 flex-1 rounded border border-white/15 bg-black/30 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/50 transition-colors"
           />
           <span className="text-zinc-400 shrink-0">/trade</span>
           {savingLot && <Loader2 className="size-2.5 animate-spin text-zinc-400 shrink-0" />}
