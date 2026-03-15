@@ -67,4 +67,6 @@ export interface SavedStrategy {
 export interface AlgoAnalysisResult {
   strategy: Omit<SavedStrategy, "id" | "createdAt" | "updatedAt">;
   deltaVsHold: number;              // bestStrategyReturn - bestHoldReturn
+  /** Point-by-point equity curve for the best period (strategy + hold, normalised to 100) */
+  equityCurve: Array<{ time: number; strategy: number; hold: number }>;
 }

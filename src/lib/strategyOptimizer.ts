@@ -181,6 +181,7 @@ export function runAIOptimize(
   return {
     strategy: strategyData,
     deltaVsHold: winner.bestStrategyReturn - winner.bestHoldReturn,
+    equityCurve: [],   // populated by BacktestPanel after runAIOptimize returns
   };
 }
 

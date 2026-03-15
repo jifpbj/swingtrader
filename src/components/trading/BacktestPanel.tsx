@@ -224,7 +224,15 @@ export function BacktestPanel() {
         tradingMode,
       );
       if (optimResult) {
-        setAnalysisResult(optimResult);
+        // Compute equity curve for the best period and attach to the result
+        const curve = computeStrategyEquityCurve(
+          candles,
+          optimResult.strategy.indicator as "EMA" | "BB" | "RSI" | "MACD" | "TD9",
+          optimResult.strategy.params,
+          timeframe,
+          optimResult.strategy.bestPeriodKey as BacktestPeriodKey,
+        );
+        setAnalysisResult({ ...optimResult, equityCurve: curve });
 
         // Apply the optimised indicator + params immediately so the chart,
         // indicator ribbon, and backtest panel all reflect the best strategy
