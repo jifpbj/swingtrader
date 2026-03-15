@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, Header, HTTPException, Path, Query, Request, Response, status
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
@@ -302,3 +302,91 @@ async def cancel_all_orders(
     result = await _request("DELETE", "/v2/orders", x_alpaca_key, x_alpaca_secret, x_alpaca_base_url)
     logger.info("all_orders_cancelled")
     return result if isinstance(result, list) else []
+
+
+# ─── Debug / Diagnostic endpoints ────────────────────────────────────────────
+
+@router.get(
+    "/debug/auto-trader",
+    summary="Inspect auto-trader state — active strategies from Firestore",
+    tags=["debug"],
+)
+async def debug_auto_trader() -> dict:
+    """
+    Returns all strategies with autoTrade=True from Firestore so you can
+    verify the scheduler can see them without waiting for the next poll cycle.
+
+    Also reports whether Firebase is initialised and how many strategies are
+    active, so you can quickly rule out index / credential issues.
+    """
+    from app.services.firestore_service import _app as firebase_app  # noqa: PLC0415
+    from app.services.firestore_service import get_active_strategies  # noqa: PLC0415
+
+    firebase_ready = firebase_app is not None
+    strategies_raw: list[tuple[str, dict]] = []
+    error: str | None = None
+
+    if firebase_ready:
+        try:
+            strategies_raw = await get_active_strategies()
+        except Exception as exc:
+            error = str(exc)
+
+    strategies_summary = [
+        {
+            "strategyId":              s.get("id"),
+            "uid":                     uid,
+            "ticker":                  s.get("ticker"),
+            "timeframe":               s.get("timeframe"),
+            "indicator":               s.get("indicator"),
+            "autoTrade":               s.get("autoTrade"),
+            "tradingMode":             s.get("tradingMode"),
+            "lotSizeMode":             s.get("lotSizeMode"),
+            "lotSizeDollars":          s.get("lotSizeDollars"),
+            "lastExecutedSignalTime":  s.get("lastExecutedSignalTime"),
+            "hasOpenEntry":            s.get("openEntry") is not None,
+        }
+        for uid, s in strategies_raw
+    ]
+
+    return {
+        "firebase_ready":     firebase_ready,
+        "active_strategies":  len(strategies_summary),
+        "strategies":         strategies_summary,
+        "error":              error,
+    }
+
+
+@router.post(
+    "/debug/force-check",
+    summary="Immediately run auto-trader check for all active strategies",
+    tags=["debug"],
+)
+async def debug_force_check(request: Request) -> dict:
+    """
+    Bypasses the 30 s scheduler interval and immediately evaluates every
+    strategy with autoTrade=True.  Useful during live testing to confirm a
+    strategy fires without waiting for the next poll.
+
+    Returns a summary of what happened for each strategy.
+    """
+    from app.engine.auto_trader import check_strategy  # noqa: PLC0415
+    from app.services.firestore_service import get_active_strategies  # noqa: PLC0415
+
+    market_svc = request.app.state.market_data
+    strategies_raw = await get_active_strategies()
+
+    if not strategies_raw:
+        return {"checked": 0, "message": "No strategies with autoTrade=True found in Firestore."}
+
+    import asyncio  # noqa: PLC0415
+    results: list[dict] = []
+    for uid, strategy in strategies_raw:
+        sid = strategy.get("id", "<unknown>")
+        try:
+            await check_strategy(uid, strategy, market_svc)
+            results.append({"strategyId": sid, "uid": uid, "status": "checked"})
+        except Exception as exc:
+            results.append({"strategyId": sid, "uid": uid, "status": "error", "error": str(exc)})
+
+    return {"checked": len(results), "results": results}

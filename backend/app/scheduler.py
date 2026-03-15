@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import asyncio
 
+import os
+
 from app.core.logging import get_logger
 from app.engine.auto_trader import check_strategy
 from app.services.firestore_service import get_active_strategies
@@ -26,7 +28,9 @@ from app.services.market_data import MarketDataService
 
 logger = get_logger(__name__)
 
-POLL_INTERVAL_SECONDS = 30
+# Configurable via AUTO_TRADE_INTERVAL_SECONDS env var.
+# Default 15 s — fast enough to catch 1m candle signals in near real-time.
+POLL_INTERVAL_SECONDS = int(os.environ.get("AUTO_TRADE_INTERVAL_SECONDS", "15"))
 
 
 async def auto_trade_loop(market_svc: MarketDataService) -> None:
