@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Trash2, TrendingUp, TrendingDown, Loader2, Bot, PowerOff,
   ChevronDown, ChevronUp, ExternalLink, BarChart3, ShieldAlert,
-  DollarSign, Percent,
+  DollarSign, Percent, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { useStrategyStore } from "@/store/useStrategyStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useUIStore } from "@/store/useUIStore";
 import { useTradeStore } from "@/store/useTradeStore";
+import { useAlpacaStore } from "@/store/useAlpacaStore";
 import type { SavedStrategy, IndicatorType } from "@/types/strategy";
 import type { Timeframe } from "@/types/market";
 
@@ -65,6 +66,7 @@ export function StrategyCard({ strategy }: Props) {
     setMacdSignalPeriod,
   } = useUIStore();
   const getTradesForStrategy = useTradeStore((s) => s.getTradesForStrategy);
+  const alpacaAccount = useAlpacaStore((s) => s.account);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toggling,      setToggling]      = useState(false);
@@ -110,6 +112,14 @@ export function StrategyCard({ strategy }: Props) {
 
   // Beating backtest?
   const beatingBacktest = hasActualTrades && actualPnlPct > btReturn;
+
+  // Lot size vs. account purchasing power / equity warning (only for $ mode)
+  const lotWarning: "buying_power" | "equity" | null = (() => {
+    if (lotSizeMode !== "dollars" || !alpacaAccount) return null;
+    if (lotSizeDollars > alpacaAccount.buying_power) return "buying_power";
+    if (lotSizeDollars > alpacaAccount.equity) return "equity";
+    return null;
+  })();
 
   // ── Actions ───────────────────────────────────────────────────────────────
   function loadStrategy() {
@@ -356,9 +366,10 @@ export function StrategyCard({ strategy }: Props) {
 
       {/* ════ LOT SIZE + ACTIONS ════════════════════════════════════════════ */}
       <div
-        className="flex items-center gap-2 px-4 pb-3"
+        className="flex flex-col gap-1.5 px-4 pb-3"
         onClick={(e) => e.stopPropagation()}
       >
+      <div className="flex items-center gap-2">
         {/* Lot size row */}
         <div className="flex items-center gap-1 text-[9px] flex-1 min-w-0">
           <span className="text-zinc-300 shrink-0 font-medium">Lot</span>
@@ -389,7 +400,10 @@ export function StrategyCard({ strategy }: Props) {
               if (Number.isFinite(v) && v > 0) setLotSizeDollars(v);
             }}
             onBlur={() => handleLotSave(lotSizeMode, lotSizeDollars)}
-            className="min-w-0 flex-1 rounded border border-white/15 bg-black/30 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/50 transition-colors"
+            className={cn(
+              "min-w-0 flex-1 rounded border bg-black/30 px-1.5 py-0.5 text-right font-mono tabular-nums text-zinc-200 outline-none focus:border-amber-500/50 transition-colors",
+              lotWarning ? "border-amber-500/50" : "border-white/15",
+            )}
           />
           <span className="text-zinc-400 shrink-0">/trade</span>
           {savingLot && <Loader2 className="size-2.5 animate-spin text-zinc-400 shrink-0" />}
@@ -414,6 +428,19 @@ export function StrategyCard({ strategy }: Props) {
               ? <><Bot className="size-2.5" /> Server</>
               : <><PowerOff className="size-2.5" /> Off</>}
         </button>
+      </div>
+
+      {/* Lot size warning */}
+      {lotWarning && (
+        <div className="flex items-start gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5">
+          <AlertTriangle className="size-3 text-amber-400 shrink-0 mt-px" />
+          <p className="text-[9px] text-amber-300 leading-snug">
+            {lotWarning === "buying_power"
+              ? <>Lot size exceeds your buying power ({currFmt.format(alpacaAccount!.buying_power)}). Orders may be rejected.</>
+              : <>Lot size exceeds your account equity ({currFmt.format(alpacaAccount!.equity)}). Consider reducing the lot size.</>}
+          </p>
+        </div>
+      )}
       </div>
 
       {/* ════ FOOTER ROW — history expand + portfolio link ══════════════════ */}
