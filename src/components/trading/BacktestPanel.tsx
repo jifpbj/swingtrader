@@ -535,7 +535,7 @@ export function BacktestPanel() {
                           return (
                             <div style={{ background: "rgba(9,9,11,0.92)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px", fontSize: 10, lineHeight: 1.6 }}>
                               <div style={{ color: "#71717a", marginBottom: 2 }}>{label}</div>
-                              <div style={{ color: stratDelta >= 0 ? "#34d399" : "rgb(248 113 113)" }}>
+                              <div style={{ color: stratDelta >= 0 ? "#fbbf24" : "rgb(248 113 113)" }}>
                                 Strat: {stratDelta >= 0 ? "+" : ""}{stratDelta.toFixed(1)}%
                               </div>
                               <div style={{ color: holdDelta >= 0 ? "#e4e4e7" : "#71717a" }}>
@@ -548,13 +548,29 @@ export function BacktestPanel() {
                       />
 
                       {/* ── Line overlays (drawn on top of fills) ────────── */}
-                      {/* Strategy — solid emerald */}
+                      {/* Strategy — solid amber */}
                       <Line
                         type="monotone"
                         dataKey="adjStrategy"
-                        stroke="#34d399"
+                        stroke="#fbbf24"
                         strokeWidth={2}
-                        dot={false}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        dot={(props: any) => {
+                          const sig = props?.payload?.signal;
+                          if (!sig) return <g key={props.key} />;
+                          const color = sig === "buy" ? "#34d399" : "#ef4444";
+                          return (
+                            <circle
+                              key={props.key}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={3.5}
+                              fill={color}
+                              stroke="rgba(0,0,0,0.5)"
+                              strokeWidth={1}
+                            />
+                          );
+                        }}
                         isAnimationActive={false}
                       />
                       {/* Hold — dashed zinc */}
@@ -577,14 +593,22 @@ export function BacktestPanel() {
               )}
 
               {/* Legend */}
-              <div className="flex items-center gap-3 px-0.5">
+              <div className="flex items-center gap-3 px-0.5 flex-wrap">
                 <div className="flex items-center gap-1">
-                  <span className="w-4 h-px bg-emerald-400 inline-block" />
+                  <span className="w-4 h-px inline-block" style={{ background: "#fbbf24" }} />
                   <span className="text-[9px] text-zinc-500">Strategy</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-4 h-px bg-zinc-500 inline-block border-dashed border-t border-zinc-500" style={{ background: "none", borderBottom: "none", borderLeft: "none", borderRight: "none" }} />
                   <span className="text-[9px] text-zinc-500">Hold</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="text-[9px] text-zinc-500">Buy</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                  <span className="text-[9px] text-zinc-500">Sell</span>
                 </div>
               </div>
             </div>

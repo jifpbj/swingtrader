@@ -510,6 +510,7 @@ export interface EquityCurvePoint {
   time: number;     // unix timestamp
   strategy: number; // portfolio value normalised to 100 at period start
   hold: number;     // buy-and-hold normalised to 100 at period start
+  signal?: "buy" | "sell"; // trade signal fired at this candle
 }
 
 function downsample<T>(arr: T[], max: number): T[] {
@@ -533,6 +534,7 @@ function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[]): EquityCu
   let units = 0;
   const out: EquityCurvePoint[] = [];
   for (const candle of slice) {
+    let pointSignal: EquityCurvePoint["signal"] = undefined;
     while (signalIdx < orderedSignals.length && orderedSignals[signalIdx].time <= candle.time) {
       const sig = orderedSignals[signalIdx];
       if (sig.direction === "entry" && !inTrade) {
@@ -540,15 +542,17 @@ function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[]): EquityCu
         entryPrice = sig.price;
         units = cash / sig.price;
         cash = 0;
+        pointSignal = "buy";
       } else if (sig.direction === "sell" && inTrade) {
         cash = units * sig.price;
         units = 0;
         inTrade = false;
+        pointSignal = "sell";
       }
       signalIdx++;
     }
     const equity = inTrade ? units * candle.close : cash;
-    out.push({ time: candle.time, strategy: equity * 100, hold: (candle.close / startPrice) * 100 });
+    out.push({ time: candle.time, strategy: equity * 100, hold: (candle.close / startPrice) * 100, signal: pointSignal });
   }
   return out;
 }
