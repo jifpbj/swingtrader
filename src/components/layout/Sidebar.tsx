@@ -23,6 +23,13 @@ export function Sidebar() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
+  // Expand sidebar on desktop after mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    if (window.innerWidth >= 768) {
+      useUIStore.setState({ sidebarCollapsed: false });
+    }
+  }, []);
+
   const onResizePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     dragStateRef.current = { startX: e.clientX, startWidth: sidebarWidth };
     e.currentTarget.setPointerCapture(e.pointerId);

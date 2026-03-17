@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import {
   Search,
   Settings,
-  Bell,
   ChevronUp,
   ChevronDown,
   LogIn,
@@ -18,6 +17,7 @@ import {
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { DataModeToggle } from "@/components/ui/DataModeToggle";
+import { NotificationBell } from "@/components/ui/NotificationBell";
 
 export function TopBar() {
   const ticker        = useUIStore((s) => s.ticker);
@@ -124,10 +124,7 @@ export function TopBar() {
           <ThemeToggle />
         </div>
 
-        <button className="p-2 rounded-lg hover:bg-foreground/5 text-muted-foreground hover:text-foreground transition-colors relative">
-          <Bell className="size-4" />
-          <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-emerald-400" />
-        </button>
+        <NotificationBell />
 
         <button
           onClick={() => setSettingsOpen(true)}

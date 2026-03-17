@@ -13,12 +13,14 @@ import { PaperTradingPanel } from "@/components/trading/PaperTradingPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useAutoTrader } from "@/hooks/useAutoTrader";
+import { useTradeNotifications } from "@/hooks/useTradeNotifications";
 import { useAuthStore } from "@/store/useAuthStore";
 import { cn } from "@/lib/utils";
 
 export default function TradingDashboard() {
   useLivePrice();
   useAutoTrader();
+  useTradeNotifications();
   const user = useAuthStore((s) => s.user);
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
   const [rightCollapsed, setRightCollapsed] = useState(false);

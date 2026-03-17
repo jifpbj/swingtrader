@@ -123,8 +123,8 @@ export const useUIStore = create<UIState>()(
     addSignal: (signal) => set((s) => ({ signals: [signal, ...s.signals].slice(0, 50) })),
     clearSignals: () => set({ signals: [] }),
 
-    // Open by default on desktop (≥768px), closed on mobile
-    sidebarCollapsed: typeof window !== "undefined" ? window.innerWidth < 768 : true,
+    // SSR-safe default (collapsed); Sidebar expands on desktop via useEffect after mount
+    sidebarCollapsed: true,
     toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
     wsConnected: false,
