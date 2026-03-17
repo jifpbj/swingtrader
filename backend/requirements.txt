@@ -38,6 +38,9 @@ rapidfuzz==3.10.1           # Fast fuzzy string matching for ticker search
 # ─── Firebase Admin (server-side Firestore access for auto-trading) ───────────
 firebase-admin>=6.5.0
 
+# ─── Stripe (subscription webhook verification) ───────────────────────────────
+stripe>=10.0.0
+
 # ─── Dev / Testing ────────────────────────────────────────────────────────────
 pytest==8.3.4
 pytest-asyncio==0.24.0

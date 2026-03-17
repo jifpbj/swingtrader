@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # ─── Polygon ──────────────────────────────────────────────────────────────
     polygon_api_key: str = Field(default="", alias="POLYGON_API_KEY")
 
+    # ─── Stripe ───────────────────────────────────────────────────────────────
+    stripe_secret_key: str = Field(default="", alias="STRIPE_SECRET_KEY")
+    stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
+
     # ─── Firebase / Firestore ─────────────────────────────────────────────────
     google_application_credentials: str = Field(
         default="service-account.json",

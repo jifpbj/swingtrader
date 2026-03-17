@@ -260,6 +260,62 @@ def invalidate_broker_cache(uid: str) -> None:
     _broker_cache.pop(uid, None)
 
 
+# ─── Subscription management (Stripe) ────────────────────────────────────────
+
+async def save_subscription(
+    uid: str,
+    plan: str,
+    status: str,
+    stripe_customer_id: str,
+    stripe_subscription_id: str,
+) -> None:
+    """
+    Write subscription details to users/{uid}/billing/subscription.
+    Called by the Stripe webhook on checkout.session.completed.
+    """
+    db = _db()
+    try:
+        ref = db.document(f"users/{uid}/billing/subscription")
+        await ref.set(
+            {
+                "plan": plan,
+                "status": status,
+                "stripeCustomerId": stripe_customer_id,
+                "stripeSubscriptionId": stripe_subscription_id,
+                "activatedAt": int(time.time() * 1000),
+                "updatedAt": int(time.time() * 1000),
+            },
+            merge=True,
+        )
+        logger.info("subscription_saved", uid=uid, plan=plan, status=status)
+    except Exception as exc:
+        logger.error("save_subscription_failed", uid=uid, error=str(exc))
+        raise
+
+
+async def clear_subscription(uid: str) -> None:
+    """
+    Mark subscription as cancelled when Stripe fires subscription.deleted.
+    Keeps the record but sets status=cancelled and plan=free.
+    """
+    db = _db()
+    try:
+        ref = db.document(f"users/{uid}/billing/subscription")
+        await ref.set(
+            {
+                "plan": "free",
+                "status": "cancelled",
+                "cancelledAt": int(time.time() * 1000),
+                "updatedAt": int(time.time() * 1000),
+            },
+            merge=True,
+        )
+        logger.info("subscription_cleared", uid=uid)
+    except Exception as exc:
+        logger.error("clear_subscription_failed", uid=uid, error=str(exc))
+        raise
+
+
 # ─── Strategy mutations ───────────────────────────────────────────────────────
 
 async def update_strategy(uid: str, strategy_id: str, patch: dict[str, Any]) -> None:

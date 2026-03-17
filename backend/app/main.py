@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import market, trading, websocket
 from app.api.routes.broker import router as broker_router
+from app.api.routes.payments import router as payments_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.engine.analysis import AnalysisEngine
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(market.router, prefix="/api/v1")
     app.include_router(trading.router, prefix="/api/v1")
     app.include_router(broker_router, prefix="/api/v1")
+    app.include_router(payments_router)          # POST /webhook/stripe (no /api/v1 prefix)
     app.include_router(websocket.router)
 
     # ── Health check ──────────────────────────────────────────────────────────
