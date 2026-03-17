@@ -81,6 +81,14 @@ interface Candidate {
  * @param initialInvestment - Starting capital for dollar-value stats
  * @param tradingMode - "paper" | "live" for the saved strategy
  */
+/** Compute the simple buy-and-hold return from the first to last candle close. */
+function computeHoldReturn(candles: Candle[]): number {
+  if (candles.length < 2) return 0;
+  const first = candles[0].close;
+  const last  = candles[candles.length - 1].close;
+  return first > 0 ? (last - first) / first : 0;
+}
+
 export function runAIOptimize(
   ticker: string,
   timeframe: string,
@@ -88,8 +96,17 @@ export function runAIOptimize(
   currentParams: IndicatorParams,
   initialInvestment: number = 100_000,
   tradingMode: TradingMode = "paper",
-): AlgoAnalysisResult | null {
-  if (candles.length < 50) return null;
+): AlgoAnalysisResult {
+  const holdReturn = computeHoldReturn(candles);
+
+  if (candles.length < 50) {
+    return {
+      recommendation: holdReturn >= 0 ? "hold" : "avoid",
+      holdReturn,
+      deltaVsHold: 0,
+      equityCurve: [],
+    };
+  }
 
   const candidates: Candidate[] = [];
 
@@ -149,7 +166,14 @@ export function runAIOptimize(
     evaluate("MACD", { ...currentParams, macdFast: fast, macdSlow: slow, macdSignal: signal });
   }
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    return {
+      recommendation: holdReturn >= 0 ? "hold" : "avoid",
+      holdReturn,
+      deltaVsHold: 0,
+      equityCurve: [],
+    };
+  }
 
   // Pick the best candidate
   const winner = candidates.reduce((a, b) => (b.score > a.score ? b : a));
@@ -178,9 +202,20 @@ export function runAIOptimize(
     lastExecutedSignalTime: null,
   };
 
+  const deltaVsHold = winner.bestStrategyReturn - winner.bestHoldReturn;
+  // Only recommend active trading if the strategy meaningfully beats hold (>= 0 delta)
+  const recommendation =
+    deltaVsHold >= 0
+      ? "active"
+      : winner.bestHoldReturn >= 0
+        ? "hold"
+        : "avoid";
+
   return {
-    strategy: strategyData,
-    deltaVsHold: winner.bestStrategyReturn - winner.bestHoldReturn,
+    recommendation,
+    holdReturn,
+    strategy: recommendation === "active" ? strategyData : undefined,
+    deltaVsHold,
     equityCurve: [],   // populated by BacktestPanel after runAIOptimize returns
   };
 }

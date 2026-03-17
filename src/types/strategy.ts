@@ -65,7 +65,12 @@ export interface SavedStrategy {
 
 /** Ephemeral result of AI Optimize — not stored directly */
 export interface AlgoAnalysisResult {
-  strategy: Omit<SavedStrategy, "id" | "createdAt" | "updatedAt">;
+  /** "active" = a tradeable strategy was found; "hold" = no alpha but trend is positive; "avoid" = trend is negative */
+  recommendation: "active" | "hold" | "avoid";
+  /** Overall buy-and-hold return for this ticker over the analysed period */
+  holdReturn: number;
+  /** Present only when recommendation === "active" */
+  strategy?: Omit<SavedStrategy, "id" | "createdAt" | "updatedAt">;
   deltaVsHold: number;              // bestStrategyReturn - bestHoldReturn
   /** Point-by-point equity curve for the best period (strategy + hold, normalised to 100) */
   equityCurve: Array<{ time: number; strategy: number; hold: number }>;

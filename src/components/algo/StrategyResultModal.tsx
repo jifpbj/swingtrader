@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, TrendingUp, TrendingDown, BrainCircuit, Loader2, CheckCircle2, Sparkles } from "lucide-react";
+import { X, TrendingUp, TrendingDown, BrainCircuit, Loader2, CheckCircle2, Sparkles, Pause, Ban } from "lucide-react";
 import {
   ComposedChart, Area, Line, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
 } from "recharts";
@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function StrategyResultModal({ result, onClose, onSaved }: Props) {
-  const { strategy, deltaVsHold, equityCurve } = result;
+  const { recommendation, holdReturn, strategy, deltaVsHold, equityCurve } = result;
   const { saveStrategy, setActiveStrategy } = useStrategyStore();
   const user = useAuthStore((s) => s.user);
   const openAuthModal = useAuthStore((s) => s.openAuthModal);
@@ -34,12 +34,15 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { bestStrategyReturn, bestHoldReturn, bestPeriodKey } = strategy;
-  const investment      = strategy.initialInvestment;
-  const strategyPnlPct  = bestStrategyReturn * 100;
-  const strategyPnlCash = bestStrategyReturn * investment;
-  const holdPnlPct      = bestHoldReturn * 100;
-  const isPositive      = strategyPnlPct >= 0;
+  // Active-strategy fields (only present when recommendation === "active")
+  const bestStrategyReturn = strategy?.bestStrategyReturn ?? 0;
+  const bestHoldReturn     = strategy?.bestHoldReturn ?? holdReturn;
+  const bestPeriodKey      = strategy?.bestPeriodKey ?? "";
+  const investment         = strategy?.initialInvestment ?? 100_000;
+  const strategyPnlPct     = bestStrategyReturn * 100;
+  const strategyPnlCash    = bestStrategyReturn * investment;
+  const holdPnlPct         = bestHoldReturn * 100;
+  const isPositive         = strategyPnlPct >= 0;
 
   // ── Equity curve chart data ────────────────────────────────────────────────
   const yDomain = useMemo<[number, number]>(() => {
@@ -78,10 +81,11 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
     EMA: "EMA Crossover", BB: "Bollinger Bands",
     RSI: "RSI", MACD: "MACD", TD9: "TD Sequential",
   };
-  const stratLabel = indicatorLabel[strategy.indicator] ?? strategy.indicator;
+  const stratLabel = strategy ? (indicatorLabel[strategy.indicator] ?? strategy.indicator) : "";
 
   async function handleSave(withAutoTrade = false) {
     if (!user) { openAuthModal(); return; }
+    if (!strategy) return;
     setSaving(withAutoTrade ? "trade" : "save");
     setError(null);
     try {
@@ -108,6 +112,127 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
     }
   }
 
+  // ── Hold / Avoid recommendation UI ────────────────────────────────────────
+  if (recommendation !== "active") {
+    const isAvoid = recommendation === "avoid";
+    const holdPct = holdReturn * 100;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div className="glass rounded-2xl w-full max-w-md shadow-2xl border border-white/10 flex flex-col">
+
+          {/* Header */}
+          <div className="flex items-start justify-between px-5 pt-5 pb-4 shrink-0">
+            <div className="flex items-center gap-2">
+              <BrainCircuit className="size-5 text-violet-400 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-zinc-100">AI Optimize Result</p>
+                <p className="text-[11px] text-zinc-500 font-mono mt-0.5">{result.strategy?.ticker ?? ""}</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          {/* Recommendation hero */}
+          <div
+            className={cn(
+              "mx-5 mb-5 rounded-xl border overflow-hidden",
+              isAvoid
+                ? "border-red-500/30"
+                : "border-amber-500/30",
+            )}
+            style={{
+              background: isAvoid
+                ? "linear-gradient(135deg, rgba(239,68,68,0.10) 0%, rgba(16,16,20,0.55) 65%)"
+                : "linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(16,16,20,0.55) 65%)",
+            }}
+          >
+            <div className="px-5 py-5 flex flex-col items-center text-center gap-3">
+              <div className={cn(
+                "size-12 rounded-full flex items-center justify-center",
+                isAvoid ? "bg-red-500/20" : "bg-amber-500/20",
+              )}>
+                {isAvoid
+                  ? <Ban className="size-6 text-red-400" />
+                  : <Pause className="size-6 text-amber-400" />
+                }
+              </div>
+
+              <div>
+                <p className={cn(
+                  "text-base font-bold",
+                  isAvoid ? "text-red-300" : "text-amber-300",
+                )}>
+                  {isAvoid ? "Avoid This Stock" : "Hold Strategy Recommended"}
+                </p>
+                <p className="text-[12px] text-zinc-400 mt-1 leading-relaxed max-w-xs mx-auto">
+                  {isAvoid
+                    ? "All tested strategies — including buy-and-hold — show negative returns for this ticker. Sitting this one out is the prudent move."
+                    : "No active strategy generates meaningful alpha over buy-and-hold for this ticker. Simply holding the position is the best approach."
+                  }
+                </p>
+              </div>
+
+              {/* Hold return stat */}
+              <div className={cn(
+                "w-full rounded-lg px-4 py-3 border",
+                isAvoid
+                  ? "bg-red-500/10 border-red-500/20"
+                  : "bg-amber-500/10 border-amber-500/20",
+              )}>
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500 mb-1">
+                  Buy-and-Hold Return
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  {holdPct >= 0
+                    ? <TrendingUp className="size-4 text-emerald-400" />
+                    : <TrendingDown className="size-4 text-red-400" />
+                  }
+                  <span className={cn(
+                    "text-2xl font-mono font-bold tabular-nums",
+                    holdPct >= 0 ? "text-emerald-400" : "text-red-400",
+                  )}>
+                    {holdPct >= 0 ? "+" : ""}{holdPct.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Insight */}
+          <div className="mx-5 mb-5 px-4 py-3 rounded-xl bg-white/3 border border-white/8 flex items-start gap-2.5">
+            <Sparkles className="size-3.5 text-violet-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              {isAvoid
+                ? "Consider waiting for a trend reversal or a more favourable entry point before committing capital to this ticker."
+                : "Try scanning a different timeframe or check back when market conditions change — active signals may emerge as volatility picks up."
+              }
+            </p>
+          </div>
+
+          {/* Close button */}
+          <div className="px-5 pb-5">
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-zinc-300 border border-white/15 hover:bg-white/5 hover:text-zinc-100 transition-all"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Active strategy result UI ──────────────────────────────────────────────
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -122,7 +247,7 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
             <div>
               <p className="text-sm font-semibold text-zinc-100">AI Optimize Result</p>
               <p className="text-[11px] text-zinc-500 font-mono mt-0.5 truncate max-w-[320px]">
-                {strategy.name}
+                {strategy?.name}
               </p>
             </div>
           </div>
@@ -148,7 +273,7 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
             </div>
             <p className="text-[13px] text-zinc-300 leading-relaxed">
               Based on our analysis, trading{" "}
-              <span className="font-semibold text-zinc-100">{strategy.ticker}</span>{" "}
+              <span className="font-semibold text-zinc-100">{strategy?.ticker}</span>{" "}
               with{" "}
               <span className="font-semibold text-violet-300">{stratLabel}</span>{" "}
               over the past{" "}

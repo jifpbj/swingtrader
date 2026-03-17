@@ -223,20 +223,19 @@ export function BacktestPanel() {
         initialInvestment,
         tradingMode,
       );
-      if (optimResult) {
-        // Compute equity curve for the best period and attach to the result
-        const curve = computeStrategyEquityCurve(
+      // Always show the modal — even for hold/avoid recommendations
+      let curve: ReturnType<typeof computeStrategyEquityCurve> = [];
+      if (optimResult.recommendation === "active" && optimResult.strategy) {
+        // Compute equity curve for the best period
+        curve = computeStrategyEquityCurve(
           candles,
           optimResult.strategy.indicator as "EMA" | "BB" | "RSI" | "MACD" | "TD9",
           optimResult.strategy.params,
           timeframe,
           optimResult.strategy.bestPeriodKey as BacktestPeriodKey,
         );
-        setAnalysisResult({ ...optimResult, equityCurve: curve });
 
-        // Apply the optimised indicator + params immediately so the chart,
-        // indicator ribbon, and backtest panel all reflect the best strategy
-        // without requiring the user to save or trade it first.
+        // Apply the optimised indicator + params immediately
         const { indicator, params } = optimResult.strategy;
         setActiveIndicatorTab(indicator);
         setEmaPeriod(params.emaPeriod);
@@ -248,9 +247,9 @@ export function BacktestPanel() {
         setMacdFastPeriod(params.macdFast);
         setMacdSlowPeriod(params.macdSlow);
         setMacdSignalPeriod(params.macdSignal);
-
-        setShowModal(true);
       }
+      setAnalysisResult({ ...optimResult, equityCurve: curve });
+      setShowModal(true);
     } finally {
       setAnalyzing(false);
     }
