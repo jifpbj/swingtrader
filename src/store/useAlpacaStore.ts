@@ -246,17 +246,14 @@ export const useAlpacaStore = create<AlpacaState>()(
         }
       },
 
-      // ─── Firestore: load paper keys on login
+      // ─── Firestore: load paper keys on login and auto-connect
       loadCredentialsFromDb: async (uid) => {
         try {
           const snap = await getDoc(doc(db, "users", uid, "private", "alpacaKeys"));
           if (snap.exists()) {
             const data = snap.data() as { paperApiKey?: string; paperSecretKey?: string };
             if (data.paperApiKey && data.paperSecretKey) {
-              set({
-                apiKey: data.paperApiKey,
-                secretKey: data.paperSecretKey,
-              });
+              await get().connect(data.paperApiKey, data.paperSecretKey);
             }
           }
         } catch {
@@ -274,6 +271,11 @@ export const useAlpacaStore = create<AlpacaState>()(
         secretKey: state.secretKey,
         tradingMode: state.tradingMode,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.apiKey && state?.secretKey) {
+          void state.connect(state.apiKey, state.secretKey);
+        }
+      },
     },
   ),
 );
