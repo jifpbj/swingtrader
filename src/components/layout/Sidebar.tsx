@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState, type PointerEvent as R
 import Link from "next/link";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, X, Zap, BarChart2, Landmark } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Zap, BarChart2, Landmark, ScanLine } from "lucide-react";
 import { useBrokerStore } from "@/store/useBrokerStore";
 import { StrategyQueue } from "@/components/algo/StrategyQueue";
 import { DataModeToggle } from "@/components/ui/DataModeToggle";
@@ -132,6 +132,17 @@ export function Sidebar() {
           "border-t border-white/5 pt-2 mt-2 space-y-0.5",
           collapsed ? "flex flex-col items-center px-2" : "px-3",
         )}>
+          <Link
+            href="/screener"
+            className={cn(
+              "flex items-center gap-2 rounded-xl text-[11px] font-semibold text-zinc-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all",
+              collapsed ? "p-2.5" : "px-3 py-2 w-full",
+            )}
+            title="Stock Screener"
+          >
+            <ScanLine className="size-4 shrink-0" />
+            {!collapsed && <span>Screener</span>}
+          </Link>
           <Link
             href="/portfolio"
             className={cn(
