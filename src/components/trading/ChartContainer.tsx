@@ -16,8 +16,10 @@ import {
 import type { Candle, CrossoverSignal } from "@/types/market";
 import { Maximize2, RefreshCw, Bot } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
-import { toBackendTf, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
+import { toBackendTf, BACKEND_TF, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
+import type { Timeframe } from "@/types/market";
 import { useStrategyStore } from "@/store/useStrategyStore";
+import { useAlpacaStore } from "@/store/useAlpacaStore";
 
 import type {
   IChartApi, ISeriesApi, UTCTimestamp, Time,
@@ -98,6 +100,122 @@ function normalizeHistoricalBars(raw: Candle[], barSecs: number): Candle[] {
     });
   }
   return Array.from(map.values()).sort((a, b) => a.time - b.time);
+}
+
+// ─── Direct Alpaca Data API helpers ────────────────────────────────────────────
+
+interface AlpacaBar { t: string; o: number; h: number; l: number; c: number; v: number; }
+
+/** Resample 1-hour candles into 4-hour candles (client-side, for IEX feed). */
+function resample1HTo4H(candles: Candle[]): Candle[] {
+  const buckets = new Map<number, Candle>();
+  for (const c of candles) {
+    const bucket = Math.floor(c.time / 14400) * 14400;
+    const ex = buckets.get(bucket);
+    buckets.set(bucket, ex ? {
+      time: bucket, open: ex.open,
+      high: Math.max(ex.high, c.high), low: Math.min(ex.low, c.low),
+      close: c.close, volume: ex.volume + c.volume,
+    } : { ...c, time: bucket });
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
+}
+
+/**
+ * Fetch OHLCV bars directly from the Alpaca Data API using the user's stored
+ * paper-trading credentials.  Falls back to the FastAPI backend proxy if no
+ * credentials are available (or if the Alpaca request fails).
+ *
+ * Alpaca Data API endpoints:
+ *   Crypto  → https://data.alpaca.markets/v1beta3/crypto/us/bars
+ *   Equities→ https://data.alpaca.markets/v2/stocks/bars  (IEX free feed)
+ *
+ * The `end` parameter restricts the response to bars whose timestamp is at or
+ * before that moment — used when fetching older history on scroll-left.
+ */
+async function fetchBars(
+  ticker: string,
+  timeframe: Timeframe,
+  limit: number,
+  apiKey: string,
+  secretKey: string,
+  end?: string,
+): Promise<Candle[]> {
+  const isCrypto = ticker.includes("/");
+
+  if (apiKey && secretKey) {
+    try {
+      const headers = {
+        "APCA-API-KEY-ID": apiKey,
+        "APCA-API-SECRET-KEY": secretKey,
+      };
+
+      if (isCrypto) {
+        const params = new URLSearchParams({
+          symbols: ticker,
+          timeframe: BACKEND_TF[timeframe] ?? "15Min",
+          limit: String(limit),
+        });
+        if (end) params.set("end", end);
+        const resp = await fetch(
+          `https://data.alpaca.markets/v1beta3/crypto/us/bars?${params}`,
+          { headers },
+        );
+        if (resp.ok) {
+          const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
+          const raw = json.bars?.[ticker] ?? [];
+          if (raw.length) {
+            return raw.map(b => ({
+              time:   Math.floor(new Date(b.t).getTime() / 1000),
+              open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
+            }));
+          }
+        }
+      } else {
+        // For 4h, fetch 1h bars from Alpaca and resample on the client
+        const fetchTf    = timeframe === "4h" ? "1h" : timeframe;
+        const fetchLimit = timeframe === "4h" ? limit * 4 + 10 : limit;
+        const params = new URLSearchParams({
+          symbols:   ticker,
+          timeframe: BACKEND_TF[fetchTf as Timeframe] ?? "15Min",
+          limit:     String(fetchLimit),
+          feed:      "iex",
+          sort:      "asc",
+        });
+        if (end) params.set("end", end);
+        const resp = await fetch(
+          `https://data.alpaca.markets/v2/stocks/bars?${params}`,
+          { headers },
+        );
+        if (resp.ok) {
+          const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
+          const raw = json.bars?.[ticker] ?? [];
+          if (raw.length) {
+            const candles: Candle[] = raw.map(b => ({
+              time:   Math.floor(new Date(b.t).getTime() / 1000),
+              open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
+            }));
+            return (timeframe === "4h" ? resample1HTo4H(candles) : candles).slice(-limit);
+          }
+        }
+      }
+    } catch { /* fall through to backend */ }
+  }
+
+  // ── Backend proxy fallback ────────────────────────────────────────────────
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const qs = `?timeframe=${toBackendTf(timeframe)}&limit=${limit}` +
+             (end ? `&end=${encodeURIComponent(end)}` : "");
+  try {
+    const resp = await fetch(
+      `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(ticker)}${qs}`,
+    );
+    if (resp.ok) {
+      const json = await resp.json() as { bars: Candle[] };
+      return json.bars ?? [];
+    }
+  } catch { /* ignore */ }
+  return [];
 }
 
 function buildMarkers(crossovers: CrossoverSignal[]): SeriesMarker<Time>[] {
@@ -213,6 +331,14 @@ export function ChartContainer() {
   const ticker              = useUIStore(s => s.ticker);
   const timeframe           = useUIStore(s => s.timeframe);
   const demoMode            = useUIStore(s => s.demoMode);
+
+  // Alpaca credentials — read into refs so they don't re-trigger chart init
+  const alpacaApiKey    = useAlpacaStore(s => s.apiKey);
+  const alpacaSecretKey = useAlpacaStore(s => s.secretKey);
+  const alpacaApiKeyRef    = useRef(alpacaApiKey);
+  const alpacaSecretKeyRef = useRef(alpacaSecretKey);
+  useEffect(() => { alpacaApiKeyRef.current    = alpacaApiKey; },    [alpacaApiKey]);
+  useEffect(() => { alpacaSecretKeyRef.current = alpacaSecretKey; }, [alpacaSecretKey]);
   const livePrice           = useUIStore(s => s.livePrice);
 
   // Active algo strategy for overlay badge
@@ -326,8 +452,7 @@ export function ChartContainer() {
       chart.panes()[2]?.setHeight(30);
 
       // Seed historical data — fetch depth and initial zoom scale with the timeframe
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-      const barSecs  = TIMEFRAME_SECONDS[timeframe] ?? 900;
+      const barSecs    = TIMEFRAME_SECONDS[timeframe] ?? 900;
       const fetchLimit = FETCH_LIMIT[timeframe] ?? 500;
       let rawCandles: Candle[] = [];
       if (demoMode) {
@@ -335,13 +460,10 @@ export function ChartContainer() {
         const basePrice = await getDemoBasePrice(ticker);
         rawCandles = generateMockCandles(barSecs, 300, tickerSeed(ticker), basePrice);
       } else {
-        try {
-          const res = await fetch(
-            `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(ticker)}` +
-            `?timeframe=${toBackendTf(timeframe)}&limit=${fetchLimit}`
-          );
-          if (res.ok) { const json = await res.json() as { bars: Candle[] }; rawCandles = json.bars ?? []; }
-        } catch { /* fallback to empty */ }
+        rawCandles = await fetchBars(
+          ticker, timeframe, fetchLimit,
+          alpacaApiKey, alpacaSecretKey,
+        );
       }
 
       // Normalize before use: floor timestamps, enforce OHLC integrity, deduplicate, sort
@@ -379,9 +501,11 @@ export function ChartContainer() {
         from: Math.max(0, barCount - visibleBars),
         to:   barCount + 3,
       });
-      // Trigger load-more when user scrolls near the left edge
+      // Trigger load-more when user scrolls or zooms near the left edge.
+      // Threshold of 20 bars gives enough runway so bars appear before the
+      // user reaches the true edge (especially when zoomed out far).
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range && range.from <= 5) loadMoreRef.current?.();
+        if (range && range.from <= 20) loadMoreRef.current?.();
       });
 
       setChartReady(true);
@@ -602,28 +726,29 @@ export function ChartContainer() {
     if (loadingMoreRef.current || !oldestBarTimeRef.current || !candleSeriesRef.current) return;
     loadingMoreRef.current = true;
 
-    const apiUrl  = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
     const barSecs = TIMEFRAME_SECONDS[timeframeRef.current] ?? 900;
     const limit   = FETCH_LIMIT[timeframeRef.current] ?? 500;
     // Fetch bars strictly before the oldest we have
     const endISO  = new Date((oldestBarTimeRef.current - 1) * 1000).toISOString();
 
     try {
-      const res = await fetch(
-        `${apiUrl}/api/v1/market/ohlcv/${encodeURIComponent(tickerRef.current)}` +
-        `?timeframe=${toBackendTf(timeframeRef.current)}&limit=${limit}&end=${encodeURIComponent(endISO)}`
+      const newBars = await fetchBars(
+        tickerRef.current,
+        timeframeRef.current as Timeframe,
+        limit,
+        alpacaApiKeyRef.current,
+        alpacaSecretKeyRef.current,
+        endISO,
       );
-      if (!res.ok) return;
-      const json = await res.json() as { bars: Candle[] };
-      const newBars = normalizeHistoricalBars(json.bars ?? [], barSecs);
-      if (!newBars.length) return;
+      const normalized = normalizeHistoricalBars(newBars, barSecs);
+      if (!normalized.length) return;
 
-      // Deduplicate
+      // Deduplicate against what we already have
       const existing = new Set(candlesRef.current.map(c => c.time));
-      const unique   = newBars.filter(b => !existing.has(b.time));
+      const unique   = normalized.filter(b => !existing.has(b.time));
       if (!unique.length) return;
 
-      // Save viewport so we can restore it after setData (setData resets scroll)
+      // Snapshot the viewport BEFORE modifying data
       const savedRange = chartRef.current?.timeScale().getVisibleLogicalRange();
 
       const combined = [...unique, ...candlesRef.current];
@@ -631,23 +756,27 @@ export function ChartContainer() {
       for (const c of unique) volumeMapRef.current.set(c.time, c.volume);
       oldestBarTimeRef.current = combined[0].time;
 
-      import("lightweight-charts").then(() => {
-        if (!candleSeriesRef.current) return;
+      // ── Update chart synchronously (no dynamic import needed — lc already loaded) ──
+      // Keeping loadingMoreRef.current = true here prevents the setData-triggered
+      // subscribeVisibleLogicalRangeChange callback from spawning a second load
+      // while we're still patching the viewport.
+      if (candleSeriesRef.current) {
         candleSeriesRef.current.setData(combined.map(c => ({
           time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close,
         })));
-        // Shift the viewport right by the number of prepended bars so view stays stable
+        // Shift the viewport right by the number of prepended bars so the view stays stable
         if (savedRange) {
           chartRef.current?.timeScale().setVisibleLogicalRange({
             from: savedRange.from + unique.length,
             to:   savedRange.to  + unique.length,
           });
         }
-      });
+      }
 
       // Re-run the indicator effect with the expanded dataset
       setIndicatorRevision(r => r + 1);
     } finally {
+      // Release lock AFTER setData + setVisibleLogicalRange have run
       loadingMoreRef.current = false;
     }
   }, []); // reads from refs only — no reactive deps needed
