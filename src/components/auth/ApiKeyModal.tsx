@@ -13,11 +13,192 @@ import {
   ExternalLink,
   ShieldCheck,
   Wifi,
+  Crown,
+  Zap,
+  ArrowRight,
+  XCircle,
 } from "lucide-react";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useUIStore } from "@/store/useUIStore";
+import { useSubscriptionStore, type Plan } from "@/store/useSubscriptionStore";
 import { cn } from "@/lib/utils";
+
+const STRIPE_BASIC_LINK =
+  process.env.NEXT_PUBLIC_STRIPE_BASIC_LINK ?? "https://buy.stripe.com/00waEZ64S3zWbAadqtbQY01";
+
+// ─── Plan badge config ─────────────────────────────────────────────────────────
+
+function planConfig(plan: Plan, active: boolean) {
+  if (!active && plan !== "free") {
+    return {
+      label: `${plan === "basic" ? "Basic" : "Executive"} Plan · Cancelled`,
+      icon: <XCircle className="size-3.5" />,
+      badge: "text-amber-400 bg-amber-500/15 border-amber-500/25",
+      dot: "bg-amber-400",
+    };
+  }
+  switch (plan) {
+    case "basic":
+      return {
+        label: "Basic Plan · Active",
+        icon: <Zap className="size-3.5" />,
+        badge: "text-emerald-400 bg-emerald-500/15 border-emerald-500/25",
+        dot: "bg-emerald-400",
+      };
+    case "executive":
+      return {
+        label: "Executive Plan · Active",
+        icon: <Crown className="size-3.5" />,
+        badge: "text-violet-400 bg-violet-500/15 border-violet-500/25",
+        dot: "bg-violet-400",
+      };
+    default:
+      return {
+        label: "Free Plan",
+        icon: null,
+        badge: "text-zinc-400 bg-zinc-500/15 border-zinc-500/25",
+        dot: "bg-zinc-500",
+      };
+  }
+}
+
+// ─── Subscription panel ────────────────────────────────────────────────────────
+
+function SubscriptionPanel() {
+  const plan        = useSubscriptionStore((s) => s.plan);
+  const status      = useSubscriptionStore((s) => s.status);
+  const cancelling  = useSubscriptionStore((s) => s.cancelling);
+  const cancelError = useSubscriptionStore((s) => s.cancelError);
+  const cancel      = useSubscriptionStore((s) => s.cancelSubscription);
+  const user        = useAuthStore((s) => s.user);
+
+  const [confirming, setConfirming] = useState(false);
+  const [cancelled,  setCancelled]  = useState(false);
+
+  // Not logged in — nothing to show
+  if (!user) return null;
+
+  const isLoading  = status === "loading";
+  const isActive   = status === "active";
+  const isPaidPlan = plan === "basic" || plan === "executive";
+  const cfg        = planConfig(plan, isActive);
+
+  async function handleConfirmCancel() {
+    try {
+      await cancel();
+      setCancelled(true);
+      setConfirming(false);
+    } catch {
+      // error shown via cancelError from store
+    }
+  }
+
+  // ── Cancel confirmation view ────────────────────────────────────────────────
+  if (confirming) {
+    return (
+      <div className="mb-5 rounded-xl border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+        <p className="text-xs font-medium text-red-400">Cancel subscription?</p>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          Your access continues until the end of the current billing period.
+          Automatic renewals will stop immediately.
+        </p>
+        {cancelError && (
+          <p className="text-xs text-red-400 flex items-center gap-1.5">
+            <AlertCircle className="size-3.5 shrink-0" />
+            {cancelError}
+          </p>
+        )}
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleConfirmCancel}
+            disabled={cancelling}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+              cancelling
+                ? "bg-red-900/30 text-red-700 cursor-not-allowed"
+                : "bg-red-600 hover:bg-red-500 text-white",
+            )}
+          >
+            {cancelling ? (
+              <><Loader2 className="size-3 animate-spin" /> Cancelling…</>
+            ) : (
+              "Yes, Cancel Plan"
+            )}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            disabled={cancelling}
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 border border-white/10 hover:bg-white/5 transition-all"
+          >
+            Keep Plan
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-5 rounded-xl border border-white/8 bg-zinc-900/40 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-zinc-400">Subscription</span>
+        {isLoading && (
+          <span className="flex items-center gap-1 text-xs text-zinc-600">
+            <Loader2 className="size-3 animate-spin" /> Loading…
+          </span>
+        )}
+        {!isLoading && (
+          <span
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+              cfg.badge,
+            )}
+          >
+            {cfg.icon}
+            {cfg.label}
+          </span>
+        )}
+      </div>
+
+      {/* Post-cancel success */}
+      {cancelled && (
+        <div className="flex items-center gap-1.5 text-xs text-amber-400">
+          <CheckCircle2 className="size-3.5 shrink-0" />
+          Subscription cancelled. Access continues until end of billing period.
+        </div>
+      )}
+
+      {/* Free plan → upgrade CTA */}
+      {!isLoading && plan === "free" && (
+        <a
+          href={STRIPE_BASIC_LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg text-xs font-medium",
+            "bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-900/30",
+          )}
+        >
+          <Zap className="size-3.5" />
+          Upgrade to Basic
+          <ArrowRight className="size-3.5 ml-auto" />
+        </a>
+      )}
+
+      {/* Paid + active → cancel button */}
+      {!isLoading && isPaidPlan && isActive && !cancelled && (
+        <button
+          onClick={() => setConfirming(true)}
+          className="text-xs text-zinc-600 hover:text-red-400 transition-colors underline underline-offset-2 w-full text-left"
+        >
+          Cancel subscription
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Main modal ────────────────────────────────────────────────────────────────
 
 export function ApiKeyModal() {
   const settingsOpen    = useUIStore((s) => s.settingsOpen);
@@ -97,15 +278,18 @@ export function ApiKeyModal() {
               </div>
               <div>
                 <Dialog.Title className="text-sm font-semibold text-foreground">
-                  Alpaca Paper Trading
+                  Account Settings
                 </Dialog.Title>
-                <p className="text-xs text-muted-foreground">API credentials</p>
+                <p className="text-xs text-muted-foreground">Subscription & API credentials</p>
               </div>
             </div>
             <Dialog.Close className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors">
               <X className="size-4" />
             </Dialog.Close>
           </div>
+
+          {/* Subscription status panel (logged-in users only) */}
+          <SubscriptionPanel />
 
           {/* Not logged in warning */}
           {!user && (
@@ -130,6 +314,15 @@ export function ApiKeyModal() {
               </div>
             </div>
           )}
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-white/5" />
+            <span className="text-xs text-zinc-600 flex items-center gap-1.5">
+              <Key className="size-3" /> Alpaca Paper Trading
+            </span>
+            <div className="flex-1 h-px bg-white/5" />
+          </div>
 
           {/* Form */}
           <div className="space-y-4">

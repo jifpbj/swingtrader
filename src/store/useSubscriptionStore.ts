@@ -23,6 +23,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Plan = "free" | "basic" | "executive";
@@ -33,12 +35,17 @@ export interface SubscriptionState {
   status: "loading" | "active" | "inactive";
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  /** true while the cancel API call is in flight */
+  cancelling: boolean;
+  /** error message from a failed cancellation attempt */
+  cancelError: string | null;
 
   /** @internal — Firestore unsubscribe handle */
   _unsub: Unsubscribe | null;
 
   loadSubscription:   (uid: string) => void;
   unloadSubscription: () => void;
+  cancelSubscription: () => Promise<void>;
 
   /** Convenience helper used for UI gating */
   isPaid: () => boolean;
@@ -51,6 +58,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   status:                 "loading",
   stripeCustomerId:       null,
   stripeSubscriptionId:   null,
+  cancelling:             false,
+  cancelError:            null,
   _unsub:                 null,
 
   loadSubscription: (uid: string) => {
@@ -91,8 +100,36 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       status:               "inactive",
       stripeCustomerId:     null,
       stripeSubscriptionId: null,
+      cancelling:           false,
+      cancelError:          null,
       _unsub:               null,
     });
+  },
+
+  cancelSubscription: async () => {
+    set({ cancelling: true, cancelError: null });
+    try {
+      const { auth } = await import("@/lib/firebase");
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("Not authenticated");
+
+      const resp = await fetch(`${API_BASE}/api/v1/billing/cancel-subscription`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error((body as { detail?: string }).detail ?? "Cancellation failed");
+      }
+      // Firestore onSnapshot will update plan/status automatically via webhook
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      set({ cancelError: msg });
+      throw err;
+    } finally {
+      set({ cancelling: false });
+    }
   },
 
   isPaid: () => {
