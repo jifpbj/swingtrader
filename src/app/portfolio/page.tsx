@@ -168,7 +168,7 @@ export default function PortfolioPage() {
           </div>
 
           {/* Trade table */}
-          <TradeHistoryTable trades={filteredTrades} />
+          <TradeHistoryTable trades={filteredTrades} period={period} />
         </section>
       </div>
     </main>

@@ -22,6 +22,9 @@ interface Props {
 export function PositionsTable({ positions }: Props) {
   const { placeOrder } = useAlpacaStore();
 
+  const totalMktValue  = positions.reduce((s, p) => s + (p.market_value  ?? 0), 0);
+  const totalUnrealPnl = positions.reduce((s, p) => s + (p.unrealized_pl ?? 0), 0);
+
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<OrderType>("market");
   const [qty, setQty] = useState("");
@@ -299,6 +302,29 @@ export function PositionsTable({ positions }: Props) {
             );
           })}
         </tbody>
+        <tfoot>
+          <tr className="border-t border-white/10 bg-zinc-900/30">
+            <td
+              colSpan={4}
+              className="px-3 py-2 text-[10px] text-zinc-500 font-semibold uppercase tracking-wider"
+            >
+              Total · {positions.length} position{positions.length !== 1 ? "s" : ""}
+            </td>
+            <td className="px-3 py-2 text-right font-mono font-bold text-zinc-100 tabular-nums">
+              {currFmt.format(totalMktValue)}
+            </td>
+            <td
+              className={cn(
+                "px-3 py-2 text-right font-mono font-bold tabular-nums",
+                totalUnrealPnl >= 0 ? "text-emerald-400" : "text-red-400",
+              )}
+            >
+              {totalUnrealPnl >= 0 ? "+" : ""}
+              {currFmt.format(totalUnrealPnl)}
+            </td>
+            <td colSpan={2} />
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
