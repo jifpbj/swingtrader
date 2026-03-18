@@ -98,6 +98,7 @@ jobs:
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "512286989618"
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
           NEXT_PUBLIC_STRIPE_BASIC_LINK: https://buy.stripe.com/00waEZ64S3zWbAadqtbQY01
+          NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK: https://buy.stripe.com/dRm4gBeBofiEdIiaehbQY02
         run: npm run build
 
       - name: Deploy to Firebase Hosting (live)

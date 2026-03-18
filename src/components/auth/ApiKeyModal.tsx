@@ -24,8 +24,10 @@ import { useUIStore } from "@/store/useUIStore";
 import { useSubscriptionStore, type Plan } from "@/store/useSubscriptionStore";
 import { cn } from "@/lib/utils";
 
-const STRIPE_BASIC_LINK =
+const STRIPE_BASIC_MONTHLY_LINK =
   process.env.NEXT_PUBLIC_STRIPE_BASIC_LINK ?? "https://buy.stripe.com/00waEZ64S3zWbAadqtbQY01";
+const STRIPE_BASIC_ANNUAL_LINK =
+  process.env.NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK ?? "https://buy.stripe.com/dRm4gBeBofiEdIiaehbQY02";
 
 // ─── Plan badge config ─────────────────────────────────────────────────────────
 
@@ -75,6 +77,7 @@ function SubscriptionPanel() {
 
   const [confirming, setConfirming] = useState(false);
   const [cancelled,  setCancelled]  = useState(false);
+  const [annual,     setAnnual]     = useState(false);
 
   // Not logged in — nothing to show
   if (!user) return null;
@@ -168,21 +171,58 @@ function SubscriptionPanel() {
         </div>
       )}
 
-      {/* Free plan → upgrade CTA */}
+      {/* Free plan → billing toggle + upgrade CTA */}
       {!isLoading && plan === "free" && (
-        <a
-          href={STRIPE_BASIC_LINK}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn(
-            "flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg text-xs font-medium",
-            "bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-900/30",
-          )}
-        >
-          <Zap className="size-3.5" />
-          Upgrade to Basic
-          <ArrowRight className="size-3.5 ml-auto" />
-        </a>
+        <div className="space-y-2.5">
+          {/* Monthly / Annual toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-500">Billing</span>
+            <div className="flex items-center gap-1.5 p-0.5 rounded-lg bg-zinc-800/80 border border-white/5">
+              <button
+                onClick={() => setAnnual(false)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                  !annual
+                    ? "bg-zinc-600 text-white shadow"
+                    : "text-zinc-500 hover:text-zinc-300",
+                )}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setAnnual(true)}
+                className={cn(
+                  "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                  annual
+                    ? "bg-zinc-600 text-white shadow"
+                    : "text-zinc-500 hover:text-zinc-300",
+                )}
+              >
+                Annual
+                <span className={cn(
+                  "text-[10px] font-semibold px-1 py-0.5 rounded",
+                  annual ? "bg-emerald-500/30 text-emerald-300" : "bg-zinc-700 text-zinc-500",
+                )}>
+                  Save 20%
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <a
+            href={annual ? STRIPE_BASIC_ANNUAL_LINK : STRIPE_BASIC_MONTHLY_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-lg text-xs font-medium",
+              "bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-900/30",
+            )}
+          >
+            <Zap className="size-3.5" />
+            Upgrade to Basic{annual ? " · Annual" : ""}
+            <ArrowRight className="size-3.5 ml-auto" />
+          </a>
+        </div>
       )}
 
       {/* Paid + active → cancel button */}
