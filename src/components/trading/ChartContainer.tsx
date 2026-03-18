@@ -16,10 +16,9 @@ import {
 import type { Candle, CrossoverSignal } from "@/types/market";
 import { Maximize2, RefreshCw, Bot, MoonStar } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
-import { toBackendTf, BACKEND_TF, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
+import { toBackendTf, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
 import type { Timeframe } from "@/types/market";
 import { useStrategyStore } from "@/store/useStrategyStore";
-import { useAlpacaStore } from "@/store/useAlpacaStore";
 
 import type {
   IChartApi, ISeriesApi, UTCTimestamp, Time,
@@ -39,17 +38,8 @@ const CHART_COLORS = {
 };
 
 /**
- * How many bars to fetch from the API per timeframe.
+ * How many bars to fetch from the API per request.
  * Capped at the backend maximum of 1 000.
- *
- * The goal is to load enough history for each timeframe to be analytically
- * useful without hammering the API:
- *   1m  → ~8 hours of crypto data (500 bars × 60 s)
- *   5m  → ~42 hours / ~6 trading days
- *   15m → ~6 days crypto / ~3 trading weeks
- *   1h  → ~30 days
- *   4h  → ~120 days / ~4 months
- *   1d  → ~4 years (request max; broker returns what it has)
  */
 const FETCH_LIMIT: Record<string, number> = {
   "1m":  500,
@@ -62,28 +52,22 @@ const FETCH_LIMIT: Record<string, number> = {
 
 /**
  * How many bars to show in the initial viewport after loading.
- * Gives each timeframe a comfortable default scale without being either
- * too zoomed-in (tiny candles) or too zoomed-out (overwhelming detail).
  */
 const INITIAL_VISIBLE_BARS: Record<string, number> = {
-  "1m":  60,   // ~1 hour
-  "5m":  72,   // ~6 hours
-  "15m": 80,   // ~20 hours
-  "1h":  90,   // ~4 days
-  "4h":  90,   // ~15 days
-  "1d":  180,  // ~9 months (half a year visible; years of history to scroll)
+  "1m":  60,
+  "5m":  72,
+  "15m": 80,
+  "1h":  90,
+  "4h":  90,
+  "1d":  180,
 };
 
 /**
  * Normalise raw OHLCV bars before seeding the chart.
  *
- * 1. Floor every timestamp to its bar boundary so historical bars align with
- *    the same rounding applied to live ticks (Math.floor(t / barSecs) * barSecs).
- * 2. Enforce OHLC integrity: high must be ≥ max(open, close) and low must be
- *    ≤ min(open, close).  Malformed bars from the API or rounding errors would
- *    otherwise produce impossible candle shapes (body poking outside the wick).
- * 3. Deduplicate — keep the last occurrence when two bars share a timestamp
- *    (can happen at session boundaries with some data providers).
+ * 1. Floor every timestamp to its bar boundary.
+ * 2. Enforce OHLC integrity: high ≥ max(open, close), low ≤ min(open, close).
+ * 3. Deduplicate — keep the last occurrence when two bars share a timestamp.
  * 4. Sort ascending — lightweight-charts requires monotonically increasing time.
  */
 function normalizeHistoricalBars(raw: Candle[], barSecs: number): Candle[] {
@@ -93,8 +77,8 @@ function normalizeHistoricalBars(raw: Candle[], barSecs: number): Candle[] {
     map.set(t, {
       time:   t,
       open:   c.open,
-      high:   Math.max(c.high, c.open, c.close),   // must cover the body
-      low:    Math.min(c.low,  c.open, c.close),   // must cover the body
+      high:   Math.max(c.high, c.open, c.close),
+      low:    Math.min(c.low,  c.open, c.close),
       close:  c.close,
       volume: c.volume,
     });
@@ -102,48 +86,23 @@ function normalizeHistoricalBars(raw: Candle[], barSecs: number): Candle[] {
   return Array.from(map.values()).sort((a, b) => a.time - b.time);
 }
 
-// ─── Direct Alpaca Data API helpers ────────────────────────────────────────────
-
-interface AlpacaBar { t: string; o: number; h: number; l: number; c: number; v: number; }
-
-/** Resample 1-hour candles into 4-hour candles (client-side, for IEX feed). */
-function resample1HTo4H(candles: Candle[]): Candle[] {
-  const buckets = new Map<number, Candle>();
-  for (const c of candles) {
-    const bucket = Math.floor(c.time / 14400) * 14400;
-    const ex = buckets.get(bucket);
-    buckets.set(bucket, ex ? {
-      time: bucket, open: ex.open,
-      high: Math.max(ex.high, c.high), low: Math.min(ex.low, c.low),
-      close: c.close, volume: ex.volume + c.volume,
-    } : { ...c, time: bucket });
-  }
-  return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
-}
+// ─── Backend proxy fetch ──────────────────────────────────────────────────────
 
 /**
- * Fetch OHLCV bars directly from the Alpaca Data API using the user's stored
- * paper-trading credentials.  Falls back to the FastAPI backend proxy if no
- * credentials are available (or if the Alpaca request fails).
+ * Fetch OHLCV bars from the FastAPI backend, which authenticates with the
+ * Alpaca Broker API server-side.  Free users (no Alpaca account) get data
+ * through the platform's own broker credentials — no client-side API keys
+ * ever leave the browser.
  *
- * Alpaca Data API endpoints:
- *   Crypto  → https://data.alpaca.markets/v1beta3/crypto/us/bars
- *   Equities→ https://data.alpaca.markets/v2/stocks/bars  (IEX free feed)
- *
- * The `end` parameter restricts the response to bars whose timestamp is at or
- * before that moment — used when fetching older history on scroll-left.
+ * The `end` parameter restricts the response to bars whose timestamp is at
+ * or before that moment — used when fetching older history on scroll-left.
  */
 async function fetchBars(
   ticker: string,
   timeframe: Timeframe,
   limit: number,
-  apiKey: string,
-  secretKey: string,
   end?: string,
 ): Promise<Candle[]> {
-  // ── Primary: backend proxy (uses Alpaca Broker API — no user account needed) ──
-  // Free users who haven't connected an Alpaca account get data through the
-  // platform's own Broker API key configured server-side.
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const qs = `?timeframe=${toBackendTf(timeframe)}&limit=${limit}` +
              (end ? `&end=${encodeURIComponent(end)}` : "");
@@ -153,73 +112,13 @@ async function fetchBars(
     );
     if (resp.ok) {
       const json = await resp.json() as { bars: Candle[] };
-      if ((json.bars ?? []).length) return json.bars;
+      return json.bars ?? [];
     }
-  } catch { /* fall through */ }
-
-  // ── Fallback: direct Alpaca Data API with the user's paper-trading creds ──
-  // Kicks in when the backend is unreachable (local dev without FastAPI running)
-  // or the broker proxy returned empty results.
-  if (!apiKey || !secretKey) return [];
-
-  const isCrypto = ticker.includes("/");
-  const headers  = {
-    "APCA-API-KEY-ID":     apiKey,
-    "APCA-API-SECRET-KEY": secretKey,
-  };
-
-  try {
-    if (isCrypto) {
-      const params = new URLSearchParams({
-        symbols:   ticker,
-        timeframe: BACKEND_TF[timeframe] ?? "15Min",
-        limit:     String(limit),
-      });
-      if (end) params.set("end", end);
-      const resp = await fetch(
-        `https://data.alpaca.markets/v1beta3/crypto/us/bars?${params}`,
-        { headers },
-      );
-      if (resp.ok) {
-        const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
-        const raw  = json.bars?.[ticker] ?? [];
-        if (raw.length) return raw.map(b => ({
-          time: Math.floor(new Date(b.t).getTime() / 1000),
-          open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
-        }));
-      }
-    } else {
-      // 4h equity: fetch 1h bars and resample client-side (IEX feed)
-      const fetchTf    = timeframe === "4h" ? "1h" : timeframe;
-      const fetchLimit = timeframe === "4h" ? limit * 4 + 10 : limit;
-      const params = new URLSearchParams({
-        symbols:   ticker,
-        timeframe: BACKEND_TF[fetchTf as Timeframe] ?? "15Min",
-        limit:     String(fetchLimit),
-        feed:      "iex",
-        sort:      "asc",
-      });
-      if (end) params.set("end", end);
-      const resp = await fetch(
-        `https://data.alpaca.markets/v2/stocks/bars?${params}`,
-        { headers },
-      );
-      if (resp.ok) {
-        const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
-        const raw  = json.bars?.[ticker] ?? [];
-        if (raw.length) {
-          const candles: Candle[] = raw.map(b => ({
-            time: Math.floor(new Date(b.t).getTime() / 1000),
-            open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
-          }));
-          return (timeframe === "4h" ? resample1HTo4H(candles) : candles).slice(-limit);
-        }
-      }
-    }
-  } catch { /* ignore */ }
-
+  } catch { /* backend unreachable */ }
   return [];
 }
+
+// ─── Chart marker helpers ─────────────────────────────────────────────────────
 
 function buildMarkers(crossovers: CrossoverSignal[]): SeriesMarker<Time>[] {
   return crossovers.map((c) => ({
@@ -288,22 +187,7 @@ function buildTD9Markers(candles: Candle[]): SeriesMarker<Time>[] {
   return markers;
 }
 
-function computeMarkersForTab(
-  candles: Candle[], tab: IndicatorTab,
-  emaPeriod: number,
-  bbPeriod: number, bbStdDev: number,
-  rsiPeriod: number, rsiOverbought: number, rsiOversold: number,
-  macdFast: number, macdSlow: number, macdSignal: number,
-): CrossoverSignal[] {
-  const closes = candles.map(c => c.close);
-  switch (tab) {
-    case "EMA":  return detectCrossovers(candles, computeEMA(closes, emaPeriod));
-    case "BB":   return detectBollingerCrossovers(candles, bbPeriod, bbStdDev);
-    case "RSI":  return detectRSICrossovers(candles, computeRSI(closes, rsiPeriod), rsiOverbought, rsiOversold);
-    case "MACD": return detectMACDCrossovers(candles, computeMACDValues(closes, macdFast, macdSlow, macdSignal));
-    case "TD9":  return [];
-  }
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function ChartContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -331,18 +215,14 @@ export function ChartContainer() {
   const loadingMoreRef   = useRef(false);
   const tickerRef        = useRef("");
   const loadMoreRef      = useRef<(() => void) | null>(null);
+  const loadMoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when loadMore returned 0 new bars for the current oldest timestamp,
+  // so we don't keep hammering the server on every scroll event.
+  const noMoreHistoryRef = useRef(false);
 
   const ticker              = useUIStore(s => s.ticker);
   const timeframe           = useUIStore(s => s.timeframe);
   const demoMode            = useUIStore(s => s.demoMode);
-
-  // Alpaca credentials — read into refs so they don't re-trigger chart init
-  const alpacaApiKey    = useAlpacaStore(s => s.apiKey);
-  const alpacaSecretKey = useAlpacaStore(s => s.secretKey);
-  const alpacaApiKeyRef    = useRef(alpacaApiKey);
-  const alpacaSecretKeyRef = useRef(alpacaSecretKey);
-  useEffect(() => { alpacaApiKeyRef.current    = alpacaApiKey; },    [alpacaApiKey]);
-  useEffect(() => { alpacaSecretKeyRef.current = alpacaSecretKey; }, [alpacaSecretKey]);
   const livePrice           = useUIStore(s => s.livePrice);
 
   // Active algo strategy for overlay badge
@@ -362,19 +242,19 @@ export function ChartContainer() {
   const macdSlowPeriod      = useUIStore(s => s.macdSlowPeriod);
   const macdSignalPeriod    = useUIStore(s => s.macdSignalPeriod);
 
-  // Refs mirror store so async callbacks see current values without adding to chart-init deps
+  // Refs mirror store so async callbacks see current values without chart-init deps
   const activeTabRef      = useRef(activeIndicatorTab);
   const emaPeriodRef      = useRef(emaPeriod);
   const bbPeriodRef       = useRef(bbPeriod);
   const bbStdDevRef       = useRef(bbStdDev);
-  const showMarkersRef      = useRef(showSignalMarkers);
-  const timeframeRef        = useRef(timeframe);
-  const rsiPeriodRef        = useRef(rsiPeriod);
-  const rsiOverboughtRef    = useRef(rsiOverbought);
-  const rsiOversoldRef      = useRef(rsiOversold);
-  const macdFastRef         = useRef(macdFastPeriod);
-  const macdSlowRef         = useRef(macdSlowPeriod);
-  const macdSignalRef       = useRef(macdSignalPeriod);
+  const showMarkersRef    = useRef(showSignalMarkers);
+  const timeframeRef      = useRef(timeframe);
+  const rsiPeriodRef      = useRef(rsiPeriod);
+  const rsiOverboughtRef  = useRef(rsiOverbought);
+  const rsiOversoldRef    = useRef(rsiOversold);
+  const macdFastRef       = useRef(macdFastPeriod);
+  const macdSlowRef       = useRef(macdSlowPeriod);
+  const macdSignalRef     = useRef(macdSignalPeriod);
 
   useEffect(() => { activeTabRef.current    = activeIndicatorTab; }, [activeIndicatorTab]);
   useEffect(() => { emaPeriodRef.current    = emaPeriod; },         [emaPeriod]);
@@ -395,6 +275,9 @@ export function ChartContainer() {
     if (!containerRef.current) return;
     let mounted = true;
 
+    // Reset history-exhausted flag on ticker/timeframe change
+    noMoreHistoryRef.current = false;
+
     import("lightweight-charts").then(async (lc) => {
       if (!mounted || !containerRef.current) return;
 
@@ -414,12 +297,12 @@ export function ChartContainer() {
 
       // Candlestick — hollow body for bullish (close > open), filled for bearish
       const candleSeries = chart.addSeries(lc.CandlestickSeries, {
-        upColor:          "rgba(0,0,0,0)",   // transparent fill → hollow bullish body
-        downColor:        "#ef4444",          // solid red fill   → filled bearish body
-        borderUpColor:    "#22c55e",          // green outline for bullish
-        borderDownColor:  "#dc2626",          // dark-red outline for bearish
-        wickUpColor:      "#22c55e",          // green wick for bullish
-        wickDownColor:    "#ef4444",          // red wick for bearish
+        upColor:          "rgba(0,0,0,0)",
+        downColor:        "#ef4444",
+        borderUpColor:    "#22c55e",
+        borderDownColor:  "#dc2626",
+        wickUpColor:      "#22c55e",
+        wickDownColor:    "#ef4444",
       });
       candleSeriesRef.current = candleSeries;
 
@@ -435,42 +318,33 @@ export function ChartContainer() {
       const bbMiddle = chart.addSeries(lc.LineSeries, { color: "rgba(56,189,248,0.3)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
       bbMiddleRef.current = bbMiddle;
 
-      // Sub-pane 1 — MACD: line (blue), signal (red), histogram (green/red per bar)
+      // Sub-pane 1 — MACD
       const macdLineSeries = chart.addSeries(lc.LineSeries, { color: "#60a5fa", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
       macdLineSeriesRef.current = macdLineSeries;
       const macdSignalSeries = chart.addSeries(lc.LineSeries, { color: "#f87171", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 1);
       macdSignalSeriesRef.current = macdSignalSeries;
       const macdHistSeries = chart.addSeries(lc.HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 1);
       macdHistSeriesRef.current = macdHistSeries;
-
-      // Sub-pane 1 starts minimized (shown only when MACD tab is active)
       chart.panes()[1]?.setHeight(30);
 
-      // Sub-pane 2 — RSI: violet line with OB/OS price lines
+      // Sub-pane 2 — RSI
       const rsiSeries = chart.addSeries(lc.LineSeries, { color: "#a78bfa", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, 2);
       rsiSeriesRef.current = rsiSeries;
       rsiObLineRef.current = rsiSeries.createPriceLine({ price: 70, color: "rgba(167,139,250,0.5)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: true, lineVisible: true, title: "OB" });
       rsiOsLineRef.current = rsiSeries.createPriceLine({ price: 30, color: "rgba(167,139,250,0.5)", lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: true, lineVisible: true, title: "OS" });
-
-      // Sub-pane 2 starts minimized (shown only when RSI tab is active)
       chart.panes()[2]?.setHeight(30);
 
-      // Seed historical data — fetch depth and initial zoom scale with the timeframe
+      // ── Seed historical data ──────────────────────────────────────────────
       const barSecs    = TIMEFRAME_SECONDS[timeframe] ?? 900;
       const fetchLimit = FETCH_LIMIT[timeframe] ?? 500;
       let rawCandles: Candle[] = [];
       if (demoMode) {
-        // Fetch real price to seed GBM at realistic level (same params as useMockData)
         const basePrice = await getDemoBasePrice(ticker);
         rawCandles = generateMockCandles(barSecs, 300, tickerSeed(ticker), basePrice);
       } else {
-        rawCandles = await fetchBars(
-          ticker, timeframe, fetchLimit,
-          alpacaApiKey, alpacaSecretKey,
-        );
+        rawCandles = await fetchBars(ticker, timeframe, fetchLimit);
       }
 
-      // Normalize before use: floor timestamps, enforce OHLC integrity, deduplicate, sort
       const initialCandles = normalizeHistoricalBars(rawCandles, barSecs);
 
       candlesRef.current = initialCandles;
@@ -480,14 +354,9 @@ export function ChartContainer() {
       volumeMapRef.current = volMap;
 
       candleSeries.setData(initialCandles.map(c => ({
-        time:  c.time as UTCTimestamp,
-        open:  c.open,
-        high:  c.high,
-        low:   c.low,
-        close: c.close,
+        time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close,
       })));
 
-      // Marker plugin (data applied by the unified update effect when chartReady fires)
       markerPluginRef.current = lc.createSeriesMarkers(candleSeries, []);
 
       chart.subscribeCrosshairMove((param) => {
@@ -498,18 +367,21 @@ export function ChartContainer() {
         setTooltip({ x: param.point.x, y: param.point.y, ...bar, volume: volumeMapRef.current.get(time) ?? 0, time });
       });
 
-      // Open at a sensible zoom level for the selected timeframe
+      // Set initial viewport
       const visibleBars = INITIAL_VISIBLE_BARS[timeframe] ?? 80;
       const barCount = initialCandles.length;
       chart.timeScale().setVisibleLogicalRange({
         from: Math.max(0, barCount - visibleBars),
         to:   barCount + 3,
       });
-      // Trigger load-more when user scrolls or zooms near the left edge.
-      // Threshold of 20 bars gives enough runway so bars appear before the
-      // user reaches the true edge (especially when zoomed out far).
+
+      // Load more when user scrolls or zooms near the left edge (debounced)
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range && range.from <= 20) loadMoreRef.current?.();
+        if (range && range.from <= 20) {
+          // Debounce — collapse rapid scroll events into one fetch
+          if (loadMoreTimerRef.current) clearTimeout(loadMoreTimerRef.current);
+          loadMoreTimerRef.current = setTimeout(() => loadMoreRef.current?.(), 300);
+        }
       });
 
       setChartReady(true);
@@ -523,6 +395,7 @@ export function ChartContainer() {
 
     return () => {
       mounted = false; ro.disconnect(); chartRef.current?.remove();
+      if (loadMoreTimerRef.current) clearTimeout(loadMoreTimerRef.current);
       chartRef.current = candleSeriesRef.current = emaSeriesRef.current = markerPluginRef.current =
       bbUpperRef.current = bbLowerRef.current = bbMiddleRef.current =
       rsiSeriesRef.current = rsiObLineRef.current = rsiOsLineRef.current =
@@ -532,8 +405,6 @@ export function ChartContainer() {
   }, [ticker, timeframe, demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Unified indicator update effect ──────────────────────────────────────
-  // Fires whenever the active tab, any config value, or chartReady changes.
-  // chartReady in deps ensures this runs AFTER async chart init populates all refs.
   useEffect(() => {
     if (!chartReady) return;
     const candles = candlesRef.current;
@@ -552,7 +423,6 @@ export function ChartContainer() {
     macdHistSeriesRef.current?.setData([]);
     markerPluginRef.current?.setMarkers([]);
 
-    // Collapse sub-panes unless their tab is active
     if (activeIndicatorTab !== "MACD") chartRef.current?.panes()[1]?.setHeight(30);
     if (activeIndicatorTab !== "RSI")  chartRef.current?.panes()[2]?.setHeight(30);
 
@@ -580,12 +450,10 @@ export function ChartContainer() {
         rsiSeriesRef.current?.setData(
           candles.flatMap((c, i) => rsi[i] !== null ? [{ time: c.time as UTCTimestamp, value: rsi[i]! }] : [])
         );
-        // Keep OB/OS lines in sync with slider values
         rsiObLineRef.current?.applyOptions({ price: rsiOverbought });
         rsiOsLineRef.current?.applyOptions({ price: rsiOversold });
         if (showSignalMarkers)
           markerPluginRef.current?.setMarkers(buildMarkers(detectRSICrossovers(candles, rsi, rsiOverbought, rsiOversold)));
-        // Expand the RSI sub-pane
         chartRef.current?.panes()[2]?.setHeight(110);
         break;
       }
@@ -611,7 +479,6 @@ export function ChartContainer() {
         );
         if (showSignalMarkers)
           markerPluginRef.current?.setMarkers(buildMarkers(detectMACDCrossovers(candles, macd)));
-        // Expand the MACD sub-pane
         chartRef.current?.panes()[1]?.setHeight(130);
         break;
       }
@@ -635,91 +502,77 @@ export function ChartContainer() {
   const handleCandle = useCallback((rawCandle: Candle) => {
     if (!candleSeriesRef.current) return;
 
-    // 1. Floor to bar boundary — prevents per-second WS ticks from creating
-    //    individual 1-second bars instead of updating the current forming bar.
     const barSecs = TIMEFRAME_SECONDS[timeframeRef.current] ?? 900;
     const t = Math.floor(rawCandle.time / barSecs) * barSecs;
 
-    import("lightweight-charts").then(() => {
-      if (!candleSeriesRef.current) return;
+    const arr = candlesRef.current;
+    const last = arr[arr.length - 1];
+    const isNewBar = !last || last.time !== t;
 
-      const arr = candlesRef.current;
-      const last = arr[arr.length - 1];
-      const isNewBar = !last || last.time !== t;
+    const bar: Candle = isNewBar ? { ...rawCandle, time: t } : {
+      time:   t,
+      open:   last.open,
+      high:   Math.max(last.high, rawCandle.high),
+      low:    Math.min(last.low,  rawCandle.low),
+      close:  rawCandle.close,
+      volume: rawCandle.volume,
+    };
 
-      // 2. Properly accumulate OHLC for the forming bar:
-      //    - Open  : locked to the first tick that opened this bar
-      //    - High  : running maximum across all ticks in this bar
-      //    - Low   : running minimum across all ticks in this bar
-      //    - Close : always the most recent price
-      //    - Volume: cumulative total for this bar (backend sends bar-total, not delta)
-      const bar: Candle = isNewBar ? { ...rawCandle, time: t } : {
-        time:   t,
-        open:   last.open,
-        high:   Math.max(last.high, rawCandle.high),
-        low:    Math.min(last.low,  rawCandle.low),
-        close:  rawCandle.close,
-        volume: rawCandle.volume,
-      };
-
-      // 3. Push accumulated bar to the chart and local store
-      candleSeriesRef.current.update({
-        time: bar.time as UTCTimestamp,
-        open: bar.open, high: bar.high, low: bar.low, close: bar.close,
-      });
-      volumeMapRef.current.set(bar.time, bar.volume);
-
-      if (!isNewBar) arr[arr.length - 1] = bar;
-      else { arr.push(bar); if (arr.length > 500) arr.shift(); }
-
-      // 4. Incremental indicator updates (all use arr which now contains bar)
-      const ts = bar.time as UTCTimestamp;
-
-      if (activeTabRef.current === "EMA" && emaSeriesRef.current) {
-        const emas = computeEMA(arr.map(c => c.close), emaPeriodRef.current);
-        const lastEma = emas[emas.length - 1];
-        if (lastEma !== null) emaSeriesRef.current.update({ time: ts, value: lastEma });
-        if (isNewBar && showMarkersRef.current && markerPluginRef.current)
-          markerPluginRef.current.setMarkers(buildMarkers(detectCrossovers(arr, emas)));
-      }
-
-      if (activeTabRef.current === "BB" && bbUpperRef.current && bbLowerRef.current && bbMiddleRef.current) {
-        const bbs = computeBollingerBands(arr, bbPeriodRef.current, bbStdDevRef.current);
-        if (bbs.length) {
-          const b = bbs[bbs.length - 1];
-          bbUpperRef.current.update({ time: ts, value: b.upper });
-          bbLowerRef.current.update({ time: ts, value: b.lower });
-          bbMiddleRef.current.update({ time: ts, value: b.middle });
-        }
-        if (isNewBar && showMarkersRef.current && markerPluginRef.current)
-          markerPluginRef.current.setMarkers(buildMarkers(detectBollingerCrossovers(arr, bbPeriodRef.current, bbStdDevRef.current)));
-      }
-
-      if (activeTabRef.current === "RSI" && rsiSeriesRef.current) {
-        const rsi = computeRSI(arr.map(c => c.close), rsiPeriodRef.current);
-        const lastRsi = rsi[rsi.length - 1];
-        if (lastRsi !== null) rsiSeriesRef.current.update({ time: ts, value: lastRsi });
-        if (isNewBar && showMarkersRef.current && markerPluginRef.current)
-          markerPluginRef.current.setMarkers(buildMarkers(detectRSICrossovers(arr, rsi, rsiOverboughtRef.current, rsiOversoldRef.current)));
-      }
-
-      if (activeTabRef.current === "MACD" && macdLineSeriesRef.current && macdSignalSeriesRef.current && macdHistSeriesRef.current) {
-        const macd = computeMACDValues(arr.map(c => c.close), macdFastRef.current, macdSlowRef.current, macdSignalRef.current);
-        const m = macd[macd.length - 1];
-        if (m.macd !== null) macdLineSeriesRef.current.update({ time: ts, value: m.macd });
-        if (m.signal !== null) macdSignalSeriesRef.current.update({ time: ts, value: m.signal });
-        if (m.macd !== null && m.signal !== null) {
-          const hist = m.macd - m.signal;
-          macdHistSeriesRef.current.update({ time: ts, value: hist, color: hist >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)" });
-        }
-        if (isNewBar && showMarkersRef.current && markerPluginRef.current)
-          markerPluginRef.current.setMarkers(buildMarkers(detectMACDCrossovers(arr, macd)));
-      }
-
-      if (activeTabRef.current === "TD9" && isNewBar && showMarkersRef.current && markerPluginRef.current)
-        markerPluginRef.current.setMarkers(buildTD9Markers(arr));
-
+    candleSeriesRef.current.update({
+      time: bar.time as UTCTimestamp,
+      open: bar.open, high: bar.high, low: bar.low, close: bar.close,
     });
+    volumeMapRef.current.set(bar.time, bar.volume);
+
+    if (!isNewBar) arr[arr.length - 1] = bar;
+    else arr.push(bar);
+
+    // Incremental indicator updates
+    const ts = bar.time as UTCTimestamp;
+
+    if (activeTabRef.current === "EMA" && emaSeriesRef.current) {
+      const emas = computeEMA(arr.map(c => c.close), emaPeriodRef.current);
+      const lastEma = emas[emas.length - 1];
+      if (lastEma !== null) emaSeriesRef.current.update({ time: ts, value: lastEma });
+      if (isNewBar && showMarkersRef.current && markerPluginRef.current)
+        markerPluginRef.current.setMarkers(buildMarkers(detectCrossovers(arr, emas)));
+    }
+
+    if (activeTabRef.current === "BB" && bbUpperRef.current && bbLowerRef.current && bbMiddleRef.current) {
+      const bbs = computeBollingerBands(arr, bbPeriodRef.current, bbStdDevRef.current);
+      if (bbs.length) {
+        const b = bbs[bbs.length - 1];
+        bbUpperRef.current.update({ time: ts, value: b.upper });
+        bbLowerRef.current.update({ time: ts, value: b.lower });
+        bbMiddleRef.current.update({ time: ts, value: b.middle });
+      }
+      if (isNewBar && showMarkersRef.current && markerPluginRef.current)
+        markerPluginRef.current.setMarkers(buildMarkers(detectBollingerCrossovers(arr, bbPeriodRef.current, bbStdDevRef.current)));
+    }
+
+    if (activeTabRef.current === "RSI" && rsiSeriesRef.current) {
+      const rsi = computeRSI(arr.map(c => c.close), rsiPeriodRef.current);
+      const lastRsi = rsi[rsi.length - 1];
+      if (lastRsi !== null) rsiSeriesRef.current.update({ time: ts, value: lastRsi });
+      if (isNewBar && showMarkersRef.current && markerPluginRef.current)
+        markerPluginRef.current.setMarkers(buildMarkers(detectRSICrossovers(arr, rsi, rsiOverboughtRef.current, rsiOversoldRef.current)));
+    }
+
+    if (activeTabRef.current === "MACD" && macdLineSeriesRef.current && macdSignalSeriesRef.current && macdHistSeriesRef.current) {
+      const macd = computeMACDValues(arr.map(c => c.close), macdFastRef.current, macdSlowRef.current, macdSignalRef.current);
+      const m = macd[macd.length - 1];
+      if (m.macd !== null) macdLineSeriesRef.current.update({ time: ts, value: m.macd });
+      if (m.signal !== null) macdSignalSeriesRef.current.update({ time: ts, value: m.signal });
+      if (m.macd !== null && m.signal !== null) {
+        const hist = m.macd - m.signal;
+        macdHistSeriesRef.current.update({ time: ts, value: hist, color: hist >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)" });
+      }
+      if (isNewBar && showMarkersRef.current && markerPluginRef.current)
+        markerPluginRef.current.setMarkers(buildMarkers(detectMACDCrossovers(arr, macd)));
+    }
+
+    if (activeTabRef.current === "TD9" && isNewBar && showMarkersRef.current && markerPluginRef.current)
+      markerPluginRef.current.setMarkers(buildTD9Markers(arr));
   }, []);
 
   useMarketData({ onCandle: handleCandle });
@@ -727,12 +580,12 @@ export function ChartContainer() {
 
   // ─── Load more history when scrolling left ─────────────────────────────────
   const loadMoreHistory = useCallback(async () => {
-    if (loadingMoreRef.current || !oldestBarTimeRef.current || !candleSeriesRef.current) return;
+    if (loadingMoreRef.current || noMoreHistoryRef.current ||
+        !oldestBarTimeRef.current || !candleSeriesRef.current) return;
     loadingMoreRef.current = true;
 
     const barSecs = TIMEFRAME_SECONDS[timeframeRef.current] ?? 900;
     const limit   = FETCH_LIMIT[timeframeRef.current] ?? 500;
-    // Fetch bars strictly before the oldest we have
     const endISO  = new Date((oldestBarTimeRef.current - 1) * 1000).toISOString();
 
     try {
@@ -740,17 +593,22 @@ export function ChartContainer() {
         tickerRef.current,
         timeframeRef.current as Timeframe,
         limit,
-        alpacaApiKeyRef.current,
-        alpacaSecretKeyRef.current,
         endISO,
       );
       const normalized = normalizeHistoricalBars(newBars, barSecs);
-      if (!normalized.length) return;
+      if (!normalized.length) {
+        // Server has no more data older than this point — stop asking.
+        noMoreHistoryRef.current = true;
+        return;
+      }
 
       // Deduplicate against what we already have
       const existing = new Set(candlesRef.current.map(c => c.time));
       const unique   = normalized.filter(b => !existing.has(b.time));
-      if (!unique.length) return;
+      if (!unique.length) {
+        noMoreHistoryRef.current = true;
+        return;
+      }
 
       // Snapshot the viewport BEFORE modifying data
       const savedRange = chartRef.current?.timeScale().getVisibleLogicalRange();
@@ -760,34 +618,26 @@ export function ChartContainer() {
       for (const c of unique) volumeMapRef.current.set(c.time, c.volume);
       oldestBarTimeRef.current = combined[0].time;
 
-      // ── Update chart synchronously (no dynamic import needed — lc already loaded) ──
-      // Keeping loadingMoreRef.current = true here prevents the setData-triggered
-      // subscribeVisibleLogicalRangeChange callback from spawning a second load
-      // while we're still patching the viewport.
-      if (candleSeriesRef.current) {
-        candleSeriesRef.current.setData(combined.map(c => ({
-          time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close,
-        })));
-        // Shift the viewport right by the number of prepended bars so the view stays stable
-        if (savedRange) {
-          chartRef.current?.timeScale().setVisibleLogicalRange({
-            from: savedRange.from + unique.length,
-            to:   savedRange.to  + unique.length,
-          });
-        }
+      // Update chart synchronously — lock stays held so the setData-triggered
+      // visibleLogicalRangeChange callback can't spawn another load.
+      candleSeriesRef.current.setData(combined.map(c => ({
+        time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close,
+      })));
+      if (savedRange) {
+        chartRef.current?.timeScale().setVisibleLogicalRange({
+          from: savedRange.from + unique.length,
+          to:   savedRange.to  + unique.length,
+        });
       }
 
-      // Re-run the indicator effect with the expanded dataset
       setIndicatorRevision(r => r + 1);
     } finally {
-      // Release lock AFTER setData + setVisibleLogicalRange have run
       loadingMoreRef.current = false;
     }
-  }, []); // reads from refs only — no reactive deps needed
+  }, []);
   useEffect(() => { loadMoreRef.current = loadMoreHistory; }, [loadMoreHistory]);
 
-  // ─── Push live price into the forming candle every second ──────────────────
-  // Skip in demo mode: useMockData drives chart updates via handleCandle directly.
+  // ─── Push live price into the forming candle ───────────────────────────────
   useEffect(() => {
     if (demoMode || !livePrice || !candleSeriesRef.current || !candlesRef.current.length) return;
 
@@ -801,16 +651,14 @@ export function ChartContainer() {
     };
     arr[arr.length - 1] = updated;
 
-    import("lightweight-charts").then(() => {
-      candleSeriesRef.current?.update({
-        time:  updated.time as UTCTimestamp,
-        open:  updated.open,
-        high:  updated.high,
-        low:   updated.low,
-        close: updated.close,
-      });
+    candleSeriesRef.current.update({
+      time:  updated.time as UTCTimestamp,
+      open:  updated.open,
+      high:  updated.high,
+      low:   updated.low,
+      close: updated.close,
     });
-  }, [livePrice]);
+  }, [livePrice, demoMode]);
 
   const legendLabel = () => {
     switch (activeIndicatorTab) {
@@ -828,13 +676,11 @@ export function ChartContainer() {
     activeIndicatorTab === "MACD" ? "solid-blue" : "markers-only";
 
   // ─── After-hours detection ────────────────────────────────────────────────
-  // Crypto trades 24/7 — no badge. Equity: 9:30 AM – 4:00 PM ET weekdays only.
   useEffect(() => {
     const isCrypto = ticker.includes("/");
     if (demoMode || isCrypto) { setAfterHours(false); return; }
 
     function check() {
-      // Use Intl to get current time in Eastern Time (handles DST automatically)
       const etParts = new Intl.DateTimeFormat("en-US", {
         timeZone: "America/New_York",
         hour: "numeric", minute: "numeric", second: "numeric",
@@ -842,17 +688,17 @@ export function ChartContainer() {
       }).formatToParts(new Date());
 
       const get = (type: string) => Number(etParts.find(p => p.type === type)?.value ?? "0");
-      const weekday  = etParts.find(p => p.type === "weekday")?.value ?? "";
+      const weekday   = etParts.find(p => p.type === "weekday")?.value ?? "";
       const isWeekend = weekday === "Sat" || weekday === "Sun";
-      const minutes  = get("hour") * 60 + get("minute");
-      const open     = 9 * 60 + 30;   // 9:30 AM ET
-      const close    = 16 * 60;        // 4:00 PM ET
+      const minutes   = get("hour") * 60 + get("minute");
+      const open      = 9 * 60 + 30;
+      const close     = 16 * 60;
 
       setAfterHours(isWeekend || minutes < open || minutes >= close);
     }
 
     check();
-    const id = setInterval(check, 30_000); // re-check every 30 s
+    const id = setInterval(check, 30_000);
     return () => clearInterval(id);
   }, [ticker, demoMode]);
 
@@ -955,6 +801,8 @@ export function ChartContainer() {
   );
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 const TOOLTIP_W = 180, TOOLTIP_OFFSET = 16;
 
 function CandleTooltipPopup({ tooltip, containerWidth }: { tooltip: CandleTooltip; containerWidth: number }) {
@@ -1011,17 +859,14 @@ function LegendItem({ line, label }: { line: LegendLineType; label: string }) {
     line === "solid-sky"    ? "rgba(56,189,248,0.8)" :
     line === "solid-violet" ? "#a78bfa" :
     line === "solid-blue"   ? "#60a5fa" : "transparent";
-  const dash = undefined;
 
   return (
     <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
       <svg width="20" height="8" viewBox="0 0 20 8">
         {line === "markers-only" ? (
-          <>
-            <polygon points="10,1 13,7 7,7" fill="#22c55e" />
-          </>
+          <polygon points="10,1 13,7 7,7" fill="#22c55e" />
         ) : (
-          <line x1="0" y1="4" x2="20" y2="4" stroke={stroke} strokeWidth="1.5" strokeDasharray={dash} />
+          <line x1="0" y1="4" x2="20" y2="4" stroke={stroke} strokeWidth="1.5" />
         )}
       </svg>
       {label}
