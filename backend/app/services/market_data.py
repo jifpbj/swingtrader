@@ -488,6 +488,24 @@ class AlpacaMarketDataService(MarketDataService):
         if self._broker_http and not self._broker_http.is_closed:
             await self._broker_http.aclose()
 
+    @staticmethod
+    def _compute_start(end: str, timeframe: Timeframe, limit: int, *, is_crypto: bool = False) -> str:
+        """Compute a generous ``start`` ISO-8601 timestamp for Alpaca.
+
+        Alpaca rejects requests where ``end`` is before its default ``start``
+        (roughly "now").  We must always pair ``end`` with an explicit ``start``
+        that is far enough in the past to accommodate ``limit`` bars plus
+        market-closure gaps (weekends / holidays for equities).
+        """
+        bar_secs = TIMEFRAME_SECONDS.get(timeframe, 900)
+        # Crypto trades 24/7 so 1.5× is plenty.
+        # Equities need ~3× to span weekends + holidays.
+        multiplier = 1.5 if is_crypto else 3.0
+        lookback_secs = int(bar_secs * limit * multiplier)
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        start_dt = end_dt - timedelta(seconds=lookback_secs)
+        return start_dt.isoformat()
+
     async def _get_crypto_ohlcv_alpaca(
         self,
         ticker: str,
@@ -504,6 +522,7 @@ class AlpacaMarketDataService(MarketDataService):
         }
         if end:
             params["end"] = end
+            params["start"] = self._compute_start(end, timeframe, limit, is_crypto=True)
 
         try:
             resp = await client.get("/v1beta3/crypto/us/bars", params=params)
@@ -559,6 +578,7 @@ class AlpacaMarketDataService(MarketDataService):
         }
         if end:
             params["end"] = end
+            params["start"] = self._compute_start(end, fetch_tf, fetch_limit, is_crypto=False)
 
         try:
             resp = await client.get("/v2/stocks/bars", params=params)
