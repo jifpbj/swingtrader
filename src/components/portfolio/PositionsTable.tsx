@@ -22,8 +22,10 @@ interface Props {
 export function PositionsTable({ positions }: Props) {
   const { placeOrder } = useAlpacaStore();
 
-  const totalMktValue  = positions.reduce((s, p) => s + (p.market_value  ?? 0), 0);
-  const totalUnrealPnl = positions.reduce((s, p) => s + (p.unrealized_pl ?? 0), 0);
+  const totalMktValue   = positions.reduce((s, p) => s + (p.market_value  ?? 0), 0);
+  const totalUnrealPnl  = positions.reduce((s, p) => s + (p.unrealized_pl ?? 0), 0);
+  const totalCostBasis  = positions.reduce((s, p) => s + p.avg_entry_price * p.qty, 0);
+  const totalUnrealPct  = totalCostBasis > 0 ? (totalUnrealPnl / totalCostBasis) * 100 : 0;
 
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<OrderType>("market");
@@ -322,7 +324,16 @@ export function PositionsTable({ positions }: Props) {
               {totalUnrealPnl >= 0 ? "+" : ""}
               {currFmt.format(totalUnrealPnl)}
             </td>
-            <td colSpan={2} />
+            <td
+              className={cn(
+                "px-3 py-2 text-right font-mono font-bold tabular-nums",
+                totalUnrealPct >= 0 ? "text-emerald-400" : "text-red-400",
+              )}
+            >
+              {totalUnrealPct >= 0 ? "+" : ""}
+              {totalUnrealPct.toFixed(2)}%
+            </td>
+            <td />
           </tr>
         </tfoot>
       </table>
