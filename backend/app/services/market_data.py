@@ -500,6 +500,7 @@ class AlpacaMarketDataService(MarketDataService):
             "symbols": ticker,
             "timeframe": _ALPACA_TIMEFRAME[timeframe],
             "limit": limit,
+            "sort": "asc",
         }
         if end:
             params["end"] = end

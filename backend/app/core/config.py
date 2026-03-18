@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     alpaca_broker_key: str = Field(default="", alias="ALPACA_BROKER_KEY")
     alpaca_broker_secret: str = Field(default="", alias="ALPACA_BROKER_SECRET")
     alpaca_broker_url: str = "https://broker-api.sandbox.alpaca.markets"
-    alpaca_broker_data_url: str = "https://data.sandbox.alpaca.markets"
+    alpaca_broker_data_url: str = "https://data.alpaca.markets"
     use_broker_data: bool = Field(default=False, alias="USE_BROKER_DATA")
 
     # ─── Polygon ──────────────────────────────────────────────────────────────
