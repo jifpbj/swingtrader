@@ -2,6 +2,7 @@
 
 import { useUIStore } from "@/store/useUIStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { UNIVERSE_MAP } from "@/lib/screenerUniverse";
 import { formatPrice, formatPercent } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
@@ -83,6 +84,18 @@ export function TopBar() {
           <span className="text-sm font-bold text-foreground">{ticker}</span>
           <Search className="size-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
         </button>
+
+        {/* Company name — desktop only */}
+        {(() => {
+          const entry = UNIVERSE_MAP[ticker];
+          const name  = entry?.name
+            ?? (ticker.includes("/") ? ticker.replace("/", " / ") : null);
+          return name ? (
+            <span className="hidden lg:block text-xs text-zinc-500 font-medium truncate max-w-[160px]" title={name}>
+              {name}
+            </span>
+          ) : null;
+        })()}
 
         {/* Price */}
         <div className="hidden md:flex items-center gap-3">

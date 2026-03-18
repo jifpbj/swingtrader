@@ -14,7 +14,7 @@ import {
   computeTDSequentialSetup,
 } from "@/lib/indicators";
 import type { Candle, CrossoverSignal } from "@/types/market";
-import { Maximize2, RefreshCw, Bot } from "lucide-react";
+import { Maximize2, RefreshCw, Bot, MoonStar } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
 import { toBackendTf, BACKEND_TF, TIMEFRAME_SECONDS } from "@/lib/timeframeConvert";
 import type { Timeframe } from "@/types/market";
@@ -141,68 +141,9 @@ async function fetchBars(
   secretKey: string,
   end?: string,
 ): Promise<Candle[]> {
-  const isCrypto = ticker.includes("/");
-
-  if (apiKey && secretKey) {
-    try {
-      const headers = {
-        "APCA-API-KEY-ID": apiKey,
-        "APCA-API-SECRET-KEY": secretKey,
-      };
-
-      if (isCrypto) {
-        const params = new URLSearchParams({
-          symbols: ticker,
-          timeframe: BACKEND_TF[timeframe] ?? "15Min",
-          limit: String(limit),
-        });
-        if (end) params.set("end", end);
-        const resp = await fetch(
-          `https://data.alpaca.markets/v1beta3/crypto/us/bars?${params}`,
-          { headers },
-        );
-        if (resp.ok) {
-          const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
-          const raw = json.bars?.[ticker] ?? [];
-          if (raw.length) {
-            return raw.map(b => ({
-              time:   Math.floor(new Date(b.t).getTime() / 1000),
-              open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
-            }));
-          }
-        }
-      } else {
-        // For 4h, fetch 1h bars from Alpaca and resample on the client
-        const fetchTf    = timeframe === "4h" ? "1h" : timeframe;
-        const fetchLimit = timeframe === "4h" ? limit * 4 + 10 : limit;
-        const params = new URLSearchParams({
-          symbols:   ticker,
-          timeframe: BACKEND_TF[fetchTf as Timeframe] ?? "15Min",
-          limit:     String(fetchLimit),
-          feed:      "iex",
-          sort:      "asc",
-        });
-        if (end) params.set("end", end);
-        const resp = await fetch(
-          `https://data.alpaca.markets/v2/stocks/bars?${params}`,
-          { headers },
-        );
-        if (resp.ok) {
-          const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
-          const raw = json.bars?.[ticker] ?? [];
-          if (raw.length) {
-            const candles: Candle[] = raw.map(b => ({
-              time:   Math.floor(new Date(b.t).getTime() / 1000),
-              open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
-            }));
-            return (timeframe === "4h" ? resample1HTo4H(candles) : candles).slice(-limit);
-          }
-        }
-      }
-    } catch { /* fall through to backend */ }
-  }
-
-  // ── Backend proxy fallback ────────────────────────────────────────────────
+  // ── Primary: backend proxy (uses Alpaca Broker API — no user account needed) ──
+  // Free users who haven't connected an Alpaca account get data through the
+  // platform's own Broker API key configured server-side.
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const qs = `?timeframe=${toBackendTf(timeframe)}&limit=${limit}` +
              (end ? `&end=${encodeURIComponent(end)}` : "");
@@ -212,9 +153,71 @@ async function fetchBars(
     );
     if (resp.ok) {
       const json = await resp.json() as { bars: Candle[] };
-      return json.bars ?? [];
+      if ((json.bars ?? []).length) return json.bars;
+    }
+  } catch { /* fall through */ }
+
+  // ── Fallback: direct Alpaca Data API with the user's paper-trading creds ──
+  // Kicks in when the backend is unreachable (local dev without FastAPI running)
+  // or the broker proxy returned empty results.
+  if (!apiKey || !secretKey) return [];
+
+  const isCrypto = ticker.includes("/");
+  const headers  = {
+    "APCA-API-KEY-ID":     apiKey,
+    "APCA-API-SECRET-KEY": secretKey,
+  };
+
+  try {
+    if (isCrypto) {
+      const params = new URLSearchParams({
+        symbols:   ticker,
+        timeframe: BACKEND_TF[timeframe] ?? "15Min",
+        limit:     String(limit),
+      });
+      if (end) params.set("end", end);
+      const resp = await fetch(
+        `https://data.alpaca.markets/v1beta3/crypto/us/bars?${params}`,
+        { headers },
+      );
+      if (resp.ok) {
+        const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
+        const raw  = json.bars?.[ticker] ?? [];
+        if (raw.length) return raw.map(b => ({
+          time: Math.floor(new Date(b.t).getTime() / 1000),
+          open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
+        }));
+      }
+    } else {
+      // 4h equity: fetch 1h bars and resample client-side (IEX feed)
+      const fetchTf    = timeframe === "4h" ? "1h" : timeframe;
+      const fetchLimit = timeframe === "4h" ? limit * 4 + 10 : limit;
+      const params = new URLSearchParams({
+        symbols:   ticker,
+        timeframe: BACKEND_TF[fetchTf as Timeframe] ?? "15Min",
+        limit:     String(fetchLimit),
+        feed:      "iex",
+        sort:      "asc",
+      });
+      if (end) params.set("end", end);
+      const resp = await fetch(
+        `https://data.alpaca.markets/v2/stocks/bars?${params}`,
+        { headers },
+      );
+      if (resp.ok) {
+        const json = await resp.json() as { bars?: Record<string, AlpacaBar[]> };
+        const raw  = json.bars?.[ticker] ?? [];
+        if (raw.length) {
+          const candles: Candle[] = raw.map(b => ({
+            time: Math.floor(new Date(b.t).getTime() / 1000),
+            open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
+          }));
+          return (timeframe === "4h" ? resample1HTo4H(candles) : candles).slice(-limit);
+        }
+      }
     }
   } catch { /* ignore */ }
+
   return [];
 }
 
@@ -322,6 +325,7 @@ export function ChartContainer() {
   const [chartReady, setChartReady] = useState(false);
   const [tooltip, setTooltip] = useState<CandleTooltip | null>(null);
   const [indicatorRevision, setIndicatorRevision] = useState(0);
+  const [afterHours, setAfterHours] = useState(false);
   const volumeMapRef     = useRef<Map<number, number>>(new Map());
   const oldestBarTimeRef = useRef<number | null>(null);
   const loadingMoreRef   = useRef(false);
@@ -823,6 +827,35 @@ export function ChartContainer() {
     activeIndicatorTab === "RSI"  ? "solid-violet" :
     activeIndicatorTab === "MACD" ? "solid-blue" : "markers-only";
 
+  // ─── After-hours detection ────────────────────────────────────────────────
+  // Crypto trades 24/7 — no badge. Equity: 9:30 AM – 4:00 PM ET weekdays only.
+  useEffect(() => {
+    const isCrypto = ticker.includes("/");
+    if (demoMode || isCrypto) { setAfterHours(false); return; }
+
+    function check() {
+      // Use Intl to get current time in Eastern Time (handles DST automatically)
+      const etParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "numeric", minute: "numeric", second: "numeric",
+        weekday: "short", hour12: false,
+      }).formatToParts(new Date());
+
+      const get = (type: string) => Number(etParts.find(p => p.type === type)?.value ?? "0");
+      const weekday  = etParts.find(p => p.type === "weekday")?.value ?? "";
+      const isWeekend = weekday === "Sat" || weekday === "Sun";
+      const minutes  = get("hour") * 60 + get("minute");
+      const open     = 9 * 60 + 30;   // 9:30 AM ET
+      const close    = 16 * 60;        // 4:00 PM ET
+
+      setAfterHours(isWeekend || minutes < open || minutes >= close);
+    }
+
+    check();
+    const id = setInterval(check, 30_000); // re-check every 30 s
+    return () => clearInterval(id);
+  }, [ticker, demoMode]);
+
   const setTimeframe = useUIStore(s => s.setTimeframe);
 
   return (
@@ -901,6 +934,14 @@ export function ChartContainer() {
       {chartReady && (
         <div className="absolute bottom-8 left-3 z-10 flex items-center gap-4 glass-sm px-2.5 py-1.5 rounded-lg">
           <LegendItem line={legendLine} label={legendLabel()} />
+        </div>
+      )}
+
+      {/* After-hours badge */}
+      {afterHours && !demoMode && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full glass-sm border border-amber-500/30 text-[10px] font-semibold text-amber-400/90 pointer-events-none select-none">
+          <MoonStar className="size-3 shrink-0" />
+          After Hours · Market closed
         </div>
       )}
 
