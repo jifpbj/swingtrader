@@ -19,8 +19,9 @@ import { cn } from "@/lib/utils";
      NEXT_PUBLIC_STRIPE_PREMIUM_LINK=https://buy.stripe.com/...
    Falls back to "#" in dev so buttons never hard-break.
 ───────────────────────────────────────────────────────────── */
-const STRIPE_BASIC   = process.env.NEXT_PUBLIC_STRIPE_BASIC_LINK   ?? "#";
-const STRIPE_PREMIUM = process.env.NEXT_PUBLIC_STRIPE_PREMIUM_LINK ?? "#";
+const STRIPE_BASIC        = process.env.NEXT_PUBLIC_STRIPE_BASIC_LINK        ?? "#";
+const STRIPE_BASIC_ANNUAL = process.env.NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK ?? "#";
+const STRIPE_PREMIUM      = process.env.NEXT_PUBLIC_STRIPE_PREMIUM_LINK      ?? "#";
 
 /* ── Tier feature lists ──────────────────────────────────────── */
 const FREE_FEATURES = [
@@ -451,7 +452,7 @@ export default function HomePage() {
               </p>
               <FeatureList items={BASIC_FEATURES} accent="text-emerald-500" />
               <a
-                href={STRIPE_BASIC}
+                href={annual ? STRIPE_BASIC_ANNUAL : STRIPE_BASIC}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-auto w-full py-3 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/30 hover:shadow-emerald-400/40 transition-all text-center block"
@@ -493,14 +494,27 @@ export default function HomePage() {
                 Real trained AI models, institutional-grade risk tools, and white-glove support — for traders who take alpha seriously.
               </p>
               <FeatureList items={EXEC_FEATURES} accent="text-amber-400" />
-              <a
-                href={STRIPE_PREMIUM}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-auto w-full py-3 rounded-xl text-sm font-semibold text-zinc-900 bg-amber-400 hover:bg-amber-300 shadow-lg shadow-amber-400/20 hover:shadow-amber-300/30 transition-all text-center block"
-              >
-                Go Executive →
-              </a>
+              {/* Executive CTA — coming soon tooltip */}
+              <div className="relative mt-auto group">
+                <button
+                  disabled
+                  aria-disabled="true"
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-zinc-600 bg-amber-400/20 border border-amber-400/20 cursor-not-allowed transition-all text-center"
+                >
+                  Go Executive →
+                </button>
+                {/* Tooltip */}
+                <div className={cn(
+                  "pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 z-20",
+                  "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap",
+                  "bg-zinc-800 border border-white/10 text-zinc-200 shadow-xl",
+                  "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+                )}>
+                  Coming soon
+                  {/* Arrow */}
+                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-800" />
+                </div>
+              </div>
             </div>
           </div>
 
