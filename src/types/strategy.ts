@@ -74,4 +74,12 @@ export interface AlgoAnalysisResult {
   deltaVsHold: number;              // bestStrategyReturn - bestHoldReturn
   /** Point-by-point equity curve for the best period (strategy + hold, normalised to 100) */
   equityCurve: Array<{ time: number; strategy: number; hold: number }>;
+  /** Present when recommendation is "hold" or "avoid" — other timeframes where active alpha was found */
+  alternativeTimeframes?: Array<{
+    timeframe: string;
+    recommendation: "active";
+    strategy: Omit<SavedStrategy, "id" | "createdAt" | "updatedAt">;
+    deltaVsHold: number;
+    holdReturn: number;
+  }>;
 }

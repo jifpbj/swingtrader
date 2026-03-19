@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, TrendingUp, TrendingDown, BrainCircuit, Loader2, CheckCircle2, Sparkles, Pause, Ban } from "lucide-react";
+import { X, TrendingUp, TrendingDown, BrainCircuit, Loader2, CheckCircle2, Sparkles, Pause, Ban, ArrowRight } from "lucide-react";
 import {
   ComposedChart, Area, Line, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
 } from "recharts";
@@ -207,13 +207,53 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
             </div>
           </div>
 
+          {/* Alternative timeframes — shown when alpha was found elsewhere */}
+          {result.alternativeTimeframes && result.alternativeTimeframes.length > 0 && (
+            <div className="mx-5 mb-4 rounded-xl border border-violet-500/25 bg-violet-500/8 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-violet-500/15 flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-violet-400 shrink-0" />
+                <p className="text-[11px] font-semibold text-violet-300 uppercase tracking-wider">
+                  Alpha found in other timeframes
+                </p>
+              </div>
+              <div className="divide-y divide-white/5">
+                {result.alternativeTimeframes.map((alt) => {
+                  const indLabel: Record<string, string> = {
+                    EMA: "EMA", BB: "BB Bands", RSI: "RSI", MACD: "MACD", TD9: "TD9",
+                  };
+                  const retPct = (alt.strategy.bestStrategyReturn * 100).toFixed(1);
+                  const deltaPct = (alt.deltaVsHold * 100).toFixed(1);
+                  return (
+                    <div key={alt.timeframe} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="flex-none px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 text-[10px] font-mono font-bold uppercase">
+                        {alt.timeframe}
+                      </span>
+                      <span className="flex-1 text-[11px] text-zinc-300 truncate">
+                        {indLabel[alt.strategy.indicator] ?? alt.strategy.indicator}
+                      </span>
+                      <span className="text-[11px] font-mono font-semibold text-emerald-400">
+                        +{retPct}%
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        +{deltaPct}% vs hold
+                      </span>
+                      <ArrowRight className="size-3 text-zinc-600 shrink-0" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Insight */}
           <div className="mx-5 mb-5 px-4 py-3 rounded-xl bg-white/3 border border-white/8 flex items-start gap-2.5">
             <Sparkles className="size-3.5 text-violet-400 shrink-0 mt-0.5" />
             <p className="text-[11px] text-zinc-400 leading-relaxed">
-              {isAvoid
-                ? "Consider waiting for a trend reversal or a more favourable entry point before committing capital to this ticker."
-                : "Try scanning a different timeframe or check back when market conditions change — active signals may emerge as volatility picks up."
+              {result.alternativeTimeframes && result.alternativeTimeframes.length > 0
+                ? `Switch to the ${result.alternativeTimeframes[0].timeframe.toUpperCase()} timeframe to trade the identified alpha opportunity.`
+                : isAvoid
+                  ? "Consider waiting for a trend reversal or a more favourable entry point before committing capital to this ticker."
+                  : "Try scanning a different timeframe or check back when market conditions change — active signals may emerge as volatility picks up."
               }
             </p>
           </div>

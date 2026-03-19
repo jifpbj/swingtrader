@@ -205,24 +205,26 @@ export function BacktestPanel() {
     // Run optimizer off the main thread tick so the spinner renders
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
     try {
+      const currentParams = {
+        emaPeriod,
+        bbPeriod,
+        bbStdDev,
+        rsiPeriod,
+        rsiOverbought,
+        rsiOversold,
+        macdFast: macdFastPeriod,
+        macdSlow: macdSlowPeriod,
+        macdSignal: macdSignalPeriod,
+      };
       const optimResult = runAIOptimize(
         ticker,
         timeframe,
         candles,
-        {
-          emaPeriod,
-          bbPeriod,
-          bbStdDev,
-          rsiPeriod,
-          rsiOverbought,
-          rsiOversold,
-          macdFast: macdFastPeriod,
-          macdSlow: macdSlowPeriod,
-          macdSignal: macdSignalPeriod,
-        },
+        currentParams,
         initialInvestment,
         tradingMode,
       );
+
       // Always show the modal — even for hold/avoid recommendations
       let curve: ReturnType<typeof computeStrategyEquityCurve> = [];
       if (optimResult.recommendation === "active" && optimResult.strategy) {
@@ -247,14 +249,69 @@ export function BacktestPanel() {
         setMacdFastPeriod(params.macdFast);
         setMacdSlowPeriod(params.macdSlow);
         setMacdSignalPeriod(params.macdSignal);
+
+        setAnalysisResult({ ...optimResult, equityCurve: curve });
+      } else {
+        // No alpha in current TF — scan all other timeframes for alpha
+        const ALL_TIMEFRAMES: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
+        const otherTFs = ALL_TIMEFRAMES.filter((tf) => tf !== timeframe);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+        const altCandlesResults = await Promise.all(
+          otherTFs.map(async (tf) => {
+            const period = periodKeysForTimeframe(tf).at(-1)!;
+            if (demoMode) {
+              const count = mockBarCount(tf, period as BacktestPeriodKey);
+              const tfBarSecs = TIMEFRAME_SECONDS[tf as Timeframe] ?? 900;
+              return { tf, bars: generateMockCandles(tfBarSecs, count, 0) };
+            }
+            try {
+              const res = await fetch(
+                `${apiUrl}/api/v1/market/backtest-history/${encodeURIComponent(ticker)}` +
+                `?timeframe=${toBackendTf(tf)}&period=${period}`,
+              );
+              if (!res.ok) return { tf, bars: [] as Candle[] };
+              const json = await res.json() as { bars: Candle[] };
+              return { tf, bars: json.bars ?? [] };
+            } catch {
+              return { tf, bars: [] as Candle[] };
+            }
+          }),
+        );
+
+        // Run optimizer on each alternative TF (yield to event loop between each)
+        const alternatives: NonNullable<AlgoAnalysisResult["alternativeTimeframes"]> = [];
+        for (const { tf, bars } of altCandlesResults) {
+          if (bars.length < 10) continue;
+          await new Promise<void>((r) => setTimeout(r, 0));
+          const altResult = runAIOptimize(ticker, tf, bars, currentParams, initialInvestment, tradingMode);
+          if (altResult.recommendation === "active" && altResult.strategy) {
+            alternatives.push({
+              timeframe: tf,
+              recommendation: "active",
+              strategy: altResult.strategy,
+              deltaVsHold: altResult.deltaVsHold,
+              holdReturn: altResult.holdReturn,
+            });
+          }
+        }
+
+        // Sort by delta vs hold descending — best opportunities first
+        alternatives.sort((a, b) => b.deltaVsHold - a.deltaVsHold);
+
+        setAnalysisResult({
+          ...optimResult,
+          equityCurve: [],
+          alternativeTimeframes: alternatives.length > 0 ? alternatives : undefined,
+        });
       }
-      setAnalysisResult({ ...optimResult, equityCurve: curve });
+
       setShowModal(true);
     } finally {
       setAnalyzing(false);
     }
   }, [
-    candles, ticker, timeframe, analyzing, initialInvestment, tradingMode,
+    candles, ticker, timeframe, analyzing, initialInvestment, tradingMode, demoMode,
     emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
     setAnalyzing, setAnalysisResult,
