@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 // ─── Section label ─────────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
       {children}
     </p>
   );
@@ -36,7 +36,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 // ─── Divider ───────────────────────────────────────────────────────────────────
 function Divider() {
-  return <div className="my-1 h-px bg-white/5" />;
+  return <div className="my-1 h-px bg-zinc-200 dark:bg-white/5" />;
 }
 
 // ─── Main dropdown ─────────────────────────────────────────────────────────────
@@ -155,21 +155,21 @@ export function UserDropdown() {
       {open && (
         <div className={cn(
           "absolute right-0 top-full mt-2 z-50",
-          "w-64 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl shadow-black/60",
+          "w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl shadow-2xl shadow-zinc-300/40 dark:shadow-black/60",
           "py-1 animate-in fade-in-0 zoom-in-95 origin-top-right",
         )}>
 
           {/* User identity header */}
           {user && (
-            <div className="px-3 py-2.5 border-b border-white/5">
-              <p className="text-xs font-medium text-foreground/80 truncate">{user.email}</p>
+            <div className="px-3 py-2.5 border-b border-zinc-200 dark:border-white/5">
+              <p className="text-xs font-medium text-zinc-700 dark:text-foreground/80 truncate">{user.email}</p>
               <SubBadge />
             </div>
           )}
 
           {/* ── Appearance ── */}
           <SectionLabel>Appearance</SectionLabel>
-          <div className="px-3 pb-2 flex items-center gap-0.5 glass rounded-xl mx-2 py-1">
+          <div className="px-3 pb-2 flex items-center gap-0.5 bg-zinc-100 dark:bg-white/5 rounded-xl mx-2 py-1">
             {themeOptions.map(({ value, icon, label }) => (
               <button
                 key={value}
@@ -179,8 +179,8 @@ export function UserDropdown() {
                 className={cn(
                   "flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-all",
                   theme === value
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                    : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
                 )}
               >
                 {icon}
@@ -191,15 +191,15 @@ export function UserDropdown() {
 
           {/* ── Data Mode ── */}
           <SectionLabel>Data Mode</SectionLabel>
-          <div className="px-2 pb-2 flex items-center gap-0.5 glass rounded-xl mx-2 py-0.5 text-xs">
+          <div className="px-2 pb-2 flex items-center gap-0.5 bg-zinc-100 dark:bg-white/5 rounded-xl mx-2 py-0.5 text-xs">
             {/* Demo */}
             <button
               onClick={() => setDemoMode(true)}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md font-medium transition-all",
                 dataMode === "demo"
-                  ? "bg-amber-500/20 text-amber-400"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                  : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
               )}
             >
               <FlaskConical className="size-3 shrink-0" />
@@ -212,8 +212,8 @@ export function UserDropdown() {
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
                 dataMode === "paper"
-                  ? "bg-yellow-500/20 text-yellow-400"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
+                  : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
               )}
             >
               Paper
@@ -232,9 +232,9 @@ export function UserDropdown() {
           {/* Subscription */}
           <button
             onClick={() => { setSubscriptionModalOpen(true); close(); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-white/5 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
           >
-            <CreditCard className="size-3.5 text-zinc-500 shrink-0" />
+            <CreditCard className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
             <span className="flex-1 text-left">Subscription</span>
             {user && <SubBadge />}
           </button>
@@ -242,9 +242,9 @@ export function UserDropdown() {
           {/* API Keys */}
           <button
             onClick={() => { setSettingsOpen(true); close(); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-white/5 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
           >
-            <Key className="size-3.5 text-zinc-500 shrink-0" />
+            <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
             API Keys
           </button>
 
@@ -254,9 +254,9 @@ export function UserDropdown() {
           <Link
             href="/portfolio"
             onClick={close}
-            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
           >
-            <BarChart2 className="size-3.5 text-zinc-500 shrink-0" />
+            <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
             Portfolio
           </Link>
 
@@ -264,9 +264,9 @@ export function UserDropdown() {
           <Link
             href="/account/onboard"
             onClick={close}
-            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
           >
-            <UserPlus className="size-3.5 text-zinc-500 shrink-0" />
+            <UserPlus className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
             Register for Live Trading
           </Link>
 
@@ -276,7 +276,7 @@ export function UserDropdown() {
           {user ? (
             <button
               onClick={() => { signOut(); close(); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/5 transition-colors rounded-b-xl"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/5 transition-colors rounded-b-xl"
             >
               <LogOut className="size-3.5 shrink-0" />
               Log Out
@@ -284,7 +284,7 @@ export function UserDropdown() {
           ) : (
             <button
               onClick={() => { openAuthModal(); close(); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/5 transition-colors rounded-b-xl"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-colors rounded-b-xl"
             >
               <LogIn className="size-3.5 shrink-0" />
               Log In
@@ -325,8 +325,8 @@ function LiveButton({ dataMode, wsConnected }: { dataMode: string; wsConnected: 
         className={cn(
           "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
           dataMode === "live"
-            ? "bg-emerald-500/20 text-emerald-400"
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+            : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
         )}
       >
         Live

@@ -6,7 +6,6 @@ import { formatPrice, formatPercent } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Search, ChevronUp, ChevronDown, Menu } from "lucide-react";
 import Link from "next/link";
-import { DataModeToggle } from "@/components/ui/DataModeToggle";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { UserDropdown } from "@/components/ui/UserDropdown";
 
@@ -59,11 +58,6 @@ export function TopBar() {
             <Link href="/screener" className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium">
               Screener
             </Link>
-          </div>
-
-          {/* Data mode toggle — desktop only; mobile gets it in the sidebar */}
-          <div className="hidden md:flex">
-            <DataModeToggle />
           </div>
 
           {/* Ticker button */}

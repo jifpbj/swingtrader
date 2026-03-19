@@ -4,8 +4,7 @@ import React, { useCallback, useEffect, useRef, useState, type PointerEvent as R
 import Link from "next/link";
 import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, X, Zap, BarChart2, Landmark, ScanLine } from "lucide-react";
-import { useBrokerStore } from "@/store/useBrokerStore";
+import { ChevronLeft, ChevronRight, X, Zap } from "lucide-react";
 import { StrategyQueue } from "@/components/algo/StrategyQueue";
 import { DataModeToggle } from "@/components/ui/DataModeToggle";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -17,9 +16,6 @@ const SIDEBAR_DEFAULT = 360; // matches right panel default width
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggle    = useUIStore((s) => s.toggleSidebar);
-  const brokerAccount = useBrokerStore((s) => s.account);
-  const accountHref = brokerAccount?.alpacaAccountId ? "/account/funding" : "/account/onboard";
-
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -125,55 +121,6 @@ export function Sidebar() {
         {/* Strategy queue */}
         <div className={cn("flex-1 overflow-y-auto", collapsed ? "hidden" : "px-3 pt-3")}>
           <StrategyQueue />
-        </div>
-
-        {/* Nav links */}
-        <div className={cn(
-          "border-t border-white/5 pt-2 mt-2 space-y-0.5",
-          collapsed ? "flex flex-col items-center px-2" : "px-3",
-        )}>
-          <Link
-            href="/screener"
-            className={cn(
-              "flex items-center gap-2 rounded-xl text-[11px] font-semibold text-zinc-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all",
-              collapsed ? "p-2.5" : "px-3 py-2 w-full",
-            )}
-            title="Stock Screener"
-          >
-            <ScanLine className="size-4 shrink-0" />
-            {!collapsed && <span>Screener</span>}
-          </Link>
-          <Link
-            href="/portfolio"
-            className={cn(
-              "flex items-center gap-2 rounded-xl text-[11px] font-semibold text-zinc-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all",
-              collapsed ? "p-2.5" : "px-3 py-2 w-full",
-            )}
-            title="Portfolio"
-          >
-            <BarChart2 className="size-4 shrink-0" />
-            {!collapsed && <span>Portfolio</span>}
-          </Link>
-          <Link
-            href={accountHref}
-            className={cn(
-              "flex items-center gap-2 rounded-xl text-[11px] font-semibold text-zinc-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all",
-              collapsed ? "p-2.5" : "px-3 py-2 w-full",
-            )}
-            title="Account"
-          >
-            <Landmark className="size-4 shrink-0" />
-            {!collapsed && (
-              <span className="flex items-center gap-2">
-                Account
-                {brokerAccount?.status === "ACTIVE" && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded-full">
-                    Active
-                  </span>
-                )}
-              </span>
-            )}
-          </Link>
         </div>
 
         {/* Collapse toggle: desktop only */}
