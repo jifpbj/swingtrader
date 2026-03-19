@@ -585,16 +585,20 @@ class AlpacaMarketDataService(MarketDataService):
         # When paginating backwards (end is set), fetch in descending order
         # so we get the N bars *immediately* before `end`, then reverse.
         is_pagination = end is not None
+        # Alpaca requires an explicit `start` for equity bars — without it
+        # the API silently returns empty results.
+        end_iso = end or datetime.now(timezone.utc).isoformat()
+        start_iso = self._compute_start(end_iso, fetch_tf, fetch_limit, is_crypto=False)
         params: dict[str, str | int] = {
             "symbols": ticker,
             "timeframe": _ALPACA_TIMEFRAME[fetch_tf],
             "limit": fetch_limit,
             "feed": "iex",
             "sort": "desc" if is_pagination else "asc",
+            "start": start_iso,
         }
         if end:
             params["end"] = end
-            params["start"] = self._compute_start(end, fetch_tf, fetch_limit, is_crypto=False)
 
         try:
             resp = await client.get("/v2/stocks/bars", params=params)
