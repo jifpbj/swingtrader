@@ -496,6 +496,10 @@ class AlpacaMarketDataService(MarketDataService):
         (roughly "now").  We must always pair ``end`` with an explicit ``start``
         that is far enough in the past to accommodate ``limit`` bars plus
         market-closure gaps (weekends / holidays for equities).
+
+        NOTE: This is only needed as a safety net — the caller should also
+        use ``sort=desc`` + reverse to get the *most recent* N bars before
+        ``end``, rather than the oldest N bars after ``start``.
         """
         bar_secs = TIMEFRAME_SECONDS.get(timeframe, 900)
         # Crypto trades 24/7 so 1.5× is plenty.
@@ -514,11 +518,16 @@ class AlpacaMarketDataService(MarketDataService):
         end: str | None = None,
     ) -> list[Candle]:
         client = await self._client()
+        # When paginating backwards (end is set), fetch in descending order
+        # so we get the N bars *immediately* before `end`, then reverse.
+        # Without this, sort=asc with a wide start window returns the
+        # oldest bars in the range, causing massive date jumps on the chart.
+        is_pagination = end is not None
         params: dict[str, str | int] = {
             "symbols": ticker,
             "timeframe": _ALPACA_TIMEFRAME[timeframe],
             "limit": limit,
-            "sort": "asc",
+            "sort": "desc" if is_pagination else "asc",
         }
         if end:
             params["end"] = end
@@ -549,6 +558,10 @@ class AlpacaMarketDataService(MarketDataService):
                 )
             )
 
+        # Reverse desc results back to chronological order
+        if is_pagination:
+            candles.reverse()
+
         return candles
 
     async def _get_equity_ohlcv_alpaca(
@@ -569,12 +582,15 @@ class AlpacaMarketDataService(MarketDataService):
         fetch_tf = Timeframe.H1 if timeframe == Timeframe.H4 else timeframe
         fetch_limit = limit * 4 + 10 if timeframe == Timeframe.H4 else limit
 
+        # When paginating backwards (end is set), fetch in descending order
+        # so we get the N bars *immediately* before `end`, then reverse.
+        is_pagination = end is not None
         params: dict[str, str | int] = {
             "symbols": ticker,
             "timeframe": _ALPACA_TIMEFRAME[fetch_tf],
             "limit": fetch_limit,
             "feed": "iex",
-            "sort": "asc",
+            "sort": "desc" if is_pagination else "asc",
         }
         if end:
             params["end"] = end
@@ -607,6 +623,10 @@ class AlpacaMarketDataService(MarketDataService):
                     volume=round(float(bar.get("v", 0.0)), 2),
                 )
             )
+
+        # Reverse desc results back to chronological order
+        if is_pagination:
+            candles.reverse()
 
         if timeframe != Timeframe.H4:
             return candles[-limit:]
