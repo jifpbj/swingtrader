@@ -155,7 +155,7 @@ export function UserDropdown() {
       {open && (
         <div className={cn(
           "absolute right-0 top-full mt-2 z-50",
-          "w-64 glass-bright border border-white/10 rounded-xl shadow-2xl shadow-black/40",
+          "w-64 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl shadow-black/60",
           "py-1 animate-in fade-in-0 zoom-in-95 origin-top-right",
         )}>
 

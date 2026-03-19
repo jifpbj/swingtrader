@@ -48,13 +48,18 @@ export function TopBar() {
             </span>
           </div>
 
-          {/* Pricing nav link — desktop only */}
-          <Link
-            href="/#pricing"
-            className="hidden md:block text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium"
-          >
-            Pricing
-          </Link>
+          {/* Nav links — desktop only */}
+          <div className="hidden md:flex items-center gap-3">
+            <Link href="/#pricing" className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium">
+              Pricing
+            </Link>
+            <Link href="/portfolio" className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium">
+              Portfolio
+            </Link>
+            <Link href="/screener" className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium">
+              Screener
+            </Link>
+          </div>
 
           {/* Data mode toggle — desktop only; mobile gets it in the sidebar */}
           <div className="hidden md:flex">
