@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/layout/Providers";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { ApiKeyModal } from "@/components/auth/ApiKeyModal";
+import { SubscriptionModal } from "@/components/auth/SubscriptionModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,6 +42,7 @@ export default function RootLayout({
           {children}
           <AuthModal />
           <ApiKeyModal />
+          <SubscriptionModal />
         </Providers>
       </body>
     </html>

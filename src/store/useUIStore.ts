@@ -25,9 +25,13 @@ interface UIState {
   searchOpen: boolean;
   setSearchOpen: (open: boolean) => void;
 
-  // ─── Settings modal
+  // ─── Settings modal (API keys)
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
+
+  // ─── Subscription modal
+  subscriptionModalOpen: boolean;
+  setSubscriptionModalOpen: (open: boolean) => void;
 
   // ─── Signals feed
   signals: AlphaSignal[];
@@ -118,6 +122,9 @@ export const useUIStore = create<UIState>()(
 
     settingsOpen: false,
     setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+
+    subscriptionModalOpen: false,
+    setSubscriptionModalOpen: (subscriptionModalOpen) => set({ subscriptionModalOpen }),
 
     signals: [],
     addSignal: (signal) => set((s) => ({ signals: [signal, ...s.signals].slice(0, 50) })),
