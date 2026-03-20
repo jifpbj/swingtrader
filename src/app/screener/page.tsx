@@ -83,40 +83,40 @@ function StockRow({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left group"
+      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors text-left group"
     >
       {/* Rank */}
-      <span className="w-5 text-[10px] font-mono text-zinc-600 shrink-0 text-right">
+      <span className="w-5 text-[10px] font-mono text-muted-foreground/70 shrink-0 text-right">
         {rank}
       </span>
 
       {/* Symbol + Name */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-bold text-zinc-100 tracking-wide font-mono">
+          <span className="text-[13px] font-bold text-foreground tracking-wide font-mono">
             {stock.symbol}
           </span>
           {stock.sector && (
-            <span className="hidden sm:inline text-[9px] font-medium text-zinc-600 uppercase tracking-wider">
+            <span className="hidden sm:inline text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">
               {stock.sector}
             </span>
           )}
         </div>
-        <p className="text-[11px] text-zinc-500 truncate mt-0.5">{stock.name}</p>
+        <p className="text-[11px] text-muted-foreground truncate mt-0.5">{stock.name}</p>
       </div>
 
       {/* Sub stat */}
       <div className="text-right shrink-0 hidden sm:block">
-        <p className="text-[9px] text-zinc-600 uppercase tracking-wide">{sub.label}</p>
-        <p className="text-[11px] font-mono text-zinc-400">{sub.value}</p>
+        <p className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">{sub.label}</p>
+        <p className="text-[11px] font-mono text-muted-foreground">{sub.value}</p>
       </div>
 
       {/* Price */}
       <div className="text-right shrink-0 min-w-[72px]">
-        <p className="text-[13px] font-mono font-semibold text-zinc-100">
+        <p className="text-[13px] font-mono font-semibold text-foreground">
           {priceFmt.format(stock.price)}
         </p>
-        <p className="text-[10px] font-mono text-zinc-500">
+        <p className="text-[10px] font-mono text-muted-foreground">
           {fmtDollarVol(stock.dollarVolume)}
         </p>
       </div>
@@ -128,20 +128,20 @@ function StockRow({
       )}>
         <span className={cn(
           "text-[13px] font-mono font-bold",
-          isPos ? "text-emerald-400" : "text-red-400",
+          isPos ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
         )}>
           {isPos ? "+" : ""}{stock.changePercent.toFixed(2)}%
         </span>
         <p className={cn(
           "text-[9px] font-mono",
-          isPos ? "text-emerald-400/60" : "text-red-400/60",
+          isPos ? "dark:text-emerald-400/60 text-emerald-600/60" : "dark:text-red-400/60 text-red-600/60",
         )}>
           {isPos ? "+" : ""}{priceFmt.format(stock.changeDollar)}
         </p>
       </div>
 
       {/* Arrow hint */}
-      <ChevronRight className="size-3.5 text-zinc-700 group-hover:text-zinc-400 transition-colors shrink-0" />
+      <ChevronRight className="size-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
     </button>
   );
 }
@@ -164,7 +164,7 @@ function EmptyCategory({ category }: { category: ScreenerCategory }) {
     trending_down: "No stocks are trending down ≤ −1.5% today.",
   };
   return (
-    <div className="py-16 flex flex-col items-center gap-2 text-zinc-600">
+    <div className="py-16 flex flex-col items-center gap-2 text-muted-foreground/70">
       <Activity className="size-6 opacity-40" />
       <p className="text-sm">{msgs[category] ?? "No data for this category."}</p>
     </div>
@@ -194,20 +194,20 @@ export default function ScreenerPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
+    <main className="min-h-screen bg-background text-foreground">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 glass border-b border-white/5 px-4 py-3 flex items-center gap-3">
+      <header className="sticky top-0 z-30 glass border-b border-border px-4 py-3 flex items-center gap-3">
         <Link
           href="/dashboard"
-          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all"
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all"
           title="Back to Dashboard"
         >
           <ArrowLeft className="size-4" />
         </Link>
         <div className="flex items-center gap-2">
-          <BarChart3 className="size-4 text-emerald-400" />
-          <span className="text-sm font-semibold text-zinc-200">Stock Screener</span>
+          <BarChart3 className="size-4 text-emerald-500" />
+          <span className="text-sm font-semibold text-foreground">Stock Screener</span>
         </div>
 
         {isMock && (
@@ -218,13 +218,13 @@ export default function ScreenerPage() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-[10px] text-zinc-600 hidden sm:block">
+          <span className="text-[10px] text-muted-foreground/70 hidden sm:block">
             {data ? `${data.all.length} stocks` : ""}
           </span>
           <button
             onClick={handleRefresh}
             disabled={refreshing || loading}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all disabled:opacity-40"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all disabled:opacity-40"
             title="Refresh"
           >
             <RefreshCw className={cn("size-4", (refreshing || loading) && "animate-spin")} />
@@ -233,7 +233,7 @@ export default function ScreenerPage() {
       </header>
 
       {/* ── Category tabs ────────────────────────────────────────────── */}
-      <div className="sticky top-[53px] z-20 glass border-b border-white/5">
+      <div className="sticky top-[53px] z-20 glass border-b border-border">
         <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-none">
           {CATEGORIES.map((cat) => {
             const Icon = cat.icon;
@@ -246,7 +246,7 @@ export default function ScreenerPage() {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all border",
                   isActive
                     ? cn(cat.bg, cat.color)
-                    : "text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-white/5",
+                    : "text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/50",
                 )}
               >
                 <Icon className="size-3 shrink-0" />
@@ -263,9 +263,9 @@ export default function ScreenerPage() {
         {/* Category header */}
         <div className="flex items-center gap-2 px-4 sm:px-0 mb-3">
           <activeCfg.icon className={cn("size-4 shrink-0", activeCfg.color)} />
-          <h2 className="text-sm font-semibold text-zinc-300">{activeCfg.label}</h2>
+          <h2 className="text-sm font-semibold text-foreground/80">{activeCfg.label}</h2>
           {!loading && stocks.length > 0 && (
-            <span className="text-[10px] text-zinc-600 font-mono">
+            <span className="text-[10px] text-muted-foreground/70 font-mono">
               {stocks.length} results
             </span>
           )}
@@ -273,7 +273,7 @@ export default function ScreenerPage() {
 
         {/* Column headers */}
         {stocks.length > 0 && (
-          <div className="flex items-center gap-3 px-4 pb-1 text-[9px] uppercase tracking-widest text-zinc-600 font-semibold">
+          <div className="flex items-center gap-3 px-4 pb-1 text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">
             <span className="w-5 text-right">#</span>
             <span className="flex-1">Symbol / Name</span>
             <span className="hidden sm:block w-16 text-right">Stat</span>
@@ -284,9 +284,9 @@ export default function ScreenerPage() {
         )}
 
         {/* Stock list */}
-        <div className="glass rounded-xl sm:rounded-2xl border border-white/8 overflow-hidden divide-y divide-white/5">
+        <div className="glass rounded-xl sm:rounded-2xl border border-border overflow-hidden divide-y divide-border">
           {loading ? (
-            <div className="py-20 flex flex-col items-center gap-3 text-zinc-500">
+            <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
               <Loader2 className="size-6 animate-spin" />
               <p className="text-sm">Loading market data…</p>
             </div>
@@ -307,7 +307,7 @@ export default function ScreenerPage() {
 
         {/* Footer hint */}
         {!loading && stocks.length > 0 && (
-          <p className="text-center text-[10px] text-zinc-700 mt-4 pb-6">
+          <p className="text-center text-[10px] text-muted-foreground/60 mt-4 pb-6">
             Click any stock to open its candlestick chart →{" "}
             {isMock && "Connect Alpaca credentials for live market data"}
           </p>

@@ -23,7 +23,7 @@ export function TradeHistoryTable({ trades, period }: Props) {
 
   if (trades.length === 0) {
     return (
-      <p className="text-sm text-zinc-600 text-center py-8">
+      <p className="text-sm text-muted-foreground/70 text-center py-8">
         No trade history in this period.
       </p>
     );
@@ -51,7 +51,7 @@ export function TradeHistoryTable({ trades, period }: Props) {
         onClick={() => handleSort(col)}
         className={cn(
           "text-right px-3 py-2 font-medium cursor-pointer select-none transition-colors",
-          active ? "text-zinc-200" : "text-zinc-500 hover:text-zinc-300",
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         )}
       >
         <span className="inline-flex items-center gap-1 justify-end">
@@ -66,24 +66,24 @@ export function TradeHistoryTable({ trades, period }: Props) {
     <div className="flex flex-col gap-2">
       {/* Summary */}
       <div className="flex items-center justify-between text-[11px] px-1">
-        <span className="text-zinc-500">
+        <span className="text-muted-foreground">
           {trades.length} trade{trades.length !== 1 ? "s" : ""}
-          {period ? <span className="text-zinc-600"> · {period}</span> : null}
+          {period ? <span className="text-muted-foreground/70"> · {period}</span> : null}
         </span>
-        <span className={cn("font-mono font-bold tabular-nums", totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+        <span className={cn("font-mono font-bold tabular-nums", totalPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600")}>
           Cumulative P/L: {totalPnl >= 0 ? "+" : ""}{currFmt.format(totalPnl)}
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/5">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-[11px] min-w-[760px]">
           <thead>
-            <tr className="border-b border-white/5">
-              <th className="text-left px-3 py-2 text-zinc-500 font-medium">Strategy</th>
+            <tr className="border-b border-border">
+              <th className="text-left px-3 py-2 text-muted-foreground font-medium">Strategy</th>
               <SortHeader col="ticker" label="Ticker" />
-              <th className="text-right px-3 py-2 text-zinc-500 font-medium">Entry Date</th>
-              <th className="text-right px-3 py-2 text-zinc-500 font-medium">Exit Date</th>
-              <th className="text-right px-3 py-2 text-zinc-500 font-medium">Qty</th>
+              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Entry Date</th>
+              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Exit Date</th>
+              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Qty</th>
               <SortHeader col="entryValue" label="Entry Val" />
               <SortHeader col="exitValue"  label="Exit Val" />
               <SortHeader col="pnlDollars" label="P/L $" />
@@ -92,31 +92,31 @@ export function TradeHistoryTable({ trades, period }: Props) {
           </thead>
           <tbody>
             {sorted.map((t) => {
-              const plColor    = t.pnlDollars >= 0 ? "text-emerald-400" : "text-red-400";
+              const plColor    = t.pnlDollars >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600";
               const entryValue = t.entryPrice * t.qty;
               const exitValue  = t.exitPrice  * t.qty;
               return (
-                <tr key={t.id} className="border-b border-white/3 hover:bg-white/2 transition-colors">
-                  <td className="px-3 py-2 text-zinc-400 max-w-[100px] truncate" title={t.strategyName}>
+                <tr key={t.id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
+                  <td className="px-3 py-2 text-muted-foreground max-w-[100px] truncate" title={t.strategyName}>
                     {t.strategyName}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold text-zinc-200">{t.ticker}</td>
-                  <td className="px-3 py-2 text-right font-mono text-zinc-500 whitespace-nowrap">
+                  <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">{t.ticker}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">
                     {dtFmt.format(new Date(t.entryTime * 1000))}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-zinc-500 whitespace-nowrap">
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">
                     {dtFmt.format(new Date(t.exitTime * 1000))}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-zinc-400 tabular-nums">{t.qty}</td>
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{t.qty}</td>
 
                   {/* Entry market value = entryPrice × qty */}
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-zinc-400">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
                     {currFmt0.format(entryValue)}
                   </td>
                   {/* Exit market value = exitPrice × qty */}
                   <td className={cn(
                     "px-3 py-2 text-right font-mono tabular-nums",
-                    t.pnlDollars >= 0 ? "text-zinc-300" : "text-zinc-400",
+                    t.pnlDollars >= 0 ? "text-foreground/80" : "text-muted-foreground",
                   )}>
                     {currFmt0.format(exitValue)}
                   </td>
@@ -132,22 +132,22 @@ export function TradeHistoryTable({ trades, period }: Props) {
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t border-white/10 bg-zinc-900/30">
-              <td colSpan={5} className="px-3 py-2 text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
+            <tr className="border-t border-border bg-muted/30">
+              <td colSpan={5} className="px-3 py-2 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                 Period total{period ? ` · ${period}` : ""}
               </td>
               {/* Entry value total */}
-              <td className="px-3 py-2 text-right font-mono text-zinc-400 tabular-nums text-[11px]">
+              <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums text-[11px]">
                 {currFmt0.format(trades.reduce((s, t) => s + t.entryPrice * t.qty, 0))}
               </td>
               {/* Exit value total */}
-              <td className="px-3 py-2 text-right font-mono text-zinc-400 tabular-nums text-[11px]">
+              <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums text-[11px]">
                 {currFmt0.format(trades.reduce((s, t) => s + t.exitPrice * t.qty, 0))}
               </td>
               {/* P/L $ total */}
               <td className={cn(
                 "px-3 py-2 text-right font-mono font-bold tabular-nums",
-                totalPnl >= 0 ? "text-emerald-400" : "text-red-400",
+                totalPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
               )}>
                 {totalPnl >= 0 ? "+" : ""}{currFmt.format(totalPnl)}
               </td>

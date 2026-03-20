@@ -21,8 +21,8 @@ export function TimePeriodSelector({ value, onChange }: Props) {
           className={cn(
             "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
             value === p
-              ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
-              : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5",
+              ? "bg-emerald-500/20 dark:text-emerald-300 text-emerald-700 shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
           )}
         >
           {p}

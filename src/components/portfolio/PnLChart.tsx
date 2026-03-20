@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { useUIStore } from "@/store/useUIStore";
 import type { TradeRecord } from "@/types/trade";
 
 interface ChartPoint {
@@ -30,9 +31,12 @@ const currFmt = new Intl.NumberFormat("en-US", {
 const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 export function PnLChart({ trades }: Props) {
+  const theme = useUIStore((s) => s.theme);
+  const isDark = theme === "dark";
+
   if (trades.length === 0) {
     return (
-      <div className="flex items-center justify-center h-40 text-sm text-zinc-600">
+      <div className="flex items-center justify-center h-40 text-sm text-muted-foreground/70">
         No completed trades in this period yet.
       </div>
     );
@@ -57,19 +61,27 @@ export function PnLChart({ trades }: Props) {
   const minVal = Math.min(...chartData.map((d) => d.cumPnl));
   const lineColor = chartData[chartData.length - 1].cumPnl >= 0 ? "#34d399" : "#f87171";
 
+  const tickColor  = isDark ? "#71717a" : "#6b7280";
+  const gridColor  = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+  const refColor   = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
+  const tipBg      = isDark ? "rgba(9,9,11,0.95)" : "rgba(255,255,255,0.97)";
+  const tipBorder  = isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)";
+  const tipColor   = isDark ? "#e4e4e7" : "#1a1a2e";
+  const tipLabel   = isDark ? "#71717a" : "#6b7280";
+
   return (
     <ResponsiveContainer width="100%" height={200}>
       <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
         <XAxis
           dataKey="date"
-          tick={{ fill: "#71717a", fontSize: 10 }}
+          tick={{ fill: tickColor, fontSize: 10 }}
           axisLine={false}
           tickLine={false}
           interval="preserveStartEnd"
         />
         <YAxis
-          tick={{ fill: "#71717a", fontSize: 10 }}
+          tick={{ fill: tickColor, fontSize: 10 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v: number) => currFmt.format(v)}
@@ -78,16 +90,16 @@ export function PnLChart({ trades }: Props) {
         />
         <Tooltip
           contentStyle={{
-            background: "rgba(9,9,11,0.9)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: tipBg,
+            border: tipBorder,
             borderRadius: "8px",
             fontSize: 11,
-            color: "#e4e4e7",
+            color: tipColor,
           }}
           formatter={(value: number | undefined) => [value != null ? currFmt.format(value) : "—", "Cumulative P/L"] as [string, string]}
-          labelStyle={{ color: "#71717a", marginBottom: 4 }}
+          labelStyle={{ color: tipLabel, marginBottom: 4 }}
         />
-        <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" />
+        <ReferenceLine y={0} stroke={refColor} strokeDasharray="4 4" />
         <Line
           type="monotone"
           dataKey="cumPnl"

@@ -42,9 +42,9 @@ export default function PortfolioPage() {
   // Not logged in
   if (!user) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-zinc-400 mb-4">Please sign in to view your portfolio.</p>
+          <p className="text-muted-foreground mb-4">Please sign in to view your portfolio.</p>
           <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
             Go to Dashboard
           </Link>
@@ -54,34 +54,34 @@ export default function PortfolioPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
+    <main className="min-h-screen bg-background text-foreground">
       {/* ── Top bar ──────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 glass border-b border-white/5 px-4 py-3 flex items-center gap-3">
+      <header className="sticky top-0 z-30 glass border-b border-border px-4 py-3 flex items-center gap-3">
         <Link
           href="/dashboard"
-          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-all"
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all"
           title="Back to Dashboard"
         >
           <ArrowLeft className="size-4" />
         </Link>
         <div className="flex items-center gap-2">
-          <Wallet className="size-4 text-emerald-400" />
-          <span className="text-sm font-semibold text-zinc-200">Portfolio</span>
+          <Wallet className="size-4 text-emerald-500" />
+          <span className="text-sm font-semibold text-foreground">Portfolio</span>
         </div>
         {account && (
           <div className="ml-auto flex items-center gap-4 text-[11px]">
             <div className="text-right">
-              <p className="text-zinc-500">Equity</p>
-              <p className="font-mono font-bold text-zinc-200">{currFmt.format(account.equity)}</p>
+              <p className="text-muted-foreground">Equity</p>
+              <p className="font-mono font-bold text-foreground">{currFmt.format(account.equity)}</p>
             </div>
             <div className="text-right">
-              <p className="text-zinc-500">Buying Power</p>
-              <p className="font-mono font-bold text-zinc-200">{currFmt.format(account.buying_power)}</p>
+              <p className="text-muted-foreground">Buying Power</p>
+              <p className="font-mono font-bold text-foreground">{currFmt.format(account.buying_power)}</p>
             </div>
           </div>
         )}
         {!account && (
-          <p className="ml-auto text-[11px] text-zinc-600">
+          <p className="ml-auto text-[11px] text-muted-foreground/70">
             Connect Alpaca in the dashboard to see live positions
           </p>
         )}
@@ -92,44 +92,44 @@ export default function PortfolioPage() {
         {/* ── Summary cards ──────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">Open Positions</p>
-            <p className="text-2xl font-bold text-zinc-100 tabular-nums">{positions.length}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Open Positions</p>
+            <p className="text-2xl font-bold text-foreground tabular-nums">{positions.length}</p>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">Unrealized P/L</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Unrealized P/L</p>
             <p className={cn(
               "text-2xl font-bold tabular-nums font-mono",
-              unrealPnl >= 0 ? "text-emerald-400" : "text-red-400",
+              unrealPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
             )}>
               {unrealPnl >= 0 ? "+" : ""}{currFmt.format(unrealPnl)}
             </p>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
               Realized P/L ({period})
             </p>
             <div className="flex items-center gap-1.5">
               {totalPnl >= 0
-                ? <TrendingUp className="size-4 text-emerald-400 shrink-0" />
-                : <TrendingDown className="size-4 text-red-400 shrink-0" />}
+                ? <TrendingUp className="size-4 dark:text-emerald-400 text-emerald-600 shrink-0" />
+                : <TrendingDown className="size-4 dark:text-red-400 text-red-600 shrink-0" />}
               <p className={cn(
                 "text-2xl font-bold tabular-nums font-mono",
-                totalPnl >= 0 ? "text-emerald-400" : "text-red-400",
+                totalPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
               )}>
                 {totalPnl >= 0 ? "+" : ""}{currFmt.format(totalPnl)}
               </p>
             </div>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">Win Rate ({period})</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Win Rate ({period})</p>
             <div className="flex items-center gap-1.5">
-              <Activity className="size-4 text-zinc-500 shrink-0" />
-              <p className="text-2xl font-bold tabular-nums font-mono text-zinc-200">
+              <Activity className="size-4 text-muted-foreground shrink-0" />
+              <p className="text-2xl font-bold tabular-nums font-mono text-foreground">
                 {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : "—"}
               </p>
             </div>
             {filteredTrades.length > 0 && (
-              <p className="text-[10px] text-zinc-600 font-mono">
+              <p className="text-[10px] text-muted-foreground/70 font-mono">
                 {winCount}W / {filteredTrades.length - winCount}L ({filteredTrades.length} trades)
               </p>
             )}
@@ -139,11 +139,11 @@ export default function PortfolioPage() {
         {/* ── Active Positions ────────────────────────────────────────── */}
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-200">Active Positions</h2>
+            <h2 className="text-sm font-semibold text-foreground">Active Positions</h2>
             <button
               onClick={handleRefresh}
               disabled={refreshing || !account}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-white/5 border border-transparent hover:border-white/10 transition-all disabled:opacity-40"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent hover:border-border transition-all disabled:opacity-40"
             >
               <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
               Refresh
@@ -155,13 +155,13 @@ export default function PortfolioPage() {
         {/* ── Trade History ───────────────────────────────────────────── */}
         <section className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-sm font-semibold text-zinc-200">Trade History</h2>
+            <h2 className="text-sm font-semibold text-foreground">Trade History</h2>
             <TimePeriodSelector value={period} onChange={setPeriod} />
           </div>
 
           {/* P/L Chart */}
           <div className="glass rounded-2xl p-4">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium mb-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-3">
               Cumulative P/L — {period}
             </p>
             <PnLChart trades={filteredTrades} />

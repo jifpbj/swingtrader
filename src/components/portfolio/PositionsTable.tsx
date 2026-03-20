@@ -75,17 +75,17 @@ export function PositionsTable({ positions }: Props) {
 
   if (positions.length === 0) {
     return (
-      <p className="text-sm text-zinc-600 text-center py-8">
+      <p className="text-sm text-muted-foreground/70 text-center py-8">
         No open positions. Enable auto-trade on a strategy to start trading.
       </p>
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/5 overflow-hidden">
+    <div className="rounded-xl border border-border overflow-hidden">
       <table className="w-full text-[11px] min-w-[520px]">
         <thead>
-          <tr className="border-b border-white/5 text-zinc-500 font-medium">
+          <tr className="border-b border-border text-muted-foreground font-medium">
             <th className="text-left px-3 py-2">Symbol</th>
             <th className="text-right px-3 py-2">Qty</th>
             <th className="text-right px-3 py-2">Avg Entry</th>
@@ -99,7 +99,7 @@ export function PositionsTable({ positions }: Props) {
         <tbody>
           {positions.map((p) => {
             const plColor =
-              p.unrealized_pl >= 0 ? "text-emerald-400" : "text-red-400";
+              p.unrealized_pl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600";
             const plPct = p.unrealized_plpc * 100;
             const isSelected = selectedSymbol === p.symbol;
 
@@ -109,32 +109,32 @@ export function PositionsTable({ positions }: Props) {
                   key={p.symbol}
                   onClick={() => handleSelect(p)}
                   className={cn(
-                    "border-b border-white/3 cursor-pointer transition-colors",
+                    "border-b border-border/50 cursor-pointer transition-colors",
                     isSelected
-                      ? "bg-zinc-700/40"
-                      : "hover:bg-white/3",
+                      ? "dark:bg-zinc-700/40 bg-secondary"
+                      : "hover:bg-secondary/30",
                   )}
                 >
-                  <td className="px-3 py-2 font-mono font-semibold text-zinc-100">
+                  <td className="px-3 py-2 font-mono font-semibold text-foreground">
                     <div className="flex items-center gap-1.5">
                       {p.symbol}
-                      <span className="text-[9px] text-zinc-600">
+                      <span className="text-[9px] text-muted-foreground/70">
                         {isSelected ? "▲" : "▼"}
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-zinc-300">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground/80">
                     {p.qty}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-zinc-400">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
                     {currFmt.format(p.avg_entry_price)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-zinc-300">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground/80">
                     {p.current_price !== null
                       ? currFmt.format(p.current_price)
                       : "—"}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-zinc-400">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
                     {p.market_value !== null
                       ? currFmt.format(p.market_value)
                       : "—"}
@@ -167,8 +167,8 @@ export function PositionsTable({ positions }: Props) {
                       className={cn(
                         "px-2 py-1 rounded-md text-[10px] font-bold transition-all border",
                         isSelected
-                          ? "border-zinc-600 text-zinc-400 hover:text-zinc-200"
-                          : "border-red-500/40 text-red-400 hover:bg-red-500/10",
+                          ? "border-border text-muted-foreground hover:text-foreground"
+                          : "border-red-500/40 dark:text-red-400 text-red-600 hover:bg-red-500/10",
                       )}
                     >
                       {isSelected ? "Hide" : "Sell"}
@@ -178,18 +178,18 @@ export function PositionsTable({ positions }: Props) {
 
                 {/* Inline sell form row */}
                 {isSelected && (
-                  <tr key={`${p.symbol}-sell`} className="bg-zinc-800/50">
+                  <tr key={`${p.symbol}-sell`} className="bg-muted/50">
                     <td colSpan={8} className="px-4 py-3">
                       <form
                         onSubmit={(e) => handleSell(e, p)}
                         className="flex flex-col gap-3 max-w-lg"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold text-red-400 uppercase tracking-wider">
+                          <span className="text-[11px] font-semibold dark:text-red-400 text-red-600 uppercase tracking-wider">
                             Close Position — {p.symbol}
                           </span>
                           {p.current_price != null && (
-                            <span className="text-[10px] text-zinc-500 font-mono">
+                            <span className="text-[10px] text-muted-foreground font-mono">
                               Last: {currFmt.format(p.current_price)}
                             </span>
                           )}
@@ -197,7 +197,7 @@ export function PositionsTable({ positions }: Props) {
 
                         <div className="flex gap-3 items-end flex-wrap">
                           {/* Order type */}
-                          <div className="flex gap-1 bg-zinc-900/60 rounded-lg p-0.5 shrink-0">
+                          <div className="flex gap-1 bg-muted rounded-lg p-0.5 shrink-0">
                             {(["market", "limit"] as OrderType[]).map((t) => (
                               <button
                                 key={t}
@@ -206,8 +206,8 @@ export function PositionsTable({ positions }: Props) {
                                 className={cn(
                                   "px-3 py-1 rounded-md text-[11px] font-medium transition-all capitalize",
                                   orderType === t
-                                    ? "bg-zinc-700 text-zinc-100 shadow-sm"
-                                    : "text-zinc-500 hover:text-zinc-400",
+                                    ? "dark:bg-zinc-700 dark:text-zinc-100 bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground",
                                 )}
                               >
                                 {t}
@@ -217,7 +217,7 @@ export function PositionsTable({ positions }: Props) {
 
                           {/* Qty */}
                           <div className="flex flex-col gap-1 w-28">
-                            <label className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                               Qty
                             </label>
                             <input
@@ -227,14 +227,14 @@ export function PositionsTable({ positions }: Props) {
                               min="0.0001"
                               step="any"
                               required
-                              className="bg-zinc-900/60 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-red-400/60 focus:ring-1 focus:ring-red-400/20 transition-all"
+                              className="bg-background border border-border rounded-lg px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/20 transition-all"
                             />
                           </div>
 
                           {/* Limit price */}
                           {orderType === "limit" && (
                             <div className="flex flex-col gap-1 w-32">
-                              <label className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider">
                                 Limit Price
                               </label>
                               <input
@@ -249,7 +249,7 @@ export function PositionsTable({ positions }: Props) {
                                     ? p.current_price.toFixed(2)
                                     : ""
                                 }
-                                className="bg-zinc-900/60 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-red-400/60 focus:ring-1 focus:ring-red-400/20 transition-all"
+                                className="bg-background border border-border rounded-lg px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/20 transition-all"
                               />
                             </div>
                           )}
@@ -262,7 +262,7 @@ export function PositionsTable({ positions }: Props) {
                                 setSelectedSymbol(null);
                                 setResult(null);
                               }}
-                              className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 border border-white/10 hover:bg-white/5 transition-all"
+                              className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground border border-border hover:bg-secondary/50 transition-all"
                             >
                               Cancel
                             </button>
@@ -288,8 +288,8 @@ export function PositionsTable({ positions }: Props) {
                             className={cn(
                               "flex items-center gap-2 text-[11px] rounded-lg px-3 py-2 border",
                               result.ok
-                                ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                                : "text-red-400 bg-red-500/10 border-red-500/20",
+                                ? "dark:text-emerald-400 text-emerald-600 bg-emerald-500/10 border-emerald-500/20"
+                                : "dark:text-red-400 text-red-600 bg-red-500/10 border-red-500/20",
                             )}
                           >
                             <AlertCircle className="size-3.5 shrink-0" />
@@ -305,20 +305,20 @@ export function PositionsTable({ positions }: Props) {
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t border-white/10 bg-zinc-900/30">
+          <tr className="border-t border-border bg-muted/30">
             <td
               colSpan={4}
-              className="px-3 py-2 text-[10px] text-zinc-500 font-semibold uppercase tracking-wider"
+              className="px-3 py-2 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider"
             >
               Total · {positions.length} position{positions.length !== 1 ? "s" : ""}
             </td>
-            <td className="px-3 py-2 text-right font-mono font-bold text-zinc-100 tabular-nums">
+            <td className="px-3 py-2 text-right font-mono font-bold text-foreground tabular-nums">
               {currFmt.format(totalMktValue)}
             </td>
             <td
               className={cn(
                 "px-3 py-2 text-right font-mono font-bold tabular-nums",
-                totalUnrealPnl >= 0 ? "text-emerald-400" : "text-red-400",
+                totalUnrealPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
               )}
             >
               {totalUnrealPnl >= 0 ? "+" : ""}
@@ -327,7 +327,7 @@ export function PositionsTable({ positions }: Props) {
             <td
               className={cn(
                 "px-3 py-2 text-right font-mono font-bold tabular-nums",
-                totalUnrealPct >= 0 ? "text-emerald-400" : "text-red-400",
+                totalUnrealPct >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
               )}
             >
               {totalUnrealPct >= 0 ? "+" : ""}
