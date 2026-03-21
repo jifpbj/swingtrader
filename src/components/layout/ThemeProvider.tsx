@@ -13,13 +13,29 @@ function applyTheme(theme: string) {
   root.style.colorScheme = isDark ? "dark" : "light";
 }
 
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* Safari private mode — ignore */
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
 
   // On mount: read localStorage, sync into store, apply to DOM
   useEffect(() => {
-    const stored = localStorage.getItem("pa-theme") as typeof theme | null;
+    const stored = safeGetItem("pa-theme") as typeof theme | null;
     if (stored && stored !== theme) {
       setTheme(stored);
     } else {
@@ -30,7 +46,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Whenever theme changes: persist + apply
   useEffect(() => {
-    localStorage.setItem("pa-theme", theme);
+    safeSetItem("pa-theme", theme);
     applyTheme(theme);
   }, [theme]);
 
