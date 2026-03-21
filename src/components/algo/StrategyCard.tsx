@@ -134,26 +134,40 @@ export function StrategyCard({ strategy }: Props) {
   const beatingBacktest = hasActualTrades && actualPnlPct > btReturn;
 
   // ── Open trade state ──────────────────────────────────────────────────────
-  const openEntry = strategy.openEntry;
-  const hasOpenTrade = !!openEntry;
+  const openEntry        = strategy.openEntry;
+  const alpacaConnected  = !!alpacaAccount;
 
   // Find matching Alpaca position (strip "/" from "BTC/USD" → "BTCUSD")
   const alpacaSymbol   = strategy.ticker.replace("/", "");
   const alpacaPosition = alpacaPositions.find((p) => p.symbol === alpacaSymbol);
 
-  // Unrealized P&L % — prefer live Alpaca data, fallback to computed from livePrice
+  // Source of truth: if Alpaca is connected, only show "IN TRADE" when Alpaca
+  // actually holds the position. If disconnected, fall back to Firestore openEntry.
+  const hasOpenTrade = alpacaConnected ? !!alpacaPosition : !!openEntry;
+
+  // Display values — always prefer live Alpaca data
+  const displayEntryPrice: number | null =
+    alpacaPosition?.avg_entry_price ?? openEntry?.price ?? null;
+
+  const displayCurrentPrice: number | null =
+    alpacaPosition?.current_price ??
+    (currentTicker === strategy.ticker ? livePrice : null);
+
+  const displayQty: number | null =
+    alpacaPosition?.qty ?? openEntry?.qty ?? null;
+
+  // Unrealized P&L — from Alpaca if available, else compute from livePrice
   const unrealizedPlPct: number | null = (() => {
     if (!hasOpenTrade) return null;
-    if (alpacaPosition?.unrealized_plpc != null) return alpacaPosition.unrealized_plpc; // decimal e.g. 0.05
-    if (currentTicker === strategy.ticker && livePrice != null && openEntry) {
-      return (livePrice - openEntry.price) / openEntry.price;
+    if (alpacaPosition?.unrealized_plpc != null) return alpacaPosition.unrealized_plpc;
+    if (displayCurrentPrice != null && displayEntryPrice != null && displayEntryPrice > 0) {
+      return (displayCurrentPrice - displayEntryPrice) / displayEntryPrice;
     }
     return null;
   })();
 
-  // Current market price for the open position
-  const openCurrentPrice: number | null =
-    alpacaPosition?.current_price ?? (currentTicker === strategy.ticker ? livePrice : null);
+  const unrealizedPlDollars: number | null =
+    alpacaPosition?.unrealized_pl ?? null;
 
   // ── Lot size vs. account purchasing power / equity warning (only for $ mode)
   const lotWarning: "buying_power" | "equity" | null = (() => {
@@ -300,7 +314,7 @@ export function StrategyCard({ strategy }: Props) {
       </div>
 
       {/* ════ OPEN POSITION PANEL ═══════════════════════════════════════════ */}
-      {hasOpenTrade && openEntry && (
+      {hasOpenTrade && (
         <div className="mx-4 mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 overflow-hidden">
           {/* Header row */}
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-blue-500/15 bg-blue-500/10">
@@ -310,25 +324,30 @@ export function StrategyCard({ strategy }: Props) {
                 Open Position
               </span>
             </div>
-            <span className="text-[9px] text-muted-foreground font-mono">
-              {dateFmtSh.format(new Date(openEntry.time * 1000))}
-            </span>
+            {/* Show entry date from Firestore openEntry if available */}
+            {openEntry?.time != null && (
+              <span className="text-[9px] text-muted-foreground font-mono">
+                {dateFmtSh.format(new Date(openEntry.time * 1000))}
+              </span>
+            )}
           </div>
 
           {/* Price / P&L row */}
           <div className="flex items-center justify-between px-3 py-2 gap-2">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Entry</span>
-              <span className="text-[11px] font-mono tabular-nums text-foreground font-semibold">
-                ${openEntry.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
+            {displayEntryPrice != null && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Entry</span>
+                <span className="text-[11px] font-mono tabular-nums text-foreground font-semibold">
+                  ${displayEntryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
 
-            {openCurrentPrice != null && (
+            {displayCurrentPrice != null && (
               <div className="flex flex-col gap-0.5">
                 <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Current</span>
                 <span className="text-[11px] font-mono tabular-nums text-foreground font-semibold">
-                  ${openCurrentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${displayCurrentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             )}
@@ -349,6 +368,11 @@ export function StrategyCard({ strategy }: Props) {
                   <span className="text-[13px] font-black tabular-nums tracking-tight">
                     {unrealizedPlPct >= 0 ? "+" : ""}{(unrealizedPlPct * 100).toFixed(2)}%
                   </span>
+                  {unrealizedPlDollars != null && (
+                    <span className="text-[9px] font-mono opacity-70 ml-0.5">
+                      ({unrealizedPlDollars >= 0 ? "+" : ""}{currFmt.format(unrealizedPlDollars)})
+                    </span>
+                  )}
                 </div>
               ) : (
                 <span className="text-[11px] text-muted-foreground font-mono">—</span>
@@ -356,11 +380,14 @@ export function StrategyCard({ strategy }: Props) {
             </div>
           </div>
 
-          {/* Qty row */}
-          {openEntry.qty != null && (
-            <div className="px-3 pb-2 flex items-center gap-1">
-              <span className="text-[8px] text-muted-foreground">Qty:</span>
-              <span className="text-[9px] font-mono text-foreground">{openEntry.qty}</span>
+          {/* Qty row — from Alpaca if connected */}
+          {displayQty != null && (
+            <div className="px-3 pb-2 flex items-center gap-1.5">
+              <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Qty held:</span>
+              <span className="text-[9px] font-mono font-semibold text-foreground">{displayQty}</span>
+              {!alpacaConnected && (
+                <span className="text-[8px] text-muted-foreground italic">(estimated)</span>
+              )}
             </div>
           )}
         </div>
