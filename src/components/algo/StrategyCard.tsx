@@ -6,6 +6,7 @@ import {
   Trash2, TrendingUp, TrendingDown, Loader2, Bot, PowerOff,
   ChevronDown, ChevronUp, ExternalLink, BarChart3, ShieldAlert,
   DollarSign, Percent, AlertTriangle, ShieldCheck, ShieldOff,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/utils";
@@ -66,7 +67,10 @@ export function StrategyCard({ strategy }: Props) {
     setMacdSignalPeriod, setTrailingStopEnabled, setTrailingStopPercent,
   } = useUIStore();
   const getTradesForStrategy = useTradeStore((s) => s.getTradesForStrategy);
-  const alpacaAccount = useAlpacaStore((s) => s.account);
+  const alpacaAccount   = useAlpacaStore((s) => s.account);
+  const alpacaPositions = useAlpacaStore((s) => s.positions);
+  const livePrice       = useUIStore((s) => s.livePrice);
+  const currentTicker   = useUIStore((s) => s.ticker);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toggling,      setToggling]      = useState(false);
@@ -129,7 +133,29 @@ export function StrategyCard({ strategy }: Props) {
   // Beating backtest?
   const beatingBacktest = hasActualTrades && actualPnlPct > btReturn;
 
-  // Lot size vs. account purchasing power / equity warning (only for $ mode)
+  // ── Open trade state ──────────────────────────────────────────────────────
+  const openEntry = strategy.openEntry;
+  const hasOpenTrade = !!openEntry;
+
+  // Find matching Alpaca position (strip "/" from "BTC/USD" → "BTCUSD")
+  const alpacaSymbol   = strategy.ticker.replace("/", "");
+  const alpacaPosition = alpacaPositions.find((p) => p.symbol === alpacaSymbol);
+
+  // Unrealized P&L % — prefer live Alpaca data, fallback to computed from livePrice
+  const unrealizedPlPct: number | null = (() => {
+    if (!hasOpenTrade) return null;
+    if (alpacaPosition?.unrealized_plpc != null) return alpacaPosition.unrealized_plpc; // decimal e.g. 0.05
+    if (currentTicker === strategy.ticker && livePrice != null && openEntry) {
+      return (livePrice - openEntry.price) / openEntry.price;
+    }
+    return null;
+  })();
+
+  // Current market price for the open position
+  const openCurrentPrice: number | null =
+    alpacaPosition?.current_price ?? (currentTicker === strategy.ticker ? livePrice : null);
+
+  // ── Lot size vs. account purchasing power / equity warning (only for $ mode)
   const lotWarning: "buying_power" | "equity" | null = (() => {
     if (lotSizeMode !== "dollars" || !alpacaAccount) return null;
     if (lotSizeDollars > alpacaAccount.buying_power) return "buying_power";
@@ -219,6 +245,13 @@ export function StrategyCard({ strategy }: Props) {
             )}>
               {strategy.indicator}
             </span>
+            {/* IN TRADE badge */}
+            {hasOpenTrade && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold border bg-blue-500/15 dark:text-blue-300 text-blue-700 border-blue-500/30 shrink-0 animate-pulse">
+                <Activity className="size-2.5 shrink-0" />
+                LIVE
+              </span>
+            )}
           </div>
 
           {/* Indicator full name */}
@@ -265,6 +298,73 @@ export function StrategyCard({ strategy }: Props) {
           </button>
         </div>
       </div>
+
+      {/* ════ OPEN POSITION PANEL ═══════════════════════════════════════════ */}
+      {hasOpenTrade && openEntry && (
+        <div className="mx-4 mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 overflow-hidden">
+          {/* Header row */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-blue-500/15 bg-blue-500/10">
+            <div className="flex items-center gap-1">
+              <Activity className="size-3 text-blue-400 animate-pulse shrink-0" />
+              <span className="text-[9px] font-bold uppercase tracking-wider dark:text-blue-300 text-blue-700">
+                Open Position
+              </span>
+            </div>
+            <span className="text-[9px] text-muted-foreground font-mono">
+              {dateFmtSh.format(new Date(openEntry.time * 1000))}
+            </span>
+          </div>
+
+          {/* Price / P&L row */}
+          <div className="flex items-center justify-between px-3 py-2 gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Entry</span>
+              <span className="text-[11px] font-mono tabular-nums text-foreground font-semibold">
+                ${openEntry.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {openCurrentPrice != null && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Current</span>
+                <span className="text-[11px] font-mono tabular-nums text-foreground font-semibold">
+                  ${openCurrentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+
+            {/* Unrealized P&L — the hero number */}
+            <div className="flex flex-col items-end gap-0.5 ml-auto">
+              <span className="text-[8px] text-muted-foreground uppercase tracking-wide">Unrealized P&amp;L</span>
+              {unrealizedPlPct != null ? (
+                <div className={cn(
+                  "flex items-center gap-1 px-2 py-0.5 rounded-lg",
+                  unrealizedPlPct >= 0
+                    ? "bg-emerald-500/20 dark:text-emerald-300 text-emerald-700"
+                    : "bg-red-500/20 dark:text-red-300 text-red-700",
+                )}>
+                  {unrealizedPlPct >= 0
+                    ? <TrendingUp className="size-3 shrink-0" />
+                    : <TrendingDown className="size-3 shrink-0" />}
+                  <span className="text-[13px] font-black tabular-nums tracking-tight">
+                    {unrealizedPlPct >= 0 ? "+" : ""}{(unrealizedPlPct * 100).toFixed(2)}%
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[11px] text-muted-foreground font-mono">—</span>
+              )}
+            </div>
+          </div>
+
+          {/* Qty row */}
+          {openEntry.qty != null && (
+            <div className="px-3 pb-2 flex items-center gap-1">
+              <span className="text-[8px] text-muted-foreground">Qty:</span>
+              <span className="text-[9px] font-mono text-foreground">{openEntry.qty}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ════ MAIN P/L DISPLAY ══════════════════════════════════════════════ */}
       <div className="px-4 pb-3">
