@@ -10,8 +10,9 @@ import {
   Tooltip,
 } from "recharts";
 import { useUIStore } from "@/store/useUIStore";
+import { useStrategyStore } from "@/store/useStrategyStore";
 import { cn, formatVolume } from "@/lib/utils";
-import { Activity, TrendingUp, Cpu } from "lucide-react";
+import { Activity, TrendingUp, Cpu, ShieldCheck, ShieldOff } from "lucide-react";
 
 // ─── RSI Gauge ────────────────────────────────────────────────────────────────
 function RSIGauge({ value }: { value: number }) {
@@ -194,6 +195,12 @@ function ATRDisplay({ atr, price }: { atr: number; price: number }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function IndicatorRibbon() {
   const indicators = useUIStore((s) => s.indicators);
+  const trailingStopEnabled = useUIStore((s) => s.trailingStopEnabled);
+  const trailingStopPercent = useUIStore((s) => s.trailingStopPercent);
+  const activeStrategyId = useStrategyStore((s) => s.activeStrategyId);
+  const strategies = useStrategyStore((s) => s.strategies);
+  const activeStrategy = strategies.find((s) => s.id === activeStrategyId);
+  const openEntry = activeStrategy?.openEntry;
 
   if (!indicators) {
     return (
@@ -265,6 +272,32 @@ export function IndicatorRibbon() {
             {formatVolume(indicators.volume24h)}
           </span>
           <span className="text-[10px] text-zinc-500">USDT</span>
+        </div>
+
+        <div className="h-px w-px bg-white/5 self-stretch" />
+
+        {/* Trailing Stop */}
+        <div className="shrink-0 flex flex-col justify-center gap-1">
+          <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+            {trailingStopEnabled
+              ? <ShieldCheck className="size-3 text-amber-400" />
+              : <ShieldOff className="size-3" />}
+            Trail Stop
+          </div>
+          {trailingStopEnabled ? (
+            <>
+              <span className="font-mono text-sm text-amber-400 font-medium">
+                {trailingStopPercent.toFixed(1)}%
+              </span>
+              {openEntry && (
+                <span className="text-[9px] text-amber-400/70 font-mono">
+                  @ ${((openEntry.highWaterMark ?? openEntry.price) * (1 - trailingStopPercent / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="font-mono text-sm text-zinc-600 font-medium">OFF</span>
+          )}
         </div>
       </div>
     </div>

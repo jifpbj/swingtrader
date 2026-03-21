@@ -13,6 +13,8 @@ export interface IndicatorParams {
   macdFast: number;
   macdSlow: number;
   macdSignal: number;
+  trailingStopEnabled: boolean;  // whether trailing stop is active
+  trailingStopPercent: number;   // e.g. 5 = 5% trailing stop
 }
 
 /** Serialization-safe backtest period result (stored in Firestore) */
@@ -37,6 +39,7 @@ export interface OpenEntry {
   time: number;    // Unix seconds of the buy signal
   price: number;   // price at which the buy was executed
   qty: number;     // units bought
+  highWaterMark: number; // highest price since entry, used for trailing stop
 }
 
 export interface SavedStrategy {
@@ -57,6 +60,8 @@ export interface SavedStrategy {
   orderQty: number;                 // units to trade per signal (computed from lotSizeDollars)
   lotSizeMode: "dollars" | "units"; // how the user specified lot size
   lotSizeDollars: number;           // capital to deploy per trade in USD
+  trailingStopEnabled: boolean;     // whether trailing stop loss is active
+  trailingStopPercent: number;      // e.g. 5 = sell if price drops 5% from high water mark
   openEntry: OpenEntry | null;      // set on buy, cleared on sell (used for P/L tracking)
   lastExecutedSignalTime: number | null; // Unix seconds — dedup guard
   createdAt: number;                // Unix ms

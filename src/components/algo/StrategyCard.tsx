@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Trash2, TrendingUp, TrendingDown, Loader2, Bot, PowerOff,
   ChevronDown, ChevronUp, ExternalLink, BarChart3, ShieldAlert,
-  DollarSign, Percent, AlertTriangle,
+  DollarSign, Percent, AlertTriangle, ShieldCheck, ShieldOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/utils";
@@ -63,7 +63,7 @@ export function StrategyCard({ strategy }: Props) {
   const {
     setTicker, setTimeframe, setActiveIndicatorTab, setEmaPeriod, setBbPeriod, setBbStdDev,
     setRsiPeriod, setRsiOverbought, setRsiOversold, setMacdFastPeriod, setMacdSlowPeriod,
-    setMacdSignalPeriod,
+    setMacdSignalPeriod, setTrailingStopEnabled, setTrailingStopPercent,
   } = useUIStore();
   const getTradesForStrategy = useTradeStore((s) => s.getTradesForStrategy);
   const alpacaAccount = useAlpacaStore((s) => s.account);
@@ -88,6 +88,22 @@ export function StrategyCard({ strategy }: Props) {
         orderQty: mode === "units" ? amount : 1,
       }, user.uid);
     } finally { setSavingLot(false); }
+  }
+
+  // Trailing stop
+  const [tsEnabled, setTsEnabled] = useState(strategy.trailingStopEnabled ?? false);
+  const [tsPercent, setTsPercent] = useState(strategy.trailingStopPercent ?? 5);
+  const [savingTs,  setSavingTs]  = useState(false);
+
+  async function handleTsSave(enabled: boolean, pct: number) {
+    if (!user) return;
+    setSavingTs(true);
+    try {
+      await updateStrategy(strategy.id, {
+        trailingStopEnabled: enabled,
+        trailingStopPercent: pct,
+      }, user.uid);
+    } finally { setSavingTs(false); }
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────
@@ -136,6 +152,8 @@ export function StrategyCard({ strategy }: Props) {
     setMacdFastPeriod(strategy.params.macdFast);
     setMacdSlowPeriod(strategy.params.macdSlow);
     setMacdSignalPeriod(strategy.params.macdSignal);
+    setTrailingStopEnabled(strategy.trailingStopEnabled ?? false);
+    setTrailingStopPercent(strategy.trailingStopPercent ?? 5);
   }
 
   async function handleToggleAutoTrade(e: React.MouseEvent) {
@@ -441,6 +459,80 @@ export function StrategyCard({ strategy }: Props) {
           </p>
         </div>
       )}
+
+      {/* ════ TRAILING STOP LOSS ══════════════════════════════════════════ */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-foreground/80 font-medium shrink-0 flex items-center gap-1">
+            {tsEnabled ? <ShieldCheck className="size-2.5 text-amber-400" /> : <ShieldOff className="size-2.5 text-muted-foreground" />}
+            Trail Stop
+          </span>
+
+          {/* Toggle */}
+          <button
+            onClick={() => { const next = !tsEnabled; setTsEnabled(next); handleTsSave(next, tsPercent); }}
+            className={cn(
+              "px-1.5 py-0.5 rounded text-[9px] font-semibold transition-all border",
+              tsEnabled
+                ? "bg-amber-500/20 dark:text-amber-300 text-amber-700 border-amber-500/30"
+                : "bg-secondary/50 text-muted-foreground border-border hover:text-foreground",
+            )}
+          >
+            {tsEnabled ? "ON" : "OFF"}
+          </button>
+
+          {/* Preset buttons */}
+          {tsEnabled && (
+            <div className="flex items-center gap-0.5">
+              {[2, 5, 10].map((pct) => (
+                <button
+                  key={pct}
+                  onClick={() => { setTsPercent(pct); handleTsSave(true, pct); }}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[9px] font-mono transition-all",
+                    tsPercent === pct
+                      ? "bg-amber-500/20 dark:text-amber-300 text-amber-700 font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                  )}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+          )}
+
+          {savingTs && <Loader2 className="size-2.5 animate-spin text-muted-foreground shrink-0" />}
+        </div>
+
+        {/* Custom input + computed stop level */}
+        {tsEnabled && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-[9px]">
+              <input
+                type="number"
+                min={0.5}
+                max={50}
+                step={0.5}
+                value={tsPercent}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v >= 0.5 && v <= 50) setTsPercent(v);
+                }}
+                onBlur={() => handleTsSave(true, tsPercent)}
+                className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-right font-mono tabular-nums text-foreground outline-none focus:border-amber-500/50 transition-colors"
+              />
+              <span className="text-muted-foreground">%</span>
+            </div>
+
+            {/* Show computed stop level when open position exists */}
+            {strategy.openEntry && (
+              <span className="text-[9px] font-mono text-amber-400/80 ml-auto">
+                Stop @ ${((strategy.openEntry.highWaterMark ?? strategy.openEntry.price) * (1 - tsPercent / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
       </div>
 
       {/* ════ FOOTER ROW — history expand + portfolio link ══════════════════ */}

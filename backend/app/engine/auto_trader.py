@@ -6,6 +6,7 @@ Called by the scheduler every N s for each strategy that has autoTrade=True.
 Flow per strategy:
   1. Map frontend timeframe string → backend Timeframe enum
   2. Fetch 150 OHLCV bars via the shared MarketDataService
+  2b. Trailing stop check (if enabled & open position)
   3. Detect crossover signals via signals.py
   4. Dedup: skip if signal already executed (lastExecutedSignalTime)
   5. Fetch per-user Alpaca keys from Firestore (cached 5 min)
@@ -207,6 +208,192 @@ async def _get_latest_price(
             return None
 
 
+# ─── Shared sell helper ──────────────────────────────────────────────────────
+
+async def _execute_sell(
+    uid: str,
+    strategy: dict[str, Any],
+    strategy_id: str,
+    ticker: str,
+    exit_price: float,
+    exit_time: int,
+    position_qty: float,
+    base_url: str,
+    api_key: str,
+    secret_key: str,
+    lot_dollars: float,
+    exit_reason: str = "signal",
+) -> bool:
+    """
+    Place a sell order and write the trade record to Firestore.
+    Returns True on success, False on failure.
+    """
+    alpaca_sym = _alpaca_symbol(ticker)
+
+    order = await _place_order(
+        alpaca_sym, position_qty, None, "sell", base_url, api_key, secret_key,
+    )
+    if order is None:
+        logger.warning(
+            "auto_trader_sell_failed",
+            uid=uid, strategy_id=strategy_id, symbol=alpaca_sym,
+            exit_reason=exit_reason,
+        )
+        return False
+
+    filled_qty = float(order.get("filled_qty") or order.get("qty") or position_qty or 0)
+    now_ms = int(time.time() * 1000)
+
+    logger.info(
+        "auto_trade_sell_executed",
+        uid=uid,
+        strategy_id=strategy_id,
+        ticker=ticker,
+        qty=filled_qty,
+        price=exit_price,
+        exit_reason=exit_reason,
+        order_id=order.get("id"),
+    )
+
+    # Compute P&L from openEntry
+    open_entry  = strategy.get("openEntry") or {}
+    entry_price = float(open_entry.get("price", exit_price))
+    entry_qty   = float(open_entry.get("qty", filled_qty))
+    entry_time  = int(open_entry.get("time", exit_time))
+
+    pnl_dollars = (exit_price - entry_price) * entry_qty
+    pnl_percent = pnl_dollars / (entry_price * entry_qty) if entry_price > 0 else 0.0
+
+    await add_trade(uid, {
+        "strategyId":     strategy_id,
+        "strategyName":   strategy.get("name", ""),
+        "ticker":         alpaca_sym,
+        "entryTime":      entry_time,
+        "exitTime":       exit_time,
+        "entryPrice":     entry_price,
+        "exitPrice":      exit_price,
+        "qty":            entry_qty,
+        "pnlDollars":     pnl_dollars,
+        "pnlPercent":     pnl_percent,
+        "lotSizeDollars": lot_dollars,
+        "exitReason":     exit_reason,
+        "createdAt":      now_ms,
+    })
+
+    await update_strategy(uid, strategy_id, {
+        "lastExecutedSignalTime": exit_time,
+        "openEntry": None,
+    })
+
+    return True
+
+
+# ─── Trailing stop check ────────────────────────────────────────────────────
+
+async def _check_trailing_stop(
+    uid: str,
+    strategy: dict[str, Any],
+    strategy_id: str,
+    ticker: str,
+    api_key: str,
+    secret_key: str,
+    base_url: str,
+) -> bool:
+    """
+    Check trailing stop condition for an open position.
+    Returns True if stop was triggered and position was sold.
+
+    1. Read openEntry + trailingStopPercent from strategy
+    2. Fetch latest price
+    3. Update highWaterMark = max(current HWM, latest price)
+    4. Compute stopLevel = highWaterMark * (1 - pct/100)
+    5. If price <= stopLevel → sell
+    6. Always persist updated highWaterMark
+    """
+    open_entry = strategy.get("openEntry") or {}
+    stop_pct = float(strategy.get("trailingStopPercent", 5))
+
+    alpaca_sym = _alpaca_symbol(ticker)
+
+    # Fetch latest price
+    latest_price = await _get_latest_price(ticker, api_key, secret_key)
+    if latest_price is None:
+        logger.warning(
+            "trailing_stop_price_unavailable",
+            uid=uid, strategy_id=strategy_id, ticker=ticker,
+        )
+        return False
+
+    # Update high water mark
+    current_hwm = float(open_entry.get("highWaterMark", open_entry.get("price", 0)))
+    new_hwm = max(current_hwm, latest_price)
+
+    # Compute stop level
+    stop_level = new_hwm * (1 - stop_pct / 100)
+
+    logger.info(
+        "trailing_stop_check",
+        uid=uid,
+        strategy_id=strategy_id,
+        ticker=ticker,
+        latest_price=latest_price,
+        high_water_mark=new_hwm,
+        stop_level=stop_level,
+        stop_pct=stop_pct,
+    )
+
+    # Check if stop triggered
+    if latest_price <= stop_level:
+        logger.info(
+            "trailing_stop_triggered",
+            uid=uid,
+            strategy_id=strategy_id,
+            ticker=ticker,
+            latest_price=latest_price,
+            stop_level=stop_level,
+            high_water_mark=new_hwm,
+            drop_pct=round((1 - latest_price / new_hwm) * 100, 2),
+        )
+
+        # Fetch position qty
+        position = await _fetch_position(alpaca_sym, base_url, api_key, secret_key)
+        position_qty = float(position.get("qty", 0)) if position else 0.0
+
+        if position_qty <= 0:
+            logger.warning(
+                "trailing_stop_no_position",
+                uid=uid, strategy_id=strategy_id, ticker=ticker,
+            )
+            # Clear openEntry since there's no actual position
+            await update_strategy(uid, strategy_id, {"openEntry": None})
+            return True
+
+        lot_dollars = float(strategy.get("lotSizeDollars", 1_000) or 1_000)
+        exit_time = int(time.time())
+
+        return await _execute_sell(
+            uid=uid,
+            strategy=strategy,
+            strategy_id=strategy_id,
+            ticker=ticker,
+            exit_price=latest_price,
+            exit_time=exit_time,
+            position_qty=position_qty,
+            base_url=base_url,
+            api_key=api_key,
+            secret_key=secret_key,
+            lot_dollars=lot_dollars,
+            exit_reason="trailing_stop",
+        )
+
+    # Stop not triggered — persist updated HWM if it changed
+    if new_hwm > current_hwm:
+        updated_entry = {**open_entry, "highWaterMark": new_hwm}
+        await update_strategy(uid, strategy_id, {"openEntry": updated_entry})
+
+    return False
+
+
 # ─── Core check function ──────────────────────────────────────────────────────
 
 async def check_strategy(
@@ -255,6 +442,33 @@ async def check_strategy(
         return
 
     logger.info("auto_trader_bars_ok", uid=uid, strategy_id=strategy_id, bar_count=len(candles))
+
+    # ── 2b. Trailing stop check (before signal detection) ────────────────────
+    open_entry = strategy.get("openEntry")
+    if strategy.get("trailingStopEnabled") and open_entry:
+        trading_mode = strategy.get("tradingMode", "paper")
+        keys = await get_alpaca_keys(uid)
+        if keys:
+            if trading_mode == "live":
+                ts_api_key    = keys.get("liveApiKey", "")
+                ts_secret_key = keys.get("liveSecretKey", "")
+            else:
+                ts_api_key    = keys.get("paperApiKey", "")
+                ts_secret_key = keys.get("paperSecretKey", "")
+
+            if ts_api_key and ts_secret_key:
+                ts_base_url = _ALPACA_BASE.get(trading_mode, _ALPACA_BASE["paper"])
+                stop_triggered = await _check_trailing_stop(
+                    uid=uid,
+                    strategy=strategy,
+                    strategy_id=strategy_id,
+                    ticker=ticker,
+                    api_key=ts_api_key,
+                    secret_key=ts_secret_key,
+                    base_url=ts_base_url,
+                )
+                if stop_triggered:
+                    return  # Position closed by trailing stop, skip signal detection
 
     # Convert Candle objects → plain dicts for signals.py
     bars = [
@@ -396,73 +610,53 @@ async def check_strategy(
         trading_mode=trading_mode, base_url=base_url,
     )
 
-    # ── 9. Place order ────────────────────────────────────────────────────────
-    order = await _place_order(
-        alpaca_sym, order_qty, order_notional, side, base_url, api_key, secret_key,
-    )
-    if order is None:
-        logger.warning(
-            "auto_trader_order_failed",
-            uid=uid, strategy_id=strategy_id, symbol=alpaca_sym, side=side,
-        )
-        return
-
     signal_time  = latest["time"]
     signal_price = latest["price"]
-    now_ms       = int(time.time() * 1000)
 
-    # Resolve actual filled qty from order response for bookkeeping
-    filled_qty = float(order.get("filled_qty") or order.get("qty") or order_qty or 0)
-
-    logger.info(
-        "auto_trade_executed",
-        uid=uid,
-        strategy_id=strategy_id,
-        ticker=ticker,
-        side=side,
-        qty=filled_qty,
-        notional=order_notional,
-        price=signal_price,
-        order_id=order.get("id"),
-    )
-
-    # ── 10. Write Firestore ───────────────────────────────────────────────────
+    # ── 9 & 10. Place order + write Firestore ────────────────────────────────
     if side == "buy":
+        order = await _place_order(
+            alpaca_sym, order_qty, order_notional, side, base_url, api_key, secret_key,
+        )
+        if order is None:
+            logger.warning(
+                "auto_trader_order_failed",
+                uid=uid, strategy_id=strategy_id, symbol=alpaca_sym, side=side,
+            )
+            return
+
+        filled_qty = float(order.get("filled_qty") or order.get("qty") or order_qty or 0)
+
+        logger.info(
+            "auto_trade_executed",
+            uid=uid, strategy_id=strategy_id, ticker=ticker, side=side,
+            qty=filled_qty, notional=order_notional, price=signal_price,
+            order_id=order.get("id"),
+        )
+
         await update_strategy(uid, strategy_id, {
             "lastExecutedSignalTime": signal_time,
             "openEntry": {
                 "time":  signal_time,
                 "price": signal_price,
                 "qty":   filled_qty,
+                "highWaterMark": signal_price,
             },
             "orderQty": filled_qty,
         })
     else:
-        # Compute P&L from openEntry
-        open_entry  = strategy.get("openEntry") or {}
-        entry_price = float(open_entry.get("price", signal_price))
-        entry_qty   = float(open_entry.get("qty", filled_qty))
-        entry_time  = int(open_entry.get("time", signal_time))
-
-        pnl_dollars = (signal_price - entry_price) * entry_qty
-        pnl_percent = pnl_dollars / (entry_price * entry_qty) if entry_price > 0 else 0.0
-
-        await add_trade(uid, {
-            "strategyId":     strategy_id,
-            "strategyName":   strategy.get("name", ""),
-            "ticker":         alpaca_sym,
-            "entryTime":      entry_time,
-            "exitTime":       signal_time,
-            "entryPrice":     entry_price,
-            "exitPrice":      signal_price,
-            "qty":            entry_qty,
-            "pnlDollars":     pnl_dollars,
-            "pnlPercent":     pnl_percent,
-            "lotSizeDollars": lot_dollars,
-            "createdAt":      now_ms,
-        })
-
-        await update_strategy(uid, strategy_id, {
-            "lastExecutedSignalTime": signal_time,
-            "openEntry": None,
-        })
+        # Sell via shared helper
+        await _execute_sell(
+            uid=uid,
+            strategy=strategy,
+            strategy_id=strategy_id,
+            ticker=ticker,
+            exit_price=signal_price,
+            exit_time=signal_time,
+            position_qty=position_qty,
+            base_url=base_url,
+            api_key=api_key,
+            secret_key=secret_key,
+            lot_dollars=lot_dollars,
+            exit_reason="signal",
+        )

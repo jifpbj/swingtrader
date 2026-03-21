@@ -177,6 +177,61 @@ export function IndicatorPanel() {
         {activeTab === "MACD" && <MACDConfig />}
         {activeTab === "TD9"  && <TD9Config />}
       </div>
+
+      {/* ─── Risk Management — trailing stop ─────────────────────────────── */}
+      <TrailingStopConfig />
+    </div>
+  );
+}
+
+function TrailingStopConfig() {
+  const tsEnabled    = useUIStore(s => s.trailingStopEnabled);
+  const setTsEnabled = useUIStore(s => s.setTrailingStopEnabled);
+  const tsPercent    = useUIStore(s => s.trailingStopPercent);
+  const setTsPercent = useUIStore(s => s.setTrailingStopPercent);
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-white/5 pt-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold text-zinc-300">Risk Management</span>
+      </div>
+
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={tsEnabled}
+          onChange={e => setTsEnabled(e.target.checked)}
+          className="accent-amber-400 size-3"
+        />
+        <span className="text-[11px] text-zinc-300">Trailing Stop Loss</span>
+      </label>
+
+      {tsEnabled && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-zinc-500">Percentage</span>
+            <span className="text-[11px] font-mono tabular-nums text-zinc-200">
+              {tsPercent.toFixed(1)}%
+            </span>
+          </div>
+          <Slider.Root
+            value={[tsPercent]}
+            onValueChange={([v]) => setTsPercent(v)}
+            min={0.5}
+            max={20}
+            step={0.5}
+            className="relative flex items-center select-none touch-none w-full h-4"
+          >
+            <Slider.Track className="bg-white/10 relative grow rounded-full h-1">
+              <Slider.Range className="absolute rounded-full h-full bg-amber-400/60" />
+            </Slider.Track>
+            <Slider.Thumb className="block size-3 rounded-full shadow focus:outline-none bg-amber-400" />
+          </Slider.Root>
+          <p className="text-[9px] text-zinc-500/80 leading-relaxed">
+            Automatically exits when price drops {tsPercent}% from the highest price since entry.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

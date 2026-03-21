@@ -292,6 +292,7 @@ export function ChartContainer() {
 
   const tradeMarkersRef = useRef<SeriesMarker<Time>[]>([]);
   const activePriceLineRef = useRef<IPriceLine | null>(null);
+  const trailingStopLineRef = useRef<IPriceLine | null>(null);
   const refreshPriceLevelsRef = useRef<(() => void) | null>(null);
 
   const [chartReady, setChartReady] = useState(false);
@@ -333,6 +334,8 @@ export function ChartContainer() {
   const macdFastPeriod = useUIStore((s) => s.macdFastPeriod);
   const macdSlowPeriod = useUIStore((s) => s.macdSlowPeriod);
   const macdSignalPeriod = useUIStore((s) => s.macdSignalPeriod);
+  const trailingStopEnabled = useUIStore((s) => s.trailingStopEnabled);
+  const trailingStopPercent = useUIStore((s) => s.trailingStopPercent);
 
   // Refs mirror store so async callbacks see current values without chart-init deps
   const activeTabRef = useRef(activeIndicatorTab);
@@ -1121,6 +1124,35 @@ export function ChartContainer() {
     },
     [hidePriceLine],
   );
+
+  // ─── Trailing stop price line ───────────────────────────────────────────────
+  useEffect(() => {
+    // Remove old line
+    if (trailingStopLineRef.current && candleSeriesRef.current) {
+      try { candleSeriesRef.current.removePriceLine(trailingStopLineRef.current); } catch { /* already removed */ }
+      trailingStopLineRef.current = null;
+    }
+
+    // Add new line if trailing stop is enabled and there's an open position
+    if (
+      trailingStopEnabled &&
+      trailingStopPercent > 0 &&
+      activeStrategy?.openEntry &&
+      candleSeriesRef.current
+    ) {
+      const hwm = activeStrategy.openEntry.highWaterMark ?? activeStrategy.openEntry.price;
+      const stopLevel = hwm * (1 - trailingStopPercent / 100);
+      trailingStopLineRef.current = candleSeriesRef.current.createPriceLine({
+        price: stopLevel,
+        color: "#f59e0b",
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        axisLabelVisible: true,
+        lineVisible: true,
+        title: "Trail Stop",
+      });
+    }
+  }, [trailingStopEnabled, trailingStopPercent, activeStrategy?.openEntry, chartReady]);
 
   // ─── Keep tradeMarkersRef in sync; bump indicatorRevision to redraw ────────
   useEffect(() => {

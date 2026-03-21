@@ -72,6 +72,10 @@ export function BacktestPanel() {
   const macdFastPeriod     = useUIStore((s) => s.macdFastPeriod);
   const macdSlowPeriod     = useUIStore((s) => s.macdSlowPeriod);
   const macdSignalPeriod   = useUIStore((s) => s.macdSignalPeriod);
+  const trailingStopEnabled  = useUIStore((s) => s.trailingStopEnabled);
+  const trailingStopPercent  = useUIStore((s) => s.trailingStopPercent);
+  const setTrailingStopEnabled  = useUIStore((s) => s.setTrailingStopEnabled);
+  const setTrailingStopPercent  = useUIStore((s) => s.setTrailingStopPercent);
 
   const setActiveIndicatorTab = useUIStore((s) => s.setActiveIndicatorTab);
   const setEmaPeriod          = useUIStore((s) => s.setEmaPeriod);
@@ -187,6 +191,8 @@ export function BacktestPanel() {
           macdFast: macdFastPeriod,
           macdSlow: macdSlowPeriod,
           macdSignal: macdSignalPeriod,
+          trailingStopEnabled,
+          trailingStopPercent,
         },
         timeframe,
       ),
@@ -196,6 +202,7 @@ export function BacktestPanel() {
     emaPeriod, bbPeriod, bbStdDev,
     rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
+    trailingStopEnabled, trailingStopPercent,
   ]);
 
   // ─── AI Analyze ────────────────────────────────────────────────────────────
@@ -215,6 +222,8 @@ export function BacktestPanel() {
         macdFast: macdFastPeriod,
         macdSlow: macdSlowPeriod,
         macdSignal: macdSignalPeriod,
+        trailingStopEnabled,
+        trailingStopPercent,
       };
       const optimResult = runAIOptimize(
         ticker,
@@ -249,6 +258,8 @@ export function BacktestPanel() {
         setMacdFastPeriod(params.macdFast);
         setMacdSlowPeriod(params.macdSlow);
         setMacdSignalPeriod(params.macdSignal);
+        setTrailingStopEnabled(params.trailingStopEnabled ?? false);
+        setTrailingStopPercent(params.trailingStopPercent ?? 5);
 
         setAnalysisResult({ ...optimResult, equityCurve: curve });
       } else {
@@ -345,7 +356,10 @@ export function BacktestPanel() {
           params: {
             emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
             macdFast: macdFastPeriod, macdSlow: macdSlowPeriod, macdSignal: macdSignalPeriod,
+            trailingStopEnabled, trailingStopPercent,
           },
+          trailingStopEnabled,
+          trailingStopPercent,
           backtestResult: {
             ticker: result.ticker,
             strategyLabel: result.strategyLabel,
@@ -377,6 +391,7 @@ export function BacktestPanel() {
     result, user, ticker, timeframe, activeIndicatorTab, initialInvestment, tradingMode,
     emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
+    trailingStopEnabled, trailingStopPercent,
     saveStrategy, setActiveStrategy,
   ]);
 
@@ -398,6 +413,8 @@ export function BacktestPanel() {
         macdFast: macdFastPeriod,
         macdSlow: macdSlowPeriod,
         macdSignal: macdSignalPeriod,
+        trailingStopEnabled,
+        trailingStopPercent,
       },
       timeframe,
       chartPeriod,
@@ -406,6 +423,7 @@ export function BacktestPanel() {
     candles, result, chartPeriod, activeIndicatorTab, timeframe,
     emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
+    trailingStopEnabled, trailingStopPercent,
   ]);
 
   // ─── Y-axis domain: ±10% padding around the data range ─────────────────────
@@ -614,7 +632,7 @@ export function BacktestPanel() {
                         dot={(props: any) => {
                           const sig = props?.payload?.signal;
                           if (!sig) return <g key={props.key} />;
-                          const color = sig === "buy" ? "#34d399" : "#ef4444";
+                          const color = sig === "buy" ? "#34d399" : sig === "stop" ? "#f59e0b" : "#ef4444";
                           return (
                             <circle
                               key={props.key}

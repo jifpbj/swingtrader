@@ -24,6 +24,9 @@ const MACD_COMBOS   = [
   { fast: 5,  slow: 13, signal: 6 },
 ];
 
+// ─── Trailing stop sweep values (phase 2) ──────────────────────────────────
+const TRAILING_STOP_PCTS = [0, 2, 3, 5, 8, 10]; // 0 = disabled
+
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 
 /**
@@ -139,15 +142,18 @@ export function runAIOptimize(
     });
   }
 
+  // Phase 1: sweep indicator params WITHOUT trailing stop
+  const baseParams = { ...currentParams, trailingStopEnabled: false, trailingStopPercent: 0 };
+
   // ─── EMA sweep ────────────────────────────────────────────────────────────
   for (const emaPeriod of EMA_PERIODS) {
-    evaluate("EMA", { ...currentParams, emaPeriod });
+    evaluate("EMA", { ...baseParams, emaPeriod });
   }
 
   // ─── BB sweep ─────────────────────────────────────────────────────────────
   for (const bbPeriod of BB_PERIODS) {
     for (const bbStdDev of BB_STD_DEVS) {
-      evaluate("BB", { ...currentParams, bbPeriod, bbStdDev });
+      evaluate("BB", { ...baseParams, bbPeriod, bbStdDev });
     }
   }
 
@@ -156,14 +162,14 @@ export function runAIOptimize(
     for (const rsiOverbought of RSI_OB_LEVELS) {
       for (const rsiOversold of RSI_OS_LEVELS) {
         if (rsiOversold >= rsiOverbought) continue;
-        evaluate("RSI", { ...currentParams, rsiPeriod, rsiOverbought, rsiOversold });
+        evaluate("RSI", { ...baseParams, rsiPeriod, rsiOverbought, rsiOversold });
       }
     }
   }
 
   // ─── MACD sweep ───────────────────────────────────────────────────────────
   for (const { fast, slow, signal } of MACD_COMBOS) {
-    evaluate("MACD", { ...currentParams, macdFast: fast, macdSlow: slow, macdSignal: signal });
+    evaluate("MACD", { ...baseParams, macdFast: fast, macdSlow: slow, macdSignal: signal });
   }
 
   if (candidates.length === 0) {
@@ -175,7 +181,25 @@ export function runAIOptimize(
     };
   }
 
-  // Pick the best candidate
+  // ─── Phase 2: trailing stop sweep on top candidates ──────────────────────
+  // Take top 5 candidates from Phase 1 and re-evaluate each with different
+  // trailing stop percentages to find the optimal risk management setting.
+  const sorted = [...candidates].sort((a, b) => b.score - a.score);
+  const topN = sorted.slice(0, 5);
+
+  for (const candidate of topN) {
+    for (const tsPct of TRAILING_STOP_PCTS) {
+      if (tsPct === 0) continue; // already evaluated without stop
+      const tsParams: IndicatorParams = {
+        ...candidate.params,
+        trailingStopEnabled: true,
+        trailingStopPercent: tsPct,
+      };
+      evaluate(candidate.indicator, tsParams);
+    }
+  }
+
+  // Pick the best candidate (including trailing stop variants)
   const winner = candidates.reduce((a, b) => (b.score > a.score ? b : a));
 
   // Build the display label for the winning indicator
@@ -195,6 +219,8 @@ export function runAIOptimize(
     initialInvestment,
     autoTrade: false,
     tradingMode,
+    trailingStopEnabled: winner.params.trailingStopEnabled ?? false,
+    trailingStopPercent: winner.params.trailingStopPercent ?? 5,
     orderQty: 1,
     lotSizeMode: "dollars" as const,
     lotSizeDollars: 1_000,

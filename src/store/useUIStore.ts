@@ -100,6 +100,12 @@ interface UIState {
   macdSignalPeriod: number;
   setMacdSignalPeriod: (v: number) => void;
 
+  // ─── Trailing Stop config
+  trailingStopEnabled: boolean;
+  setTrailingStopEnabled: (v: boolean) => void;
+  trailingStopPercent: number;
+  setTrailingStopPercent: (v: number) => void;
+
   // ─── Demo mode (local mock data, no backend)
   demoMode: boolean;
   setDemoMode: (v: boolean) => void;
@@ -187,6 +193,11 @@ export const useUIStore = create<UIState>()(
     setMacdSlowPeriod: (macdSlowPeriod) => set({ macdSlowPeriod }),
     macdSignalPeriod: 9,
     setMacdSignalPeriod: (macdSignalPeriod) => set({ macdSignalPeriod }),
+
+    trailingStopEnabled: false,
+    setTrailingStopEnabled: (trailingStopEnabled) => set({ trailingStopEnabled }),
+    trailingStopPercent: 5,
+    setTrailingStopPercent: (trailingStopPercent) => set({ trailingStopPercent }),
 
     demoMode: false,
     setDemoMode: (demoMode) => set({ demoMode }),

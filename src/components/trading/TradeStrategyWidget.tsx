@@ -20,6 +20,8 @@ export function TradeStrategyWidget() {
   const macdFastPeriod     = useUIStore(s => s.macdFastPeriod);
   const macdSlowPeriod     = useUIStore(s => s.macdSlowPeriod);
   const macdSignalPeriod   = useUIStore(s => s.macdSignalPeriod);
+  const trailingStopEnabled  = useUIStore(s => s.trailingStopEnabled);
+  const trailingStopPercent  = useUIStore(s => s.trailingStopPercent);
   const timeframe          = useUIStore(s => s.timeframe);
 
   const user          = useAuthStore(s => s.user);
@@ -88,7 +90,10 @@ export function TradeStrategyWidget() {
             emaPeriod, bbPeriod, bbStdDev,
             rsiPeriod, rsiOverbought, rsiOversold,
             macdFast: macdFastPeriod, macdSlow: macdSlowPeriod, macdSignal: macdSignalPeriod,
+            trailingStopEnabled, trailingStopPercent,
           },
+          trailingStopEnabled,
+          trailingStopPercent,
           backtestResult: { ticker, strategyLabel, periods: {}, periodKeys: [] },
           bestPeriodKey: "",
           bestStrategyReturn: 0,

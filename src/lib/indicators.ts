@@ -279,9 +279,12 @@ function zeroResult(): BacktestPeriodResult {
 }
 
 // Bar-by-bar marked-to-market simulation of long-only strategy.
+// Supports optional trailing stop: if trailingStopPct > 0, exits when
+// price drops that % from the high water mark since entry.
 function runLongOnlyBacktest(
   slice: Candle[],
-  signals: CrossoverSignal[]
+  signals: CrossoverSignal[],
+  trailingStopPct = 0,
 ): BacktestPeriodResult {
   if (slice.length < 2) return zeroResult();
 
@@ -289,6 +292,7 @@ function runLongOnlyBacktest(
   let signalIdx = 0;
   let inTrade = false;
   let entryPrice = 0;
+  let highWaterMark = 0;
   let cash = 1;
   let units = 0;
   const gains: number[] = [];
@@ -297,11 +301,13 @@ function runLongOnlyBacktest(
   let maxDrawdown = 0;
 
   for (const candle of slice) {
+    // Process signals that fire at or before this candle
     while (signalIdx < orderedSignals.length && orderedSignals[signalIdx].time <= candle.time) {
       const sig = orderedSignals[signalIdx];
       if (sig.direction === "entry" && !inTrade) {
         inTrade = true;
         entryPrice = sig.price;
+        highWaterMark = sig.price;
         units = cash / sig.price;
         cash = 0;
       } else if (sig.direction === "sell" && inTrade) {
@@ -311,6 +317,25 @@ function runLongOnlyBacktest(
         inTrade = false;
       }
       signalIdx += 1;
+    }
+
+    // Trailing stop check (after signal processing, within the candle)
+    if (inTrade && trailingStopPct > 0) {
+      highWaterMark = Math.max(highWaterMark, candle.high);
+      const stopLevel = highWaterMark * (1 - trailingStopPct / 100);
+      if (candle.low <= stopLevel) {
+        // Stop triggered — exit at the stop level (or candle close if gapped below)
+        const exitPrice = Math.max(stopLevel, candle.low);
+        cash = units * exitPrice;
+        units = 0;
+        gains.push((exitPrice - entryPrice) / entryPrice);
+        inTrade = false;
+      }
+    }
+
+    // Update high water mark for next candle (even if stop didn't trigger)
+    if (inTrade) {
+      highWaterMark = Math.max(highWaterMark, candle.high);
     }
 
     const equity = inTrade ? units * candle.close : cash;
@@ -342,24 +367,26 @@ function runLongOnlyBacktest(
 function runBacktest(
   candles: Candle[],
   period: number,
-  fromTimestamp: number
+  fromTimestamp: number,
+  trailingStopPct = 0,
 ): BacktestPeriodResult {
   const slice = candles.filter((c) => c.time >= fromTimestamp);
   if (slice.length < period) return zeroResult();
 
   const emas = computeEMA(slice.map((c) => c.close), period);
   const crossovers = detectCrossovers(slice, emas);
-  return runLongOnlyBacktest(slice, crossovers);
+  return runLongOnlyBacktest(slice, crossovers, trailingStopPct);
 }
 
 function runSignalBacktest(
   candles: Candle[],
   fromTimestamp: number,
-  buildSignals: (slice: Candle[]) => CrossoverSignal[]
+  buildSignals: (slice: Candle[]) => CrossoverSignal[],
+  trailingStopPct = 0,
 ): BacktestPeriodResult {
   const slice = candles.filter((c) => c.time >= fromTimestamp);
   if (slice.length < 2) return zeroResult();
-  return runLongOnlyBacktest(slice, buildSignals(slice));
+  return runLongOnlyBacktest(slice, buildSignals(slice), trailingStopPct);
 }
 
 export type BacktestStrategy = "EMA" | "RSI" | "MACD" | "TD9" | "BB";
@@ -397,11 +424,14 @@ export function computeStrategyBacktests(
     macdFast: number;
     macdSlow: number;
     macdSignal: number;
+    trailingStopEnabled?: boolean;
+    trailingStopPercent?: number;
   },
   timeframe = "1d",
 ): BacktestResult {
   const n = candles.length;
   const lastTs = candles[n - 1]?.time ?? Math.floor(Date.now() / 1000);
+  const tsPct = params.trailingStopEnabled ? (params.trailingStopPercent ?? 0) : 0;
 
   const buildSignals = (slice: Candle[]): CrossoverSignal[] => {
     const closes = slice.map((c) => c.close);
@@ -451,9 +481,9 @@ export function computeStrategyBacktests(
         continue;
       }
       if (strategy === "EMA") {
-        periods[key] = runBacktest(candles, params.emaPeriod, fromTs);
+        periods[key] = runBacktest(candles, params.emaPeriod, fromTs, tsPct);
       } else {
-        periods[key] = runSignalBacktest(candles, fromTs, buildSignals);
+        periods[key] = runSignalBacktest(candles, fromTs, buildSignals, tsPct);
       }
     }
     return { ticker, strategyLabel, periods, periodKeys: SHORT_TF_KEYS };
@@ -497,8 +527,8 @@ export function computeStrategyBacktests(
       continue;
     }
     const fromTs = periodStarts[key]!;
-    if (strategy === "EMA") periods[key] = runBacktest(candles, params.emaPeriod, fromTs);
-    else periods[key] = runSignalBacktest(candles, fromTs, buildSignals);
+    if (strategy === "EMA") periods[key] = runBacktest(candles, params.emaPeriod, fromTs, tsPct);
+    else periods[key] = runSignalBacktest(candles, fromTs, buildSignals, tsPct);
   }
 
   return { ticker, strategyLabel, periods, periodKeys: LONG_TF_KEYS };
@@ -510,7 +540,7 @@ export interface EquityCurvePoint {
   time: number;     // unix timestamp
   strategy: number; // portfolio value normalised to 100 at period start
   hold: number;     // buy-and-hold normalised to 100 at period start
-  signal?: "buy" | "sell"; // trade signal fired at this candle
+  signal?: "buy" | "sell" | "stop"; // trade signal fired at this candle
 }
 
 function downsample<T>(arr: T[], max: number): T[] {
@@ -523,13 +553,14 @@ function downsample<T>(arr: T[], max: number): T[] {
   return out;
 }
 
-function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[]): EquityCurvePoint[] {
+function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[], trailingStopPct = 0): EquityCurvePoint[] {
   if (slice.length < 2) return [];
   const startPrice = slice[0].close;
   const orderedSignals = [...signals].sort((a, b) => a.time - b.time);
   let signalIdx = 0;
   let inTrade = false;
   let entryPrice = 0;
+  let highWaterMark = 0;
   let cash = 1;
   let units = 0;
   const out: EquityCurvePoint[] = [];
@@ -540,6 +571,7 @@ function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[]): EquityCu
       if (sig.direction === "entry" && !inTrade) {
         inTrade = true;
         entryPrice = sig.price;
+        highWaterMark = sig.price;
         units = cash / sig.price;
         cash = 0;
         pointSignal = "buy";
@@ -550,6 +582,21 @@ function buildEquityCurve(slice: Candle[], signals: CrossoverSignal[]): EquityCu
         pointSignal = "sell";
       }
       signalIdx++;
+    }
+    // Trailing stop check
+    if (inTrade && trailingStopPct > 0) {
+      highWaterMark = Math.max(highWaterMark, candle.high);
+      const stopLevel = highWaterMark * (1 - trailingStopPct / 100);
+      if (candle.low <= stopLevel) {
+        const exitPrice = Math.max(stopLevel, candle.low);
+        cash = units * exitPrice;
+        units = 0;
+        inTrade = false;
+        pointSignal = "stop";
+      }
+    }
+    if (inTrade) {
+      highWaterMark = Math.max(highWaterMark, candle.high);
     }
     const equity = inTrade ? units * candle.close : cash;
     out.push({ time: candle.time, strategy: equity * 100, hold: (candle.close / startPrice) * 100, signal: pointSignal });
@@ -568,6 +615,7 @@ export function computeStrategyEquityCurve(
     emaPeriod: number; bbPeriod: number; bbStdDev: number;
     rsiPeriod: number; rsiOverbought: number; rsiOversold: number;
     macdFast: number; macdSlow: number; macdSignal: number;
+    trailingStopEnabled?: boolean; trailingStopPercent?: number;
   },
   timeframe: string,
   periodKey: BacktestPeriodKey,
@@ -608,7 +656,8 @@ export function computeStrategyEquityCurve(
 
   const slice = candles.filter((c) => c.time >= fromTs);
   if (slice.length < 2) return [];
-  return downsample(buildEquityCurve(slice, buildSignals(slice)), 200);
+  const tsPct = params.trailingStopEnabled ? (params.trailingStopPercent ?? 0) : 0;
+  return downsample(buildEquityCurve(slice, buildSignals(slice), tsPct), 200);
 }
 
 // Backwards-compatible wrapper (EMA, long-TF default)

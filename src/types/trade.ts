@@ -13,6 +13,7 @@ export interface TradeRecord {
   pnlDollars: number;      // (exitPrice - entryPrice) * qty
   pnlPercent: number;      // pnlDollars / (entryPrice * qty)
   lotSizeDollars: number;  // capital deployed (for context)
+  exitReason?: "signal" | "trailing_stop"; // what triggered the exit
   createdAt: number;       // Unix ms — for sorting
 }
 

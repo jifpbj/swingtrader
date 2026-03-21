@@ -28,6 +28,8 @@ export function StrategyQueue() {
   const macdFastPeriod     = useUIStore((s) => s.macdFastPeriod);
   const macdSlowPeriod     = useUIStore((s) => s.macdSlowPeriod);
   const macdSignalPeriod   = useUIStore((s) => s.macdSignalPeriod);
+  const trailingStopEnabled  = useUIStore((s) => s.trailingStopEnabled);
+  const trailingStopPercent  = useUIStore((s) => s.trailingStopPercent);
 
   // Subscribe to Firestore when user logs in, unsubscribe on logout
   useEffect(() => {
@@ -60,7 +62,10 @@ export function StrategyQueue() {
         params: {
           emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
           macdFast: macdFastPeriod, macdSlow: macdSlowPeriod, macdSignal: macdSignalPeriod,
+          trailingStopEnabled, trailingStopPercent,
         },
+        trailingStopEnabled,
+        trailingStopPercent,
         backtestResult: { ticker, strategyLabel: indicatorLabel, periods: {}, periodKeys: [] },
         bestPeriodKey: "",
         bestStrategyReturn: 0,
