@@ -407,9 +407,34 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
                     isAnimationActive={false}
                   />
 
-                  {/* Strategy line — emerald */}
-                  <Line type="monotone" dataKey="adjStrategy" stroke="#34d399"
-                    strokeWidth={2} dot={false} isAnimationActive={false} />
+                  {/* Strategy line — emerald, with buy/sell/stop signal dots */}
+                  <Line
+                    type="monotone"
+                    dataKey="adjStrategy"
+                    stroke="#34d399"
+                    strokeWidth={2}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    dot={(props: any) => {
+                      const sig = props?.payload?.signal;
+                      if (!sig) return <g key={props.key} />;
+                      const color =
+                        sig === "buy"  ? "#34d399" :
+                        sig === "stop" ? "#f59e0b" :
+                                         "#ef4444";
+                      return (
+                        <circle
+                          key={props.key}
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={3.5}
+                          fill={color}
+                          stroke="rgba(0,0,0,0.5)"
+                          strokeWidth={1}
+                        />
+                      );
+                    }}
+                    isAnimationActive={false}
+                  />
                   {/* Hold line — dashed zinc */}
                   <Line type="monotone" dataKey="adjHold" stroke="#71717a"
                     strokeWidth={1.25} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
@@ -417,7 +442,7 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
               </ResponsiveContainer>
 
               {/* Legend */}
-              <div className="flex items-center gap-4 px-2 pb-1">
+              <div className="flex items-center gap-4 px-2 pb-1 flex-wrap">
                 <div className="flex items-center gap-1.5">
                   <span className="inline-block w-5 h-[2px] bg-emerald-400 rounded-full" />
                   <span className="text-[9px] text-zinc-500">{stratLabel}</span>
@@ -427,6 +452,18 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
                     <line x1="0" y1="2" x2="20" y2="2" stroke="#71717a" strokeWidth="1.25" strokeDasharray="4 3" />
                   </svg>
                   <span className="text-[9px] text-zinc-500">Hold</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="text-[9px] text-zinc-500">Buy</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-400" />
+                  <span className="text-[9px] text-zinc-500">Sell</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-[9px] text-zinc-500">Stop</span>
                 </div>
               </div>
             </div>
