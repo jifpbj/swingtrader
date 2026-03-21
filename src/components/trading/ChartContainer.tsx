@@ -291,6 +291,8 @@ export function ChartContainer() {
   const macdHistSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
   const tradeMarkersRef = useRef<SeriesMarker<Time>[]>([]);
+  const rsiMarkerPluginRef  = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const macdMarkerPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const activePriceLineRef = useRef<IPriceLine | null>(null);
   const trailingStopLineRef = useRef<IPriceLine | null>(null);
   const refreshPriceLevelsRef = useRef<(() => void) | null>(null);
@@ -593,7 +595,9 @@ export function ChartContainer() {
         })),
       );
 
-      markerPluginRef.current = lc.createSeriesMarkers(candleSeries, []);
+      markerPluginRef.current     = lc.createSeriesMarkers(candleSeries, []);
+      rsiMarkerPluginRef.current  = lc.createSeriesMarkers(rsiSeries, []);
+      macdMarkerPluginRef.current = lc.createSeriesMarkers(macdLineSeries, []);
 
       chart.subscribeCrosshairMove((param) => {
         if (
@@ -674,6 +678,8 @@ export function ChartContainer() {
         macdLineSeriesRef.current =
         macdSignalSeriesRef.current =
         macdHistSeriesRef.current =
+        rsiMarkerPluginRef.current =
+        macdMarkerPluginRef.current =
           null;
       setChartReady(false);
     };
@@ -696,8 +702,10 @@ export function ChartContainer() {
     macdLineSeriesRef.current?.setData([]);
     macdSignalSeriesRef.current?.setData([]);
     macdHistSeriesRef.current?.setData([]);
-    // Reset to trade-only markers (cleared of indicator markers)
+    // Reset to trade-only markers on the candle pane; clear sub-pane markers
     markerPluginRef.current?.setMarkers(tradeMarkersRef.current.slice());
+    rsiMarkerPluginRef.current?.setMarkers([]);
+    macdMarkerPluginRef.current?.setMarkers([]);
 
     if (activeIndicatorTab !== "MACD")
       chartRef.current?.panes()[1]?.setHeight(30);
@@ -757,12 +765,9 @@ export function ChartContainer() {
         rsiObLineRef.current?.applyOptions({ price: rsiOverbought });
         rsiOsLineRef.current?.applyOptions({ price: rsiOversold });
         if (showSignalMarkers)
-          markerPluginRef.current?.setMarkers(
-            mergeMarkers(
-              buildMarkers(
-                detectRSICrossovers(candles, rsi, rsiOverbought, rsiOversold),
-              ),
-              tradeMarkersRef.current,
+          rsiMarkerPluginRef.current?.setMarkers(
+            buildMarkers(
+              detectRSICrossovers(candles, rsi, rsiOverbought, rsiOversold),
             ),
           );
         chartRef.current?.panes()[2]?.setHeight(110);
@@ -805,11 +810,8 @@ export function ChartContainer() {
           }),
         );
         if (showSignalMarkers)
-          markerPluginRef.current?.setMarkers(
-            mergeMarkers(
-              buildMarkers(detectMACDCrossovers(candles, macd)),
-              tradeMarkersRef.current,
-            ),
+          macdMarkerPluginRef.current?.setMarkers(
+            buildMarkers(detectMACDCrossovers(candles, macd)),
           );
         chartRef.current?.panes()[1]?.setHeight(130);
         break;
@@ -933,18 +935,15 @@ export function ChartContainer() {
       const lastRsi = rsi[rsi.length - 1];
       if (lastRsi !== null)
         rsiSeriesRef.current.update({ time: ts, value: lastRsi });
-      if (isNewBar && showMarkersRef.current && markerPluginRef.current)
-        markerPluginRef.current.setMarkers(
-          mergeMarkers(
-            buildMarkers(
-              detectRSICrossovers(
-                arr,
-                rsi,
-                rsiOverboughtRef.current,
-                rsiOversoldRef.current,
-              ),
+      if (isNewBar && showMarkersRef.current && rsiMarkerPluginRef.current)
+        rsiMarkerPluginRef.current.setMarkers(
+          buildMarkers(
+            detectRSICrossovers(
+              arr,
+              rsi,
+              rsiOverboughtRef.current,
+              rsiOversoldRef.current,
             ),
-            tradeMarkersRef.current,
           ),
         );
     }
@@ -974,12 +973,9 @@ export function ChartContainer() {
           color: hist >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)",
         });
       }
-      if (isNewBar && showMarkersRef.current && markerPluginRef.current)
-        markerPluginRef.current.setMarkers(
-          mergeMarkers(
-            buildMarkers(detectMACDCrossovers(arr, macd)),
-            tradeMarkersRef.current,
-          ),
+      if (isNewBar && showMarkersRef.current && macdMarkerPluginRef.current)
+        macdMarkerPluginRef.current.setMarkers(
+          buildMarkers(detectMACDCrossovers(arr, macd)),
         );
     }
 
