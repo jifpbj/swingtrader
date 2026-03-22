@@ -1,0 +1,112 @@
+name: Deploy — Production
+
+# Trigger: push a v* tag (e.g. git tag v1.2.3 && git push --tags)
+# Both jobs are gated by the "production" GitHub Environment which requires
+# manual reviewer approval before any deployment runs.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Opt into Node.js 24 for all action runners (required after June 2026).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ── Backend: build Docker image → Artifact Registry → Cloud Run (prod) ────
+  deploy-backend-prod:
+    name: Backend → Cloud Run (production)
+    runs-on: ubuntu-latest
+    # "production" environment must be configured in GitHub → Settings → Environments
+    # with at least one required reviewer to enforce manual approval.
+    environment: production
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      PROJECT_ID: predict-alpha-4ed0c
+      REGION:     us-west1
+      SERVICE:    predictive-alpha-api
+      IMAGE:      us-west1-docker.pkg.dev/predict-alpha-4ed0c/cloud-run-source-deploy/predictive-alpha-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (production)
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        # Tag with the git tag name (e.g. v1.2.3) for immutable release images
+        run: |
+          docker build \
+            -t ${{ env.IMAGE }}:${{ github.ref_name }} \
+            -t ${{ env.IMAGE }}:latest \
+            ./backend
+
+          docker push ${{ env.IMAGE }}:${{ github.ref_name }}
+          docker push ${{ env.IMAGE }}:latest
+
+      - name: Deploy to Cloud Run (production — public)
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image    ${{ env.IMAGE }}:${{ github.ref_name }} \
+            --region   ${{ env.REGION }} \
+            --project  ${{ env.PROJECT_ID }} \
+            --allow-unauthenticated \
+            --set-env-vars "APP_ENV=production" \
+            --set-secrets "ALPACA_API_KEY=ALPACA_API_KEY:latest,ALPACA_SECRET_KEY=ALPACA_SECRET_KEY:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest" \
+            --quiet
+          # Firebase/Firestore auth uses Application Default Credentials (ADC) on
+          # Cloud Run — no GOOGLE_APPLICATION_CREDENTIALS secret needed.
+          # The runtime service account must have roles/datastore.user granted.
+
+  # ── Frontend: build Next.js → Firebase Hosting (prod project) ────────────
+  deploy-frontend-prod:
+    name: Frontend → Firebase Hosting (production)
+    runs-on: ubuntu-latest
+    # Same manual approval gate as the backend job
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (production)
+        env:
+          NEXT_PUBLIC_API_URL: https://predictive-alpha-api-hfdxzjchaq-uw.a.run.app
+          NEXT_PUBLIC_WS_URL:  wss://predictive-alpha-api-hfdxzjchaq-uw.a.run.app/ws/trades
+          NEXT_PUBLIC_FIREBASE_API_KEY:             ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         predict-alpha-4ed0c.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID:          predict-alpha-4ed0c
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:      predict-alpha-4ed0c.firebasestorage.app
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "512286989618"
+          NEXT_PUBLIC_FIREBASE_APP_ID:              ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+          NEXT_PUBLIC_STRIPE_BASIC_LINK:            https://buy.stripe.com/00waEZ64S3zWbAadqtbQY01
+          NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK:     https://buy.stripe.com/dRm4gBeBofiEdIiaehbQY02
+        run: npm run build
+
+      - name: Deploy to Firebase Hosting (production — live channel)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken:              ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId:              live
+          projectId:              predict-alpha-4ed0c

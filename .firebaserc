@@ -1,5 +1,19 @@
 {
   "projects": {
-    "default": "predict-alpha-4ed0c"
+    "default": "predict-alpha-4ed0c",
+    "prod":    "predict-alpha-4ed0c",
+    "staging": "predict-alpha-staging"
+  },
+  "targets": {
+    "predict-alpha-4ed0c": {
+      "hosting": {
+        "prod": ["predict-alpha-4ed0c"]
+      }
+    },
+    "predict-alpha-staging": {
+      "hosting": {
+        "staging": ["predict-alpha-staging"]
+      }
+    }
   }
 }

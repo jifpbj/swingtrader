@@ -1,0 +1,109 @@
+name: Deploy — Staging
+
+on:
+  push:
+    branches: [main]
+
+# Opt into Node.js 24 for all action runners (required after June 2026).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ── Backend: build Docker image → Artifact Registry → Cloud Run (staging) ──
+  deploy-backend-staging:
+    name: Backend → Cloud Run (staging)
+    runs-on: ubuntu-latest
+    environment: staging
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      PROJECT_ID: predict-alpha-staging
+      REGION:     us-west1
+      SERVICE:    predictive-alpha-api
+      IMAGE:      us-west1-docker.pkg.dev/predict-alpha-staging/cloud-run-source-deploy/predictive-alpha-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (staging)
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_STAGING }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.IMAGE }}:latest \
+            ./backend
+
+          docker push ${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.IMAGE }}:latest
+
+      - name: Deploy to Cloud Run (staging — private behind IAP)
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image    ${{ env.IMAGE }}:${{ github.sha }} \
+            --region   ${{ env.REGION }} \
+            --project  ${{ env.PROJECT_ID }} \
+            --no-allow-unauthenticated \
+            --set-env-vars "APP_ENV=staging" \
+            --set-secrets "ALPACA_API_KEY=ALPACA_API_KEY:latest,ALPACA_SECRET_KEY=ALPACA_SECRET_KEY:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest" \
+            --quiet
+          # Cloud Run is NOT publicly accessible.
+          # All traffic reaches it via the Global HTTPS LB + IAP.
+          # Firebase/Firestore auth uses Application Default Credentials (ADC) —
+          # the compute SA must have roles/datastore.user (see setup-staging.sh).
+
+  # ── Frontend: build Next.js → Firebase Hosting (staging project) ─────────
+  deploy-frontend-staging:
+    name: Frontend → Firebase Hosting (staging)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (staging)
+        env:
+          # Staging API goes through the Global LB + IAP.
+          # WebSocket is DISABLED for staging because IAP does not support
+          # HTTP Upgrade — the dashboard falls back to REST polling.
+          NEXT_PUBLIC_API_URL: https://api.staging.predictalpha.online
+          NEXT_PUBLIC_WS_URL:  ""
+          # Staging Firebase project — separate Firestore + Auth from prod
+          NEXT_PUBLIC_FIREBASE_API_KEY:             ${{ secrets.STAGING_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         predict-alpha-staging.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID:          predict-alpha-staging
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:      predict-alpha-staging.firebasestorage.app
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.STAGING_FIREBASE_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID:              ${{ secrets.STAGING_FIREBASE_APP_ID }}
+          # Stripe test-mode checkout links (replace with actual test links)
+          NEXT_PUBLIC_STRIPE_BASIC_LINK:            ${{ secrets.STAGING_STRIPE_BASIC_LINK }}
+          NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK:     ${{ secrets.STAGING_STRIPE_BASIC_ANNUAL_LINK }}
+        run: npm run build
+
+      - name: Deploy to Firebase Hosting (staging — live channel)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken:              ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+          channelId:              live
+          projectId:              predict-alpha-staging
