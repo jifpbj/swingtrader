@@ -10,9 +10,10 @@ Flow per strategy:
   3. Detect crossover signals via signals.py
   4. Dedup: skip if signal already executed (lastExecutedSignalTime)
   5. Fetch per-user Alpaca keys from Firestore (cached 5 min)
-  6. Check current Alpaca position for the symbol
+  6a. Firestore guard: if openEntry exists, refuse to buy (primary dup-buy prevention)
+  6b. Check current Alpaca position (secondary; refuse buy if API errors)
   7. Determine order side (buy / sell / skip)
-  8. Compute order qty (dollar-mode or unit-mode)
+  8. Compute order qty (dollar-mode or unit-mode, capped to user lot size)
   9. Place market order via Alpaca REST API
   10. Write result back to Firestore (openEntry or TradeRecord)
 """
@@ -78,6 +79,11 @@ def _alpaca_symbol(ticker: str) -> str:
     return ticker.replace("/", "")
 
 
+# Sentinel that means "we couldn't determine position status" (network error,
+# timeout, etc.).  Callers must distinguish this from None (= confirmed no position).
+_POSITION_UNKNOWN: dict[str, Any] = {"__unknown__": True}
+
+
 async def _fetch_position(
     symbol: str,
     base_url: str,
@@ -86,7 +92,10 @@ async def _fetch_position(
 ) -> dict[str, Any] | None:
     """
     GET /v2/positions/{symbol}.
-    Returns the position dict or None if no open position.
+    Returns:
+      - position dict    → open position exists
+      - None             → confirmed no position (404)
+      - _POSITION_UNKNOWN → API error (caller should NOT assume "no position")
     """
     headers = {
         "APCA-API-KEY-ID": api_key,
@@ -109,10 +118,10 @@ async def _fetch_position(
                 body=exc.response.text[:300],
                 error=str(exc),
             )
-            return None
+            return _POSITION_UNKNOWN
         except Exception as exc:
             logger.warning("alpaca_position_error", symbol=symbol, error=str(exc))
-            return None
+            return _POSITION_UNKNOWN
 
 
 async def _place_order(
@@ -396,9 +405,12 @@ async def _check_trailing_stop(
             drop_pct=round((1 - latest_price / new_hwm) * 100, 2),
         )
 
-        # Fetch position qty
+        # Fetch position qty (fall back to openEntry qty if API errored)
         position = await _fetch_position(alpaca_sym, base_url, api_key, secret_key)
-        position_qty = float(position.get("qty", 0)) if position else 0.0
+        if position is _POSITION_UNKNOWN:
+            position_qty = float(open_entry.get("qty", 0))
+        else:
+            position_qty = float(position.get("qty", 0)) if position else 0.0
 
         if position_qty <= 0:
             logger.warning(
@@ -584,19 +596,52 @@ async def check_strategy(
     base_url   = _ALPACA_BASE.get(trading_mode, _ALPACA_BASE["paper"])
     alpaca_sym = _alpaca_symbol(ticker)
 
-    # ── 6. Current position ───────────────────────────────────────────────────
-    position     = await _fetch_position(alpaca_sym, base_url, api_key, secret_key)
-    position_qty = float(position.get("qty", 0)) if position else 0.0
+    # ── 6a. Firestore guard — check openEntry before hitting Alpaca ──────────
+    #   If the strategy already records an open entry, never buy again.
+    #   This is the primary duplicate-buy safeguard and does not depend on
+    #   Alpaca API availability or fill latency.
+    direction = latest["direction"]
+    open_entry = strategy.get("openEntry")
+
+    if direction == "entry" and open_entry:
+        logger.info(
+            "auto_trader_skip_already_open",
+            uid=uid, strategy_id=strategy_id,
+            open_entry_time=open_entry.get("time"),
+            open_entry_price=open_entry.get("price"),
+            hint="Strategy already has an openEntry in Firestore — skipping duplicate buy",
+        )
+        return
+
+    # ── 6b. Current Alpaca position (secondary confirmation) ──────────────────
+    position = await _fetch_position(alpaca_sym, base_url, api_key, secret_key)
+
+    # If the position API errored out, refuse to buy (we can't confirm there's
+    # no existing position).  Sells are still allowed because we can fall back
+    # to the openEntry qty.
+    if position is _POSITION_UNKNOWN:
+        if direction == "entry":
+            logger.warning(
+                "auto_trader_skip_position_unknown",
+                uid=uid, strategy_id=strategy_id, symbol=alpaca_sym,
+                hint="Cannot confirm no existing position — refusing to buy",
+            )
+            return
+        # For sells, fall back to openEntry qty if we have one
+        position_qty = float(open_entry.get("qty", 0)) if open_entry else 0.0
+    else:
+        position_qty = float(position.get("qty", 0)) if position else 0.0
+
     has_position = position_qty > 0
 
     logger.info(
         "auto_trader_position_check",
         uid=uid, strategy_id=strategy_id,
         symbol=alpaca_sym, has_position=has_position, position_qty=position_qty,
+        has_open_entry=bool(open_entry),
     )
 
     # ── 7. Determine side ─────────────────────────────────────────────────────
-    direction = latest["direction"]
     if direction == "entry" and not has_position:
         side = "buy"
     elif direction == "sell" and has_position:
