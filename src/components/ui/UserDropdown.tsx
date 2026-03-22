@@ -18,6 +18,7 @@ import {
   Zap,
   Crown,
   XCircle,
+  Bell,
 } from "lucide-react";
 import { useUIStore, type Theme } from "@/store/useUIStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -51,8 +52,9 @@ export function UserDropdown() {
   const demoMode       = useUIStore((s) => s.demoMode);
   const setDemoMode    = useUIStore((s) => s.setDemoMode);
   const wsConnected    = useUIStore((s) => s.wsConnected);
-  const setSettingsOpen          = useUIStore((s) => s.setSettingsOpen);
-  const setSubscriptionModalOpen = useUIStore((s) => s.setSubscriptionModalOpen);
+  const setSettingsOpen                = useUIStore((s) => s.setSettingsOpen);
+  const setSubscriptionModalOpen       = useUIStore((s) => s.setSubscriptionModalOpen);
+  const setNotificationSettingsOpen    = useUIStore((s) => s.setNotificationSettingsOpen);
 
   const tradingMode    = useAlpacaStore((s) => s.tradingMode);
   const setTradingMode = useAlpacaStore((s) => s.setTradingMode);
@@ -246,6 +248,15 @@ export function UserDropdown() {
           >
             <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
             API Keys
+          </button>
+
+          {/* Notifications */}
+          <button
+            onClick={() => { setNotificationSettingsOpen(true); close(); }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+          >
+            <Bell className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+            Notifications
           </button>
 
           <Divider />

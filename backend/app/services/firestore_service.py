@@ -10,14 +10,18 @@ SETUP (one-time):
   3. Add to backend/.env:
        GOOGLE_APPLICATION_CREDENTIALS=service-account.json
 
-FIRESTORE INDEX REQUIRED (collection group query):
+FIRESTORE INDEXES REQUIRED (collection group queries):
   Collection group : strategies
-  Field            : autoTrade  (Ascending)
+  Fields           : autoTrade  (Ascending)
   Scope            : Collection group
 
   Create at:
   https://console.firebase.google.com/project/<YOUR_PROJECT_ID>/firestore/indexes
   → Add index → Collection group "strategies" → Field "autoTrade" ASC → Collection group scope
+
+  Two entries are needed:
+    1. autoTrade == True  (auto-execution loop)
+    2. autoTrade == False (signal-watch / notification-only loop)
 """
 
 from __future__ import annotations
@@ -333,6 +337,106 @@ async def update_strategy(uid: str, strategy_id: str, patch: dict[str, Any]) -> 
 
 
 # ─── Trade record writes ──────────────────────────────────────────────────────
+
+async def get_signal_watch_strategies() -> list[tuple[str, dict[str, Any]]]:
+    """
+    Return a list of (uid, strategy_dict) for strategies with autoTrade=False
+    that belong to users who have emailOnSignal enabled.
+
+    Used to send signal-alert emails without placing actual orders.
+    Requires the same Firestore collection-group index as get_active_strategies()
+    but for autoTrade == False.
+    """
+    db = _db()
+    results: list[tuple[str, dict[str, Any]]] = []
+    try:
+        query = (
+            db.collection_group("strategies")
+            .where(filter=firestore_async.firestore.FieldFilter("autoTrade", "==", False))
+        )
+        async for doc in query.stream():
+            path_parts = doc.reference.path.split("/")
+            if len(path_parts) >= 4 and path_parts[0] == "users":
+                uid = path_parts[1]
+                data = doc.to_dict() or {}
+                data["id"] = doc.id
+                results.append((uid, data))
+    except Exception as exc:
+        logger.warning("get_signal_watch_strategies_failed", error=str(exc))
+    return results
+
+
+# ─── User profile helpers ─────────────────────────────────────────────────────
+
+async def get_user_email(uid: str) -> str | None:
+    """
+    Read the email field from users/{uid}.
+    Uses field_paths to avoid fetching the entire document.
+    Returns None if the document or field is missing.
+    """
+    db = _db()
+    try:
+        snap = await db.document(f"users/{uid}").get(field_paths=["email"])
+        if snap.exists:
+            return (snap.to_dict() or {}).get("email")
+    except Exception as exc:
+        logger.warning("get_user_email_failed", uid=uid, error=str(exc))
+    return None
+
+
+# ─── Notification preference helpers ─────────────────────────────────────────
+
+_notif_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_NOTIF_CACHE_TTL = 120  # seconds
+
+_NOTIF_DEFAULTS: dict[str, Any] = {
+    "emailEnabled":        False,
+    "emailOnBuy":          True,
+    "emailOnSell":         True,
+    "emailOnTrailingStop": True,
+    "emailOnSignal":       True,
+}
+
+
+async def get_notification_prefs(uid: str) -> dict[str, Any]:
+    """
+    Read users/{uid}/settings/notifications.
+    Result is cached for 120 s.
+    Returns safe defaults (emailEnabled=False) if the document is missing.
+    """
+    now = time.monotonic()
+    if uid in _notif_cache:
+        ts, cached = _notif_cache[uid]
+        if now - ts < _NOTIF_CACHE_TTL:
+            return cached
+
+    db = _db()
+    try:
+        snap = await db.document(f"users/{uid}/settings/notifications").get()
+        data = {**_NOTIF_DEFAULTS, **(snap.to_dict() or {})} if snap.exists else {**_NOTIF_DEFAULTS}
+    except Exception as exc:
+        logger.warning("get_notification_prefs_failed", uid=uid, error=str(exc))
+        data = {**_NOTIF_DEFAULTS}
+
+    _notif_cache[uid] = (now, data)
+    return data
+
+
+async def save_notification_prefs(uid: str, prefs: dict[str, Any]) -> None:
+    """
+    Write (merge) notification preferences to users/{uid}/settings/notifications.
+    Invalidates the in-process cache for this user.
+    """
+    db = _db()
+    try:
+        ref = db.document(f"users/{uid}/settings/notifications")
+        await ref.set(prefs, merge=True)
+        _notif_cache.pop(uid, None)
+        logger.info("notification_prefs_saved", uid=uid)
+    except Exception as exc:
+        logger.error("save_notification_prefs_failed", uid=uid, error=str(exc))
+        raise
+
 
 async def add_trade(uid: str, trade: dict[str, Any]) -> str:
     """

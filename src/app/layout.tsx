@@ -5,6 +5,7 @@ import { Providers } from "@/components/layout/Providers";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { ApiKeyModal } from "@/components/auth/ApiKeyModal";
 import { SubscriptionModal } from "@/components/auth/SubscriptionModal";
+import { NotificationSettingsModal } from "@/components/auth/NotificationSettingsModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,6 +44,7 @@ export default function RootLayout({
           <AuthModal />
           <ApiKeyModal />
           <SubscriptionModal />
+          <NotificationSettingsModal />
         </Providers>
       </body>
     </html>

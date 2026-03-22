@@ -33,6 +33,10 @@ interface UIState {
   subscriptionModalOpen: boolean;
   setSubscriptionModalOpen: (open: boolean) => void;
 
+  // ─── Notification settings modal
+  notificationSettingsOpen: boolean;
+  setNotificationSettingsOpen: (open: boolean) => void;
+
   // ─── Signals feed
   signals: AlphaSignal[];
   addSignal: (signal: AlphaSignal) => void;
@@ -131,6 +135,9 @@ export const useUIStore = create<UIState>()(
 
     subscriptionModalOpen: false,
     setSubscriptionModalOpen: (subscriptionModalOpen) => set({ subscriptionModalOpen }),
+
+    notificationSettingsOpen: false,
+    setNotificationSettingsOpen: (notificationSettingsOpen) => set({ notificationSettingsOpen }),
 
     signals: [],
     addSignal: (signal) => set((s) => ({ signals: [signal, ...s.signals].slice(0, 50) })),

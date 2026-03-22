@@ -27,6 +27,13 @@ import httpx
 from app.core.logging import get_logger
 from app.engine.signals import detect_signals
 from app.models.schemas import Timeframe
+from app.services.email_service import (
+    email_buy,
+    email_sell,
+    email_signal,
+    email_trailing_stop,
+    fire_email,
+)
 from app.services.firestore_service import (
     add_trade,
     get_alpaca_keys,
@@ -223,6 +230,8 @@ async def _execute_sell(
     secret_key: str,
     lot_dollars: float,
     exit_reason: str = "signal",
+    user_email: str | None = None,
+    notif_prefs: dict[str, Any] | None = None,
 ) -> bool:
     """
     Place a sell order and write the trade record to Firestore.
@@ -285,6 +294,36 @@ async def _execute_sell(
         "openEntry": None,
     })
 
+    # ── Fire-and-forget email notification ───────────────────────────────────
+    if user_email and notif_prefs and notif_prefs.get("emailEnabled"):
+        timeframe = strategy.get("timeframe", "")
+        indicator = strategy.get("indicator", "")
+        strat_name = strategy.get("name", "")
+        if exit_reason == "trailing_stop" and notif_prefs.get("emailOnTrailingStop", True):
+            fire_email(email_trailing_stop(
+                to=user_email,
+                strategy_name=strat_name,
+                ticker=ticker,
+                stop_level=exit_price,
+                qty=entry_qty,
+                pnl_dollars=pnl_dollars,
+                pnl_pct=pnl_percent,
+                timestamp=exit_time,
+            ))
+        elif exit_reason == "signal" and notif_prefs.get("emailOnSell", True):
+            fire_email(email_sell(
+                to=user_email,
+                strategy_name=strat_name,
+                ticker=ticker,
+                timeframe=timeframe,
+                indicator=indicator,
+                exit_price=exit_price,
+                qty=entry_qty,
+                pnl_dollars=pnl_dollars,
+                pnl_pct=pnl_percent,
+                timestamp=exit_time,
+            ))
+
     return True
 
 
@@ -298,6 +337,8 @@ async def _check_trailing_stop(
     api_key: str,
     secret_key: str,
     base_url: str,
+    user_email: str | None = None,
+    notif_prefs: dict[str, Any] | None = None,
 ) -> bool:
     """
     Check trailing stop condition for an open position.
@@ -384,6 +425,8 @@ async def _check_trailing_stop(
             secret_key=secret_key,
             lot_dollars=lot_dollars,
             exit_reason="trailing_stop",
+            user_email=user_email,
+            notif_prefs=notif_prefs,
         )
 
     # Stop not triggered — persist updated HWM if it changed
@@ -400,6 +443,8 @@ async def check_strategy(
     uid: str,
     strategy: dict[str, Any],
     market_svc: MarketDataService,
+    user_email: str | None = None,
+    notif_prefs: dict[str, Any] | None = None,
 ) -> None:
     """
     Evaluate one strategy and place an order if a fresh signal is detected.
@@ -466,6 +511,8 @@ async def check_strategy(
                     api_key=ts_api_key,
                     secret_key=ts_secret_key,
                     base_url=ts_base_url,
+                    user_email=user_email,
+                    notif_prefs=notif_prefs,
                 )
                 if stop_triggered:
                     return  # Position closed by trailing stop, skip signal detection
@@ -644,6 +691,20 @@ async def check_strategy(
             },
             "orderQty": filled_qty,
         })
+
+        # ── Buy email ──────────────────────────────────────────────────────
+        if user_email and notif_prefs and notif_prefs.get("emailEnabled"):
+            if notif_prefs.get("emailOnBuy", True):
+                fire_email(email_buy(
+                    to=user_email,
+                    strategy_name=strategy.get("name", ""),
+                    ticker=ticker,
+                    timeframe=strategy.get("timeframe", ""),
+                    indicator=strategy.get("indicator", ""),
+                    entry_price=signal_price,
+                    qty=filled_qty,
+                    timestamp=signal_time,
+                ))
     else:
         # Sell via shared helper
         await _execute_sell(
@@ -659,4 +720,6 @@ async def check_strategy(
             secret_key=secret_key,
             lot_dollars=lot_dollars,
             exit_reason="signal",
+            user_email=user_email,
+            notif_prefs=notif_prefs,
         )
