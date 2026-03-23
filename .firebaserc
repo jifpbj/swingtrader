@@ -2,7 +2,7 @@
   "projects": {
     "default": "predict-alpha-4ed0c",
     "prod":    "predict-alpha-4ed0c",
-    "staging": "predict-alpha-staging"
+    "staging": "sample-firebase-ai-app-97186"
   },
   "targets": {
     "predict-alpha-4ed0c": {
@@ -10,9 +10,9 @@
         "prod": ["predict-alpha-4ed0c"]
       }
     },
-    "predict-alpha-staging": {
+    "sample-firebase-ai-app-97186": {
       "hosting": {
-        "staging": ["predict-alpha-staging"]
+        "staging": ["sample-firebase-ai-app-97186"]
       }
     }
   }

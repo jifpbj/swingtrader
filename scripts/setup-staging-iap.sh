@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="predict-alpha-staging"
+PROJECT_ID="sample-firebase-ai-app-97186"
 REGION="us-west1"
 SERVICE="predictive-alpha-api"
 
@@ -35,7 +35,7 @@ PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectN
 
 # ── STEP 0: Manual prerequisite reminder ──────────────────────────────────────
 warn "MANUAL PREREQUISITE (do this first in the GCP Console if not done):"
-warn "  GCP Console → predict-alpha-staging → APIs & Services → OAuth consent screen"
+warn "  GCP Console → sample-firebase-ai-app-97186 → APIs & Services → OAuth consent screen"
 warn "  → External → App name: 'Predictive Alpha Staging' → Support email → Save"
 echo ""
 read -rp "Press Enter once the OAuth consent screen is configured…"

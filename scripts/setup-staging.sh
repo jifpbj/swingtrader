@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="predict-alpha-staging"
+PROJECT_ID="sample-firebase-ai-app-97186"
 REGION="us-west1"
 SA_NAME="github-actions-sa"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -43,7 +43,7 @@ if gcloud projects describe "$PROJECT_ID" &>/dev/null; then
   warn "Project ${PROJECT_ID} already exists — skipping creation"
 else
   gcloud projects create "$PROJECT_ID" \
-    --name="Predictive Alpha — Staging"
+    --name="Predictive Alpha Staging"
 fi
 
 # ── 2. Link billing ────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ echo ""
 # ── 10. Rename prod project display name (cosmetic) ───────────────────────────
 info "Updating prod project display name…"
 gcloud projects update predict-alpha-4ed0c \
-  --name="Predictive Alpha — Production" || true
+  --name="Predictive Alpha Production" || true
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -205,7 +205,7 @@ echo "  2. Update Secret Manager placeholders (commands printed above)"
 echo ""
 echo "  3. Create Firebase staging project:"
 echo "     https://console.firebase.google.com → Add project"
-echo "     → Import Google Cloud project → predict-alpha-staging"
+echo "     → Import Google Cloud project → sample-firebase-ai-app-97186"
 echo "     Enable: Firestore (us-west1), Authentication (Email+Google), Hosting"
 echo "     Download service account → add as FIREBASE_SERVICE_ACCOUNT_STAGING"
 echo "     Copy web app config → add STAGING_FIREBASE_* GitHub secrets"

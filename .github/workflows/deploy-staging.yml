@@ -20,10 +20,10 @@ jobs:
       id-token: write
 
     env:
-      PROJECT_ID: predict-alpha-staging
+      PROJECT_ID: sample-firebase-ai-app-97186
       REGION:     us-west1
       SERVICE:    predictive-alpha-api
-      IMAGE:      us-west1-docker.pkg.dev/predict-alpha-staging/cloud-run-source-deploy/predictive-alpha-api
+      IMAGE:      us-west1-docker.pkg.dev/sample-firebase-ai-app-97186/cloud-run-source-deploy/predictive-alpha-api
 
     steps:
       - uses: actions/checkout@v4
@@ -90,9 +90,9 @@ jobs:
           NEXT_PUBLIC_WS_URL:  ""
           # Staging Firebase project — separate Firestore + Auth from prod
           NEXT_PUBLIC_FIREBASE_API_KEY:             ${{ secrets.STAGING_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         predict-alpha-staging.firebaseapp.com
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID:          predict-alpha-staging
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:      predict-alpha-staging.firebasestorage.app
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         sample-firebase-ai-app-97186.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID:          sample-firebase-ai-app-97186
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:      sample-firebase-ai-app-97186.firebasestorage.app
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.STAGING_FIREBASE_SENDER_ID }}
           NEXT_PUBLIC_FIREBASE_APP_ID:              ${{ secrets.STAGING_FIREBASE_APP_ID }}
           # Stripe test-mode checkout links (replace with actual test links)
@@ -106,4 +106,4 @@ jobs:
           repoToken:              ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
           channelId:              live
-          projectId:              predict-alpha-staging
+          projectId:              sample-firebase-ai-app-97186
