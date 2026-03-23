@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     # ─── App ──────────────────────────────────────────────────────────────────
-    app_env: Literal["development", "production", "testing"] = "development"
+    app_env: Literal["development", "production", "staging", "testing"] = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     log_level: str = "INFO"

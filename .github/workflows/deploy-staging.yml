@@ -101,9 +101,11 @@ jobs:
         run: npm run build
 
       - name: Deploy to Firebase Hosting (staging — live channel)
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken:              ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
-          channelId:              live
-          projectId:              sample-firebase-ai-app-97186
+        env:
+          FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+        run: |
+          echo "$FIREBASE_SA_JSON" > /tmp/staging-firebase-sa.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/staging-firebase-sa.json
+          npx firebase-tools deploy --only hosting:staging \
+            --project sample-firebase-ai-app-97186 \
+            --non-interactive
