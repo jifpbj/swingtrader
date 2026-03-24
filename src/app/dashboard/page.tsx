@@ -10,18 +10,21 @@ import { BacktestPanel } from "@/components/trading/BacktestPanel";
 import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
 import { TradeStrategyWidget } from "@/components/trading/TradeStrategyWidget";
 import { PaperTradingPanel } from "@/components/trading/PaperTradingPanel";
+import { LiveTradingPanel } from "@/components/trading/LiveTradingPanel";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useAutoTrader } from "@/hooks/useAutoTrader";
 import { useTradeNotifications } from "@/hooks/useTradeNotifications";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { cn } from "@/lib/utils";
 
 export default function TradingDashboard() {
   useLivePrice();
   useAutoTrader();
   useTradeNotifications();
-  const user = useAuthStore((s) => s.user);
+  const user        = useAuthStore((s) => s.user);
+  const tradingMode = useAlpacaStore((s) => s.tradingMode);
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -131,10 +134,17 @@ export default function TradingDashboard() {
               <BacktestPanel />
               <IndicatorPanel />
 
-              {/* Paper trading — only for signed-in users */}
-              {user && (
+              {/* Paper trading panel — visible when in paper mode */}
+              {tradingMode === "paper" && (
                 <div id="paper-trading-panel">
                   <PaperTradingPanel />
+                </div>
+              )}
+
+              {/* Live trading panel — visible when in live mode (paid users) */}
+              {tradingMode === "live" && user && (
+                <div id="live-trading-panel">
+                  <LiveTradingPanel />
                 </div>
               )}
             </div>

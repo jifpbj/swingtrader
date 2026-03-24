@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Activity, RefreshCw } from "lucide-react";
-import { Lock } from "lucide-react";
+import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Activity, RefreshCw, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
@@ -17,7 +16,6 @@ import { TimePeriodSelector, periodToStartMs, type TimePeriod } from "@/componen
 
 const currFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
-/** Map our TimePeriod to Alpaca's period param */
 function periodToAlpaca(period: TimePeriod): string {
   switch (period) {
     case "1W":  return "1W";
@@ -25,65 +23,56 @@ function periodToAlpaca(period: TimePeriod): string {
     case "90D": return "3M";
     case "6M":  return "6M";
     case "1Y":  return "1A";
-    case "YTD": return "1A"; // filter client-side to Jan 1
+    case "YTD": return "1A";
   }
 }
 
-export default function PortfolioPage() {
+export default function LivePortfolioPage() {
   const user              = useAuthStore((s) => s.user);
   const isPaid            = useSubscriptionStore((s) => s.isPaid);
-  const account           = useAlpacaStore((s) => s.account);
-  const positions         = useAlpacaStore((s) => s.positions);
-  const orders            = useAlpacaStore((s) => s.orders);
-  const portfolioHistory  = useAlpacaStore((s) => s.portfolioHistory);
-  const fetchPositions    = useAlpacaStore((s) => s.fetchPositions);
-  const fetchPortfolioHistory = useAlpacaStore((s) => s.fetchPortfolioHistory);
+  const liveAccount       = useAlpacaStore((s) => s.liveAccount);
+  const livePositions     = useAlpacaStore((s) => s.livePositions);
+  const liveOrders        = useAlpacaStore((s) => s.liveOrders);
+  const livePortfolioHistory = useAlpacaStore((s) => s.livePortfolioHistory);
+  const fetchLivePositions   = useAlpacaStore((s) => s.fetchLivePositions);
+  const fetchLivePortfolioHistory = useAlpacaStore((s) => s.fetchLivePortfolioHistory);
   const strategies        = useStrategyStore((s) => s.strategies);
-  const [period, setPeriod] = useState<TimePeriod>("30D");
+  const [period, setPeriod]   = useState<TimePeriod>("30D");
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch portfolio history when period changes (or on mount)
   useEffect(() => {
-    if (!account) return;
-    void fetchPortfolioHistory(periodToAlpaca(period));
-  }, [account, period, fetchPortfolioHistory]);
+    if (!liveAccount) return;
+    void fetchLivePortfolioHistory(periodToAlpaca(period));
+  }, [liveAccount, period, fetchLivePortfolioHistory]);
 
-  // For YTD, filter portfolio history client-side to Jan 1 of current year
   const filteredHistory = useMemo(() => {
-    if (!portfolioHistory) return null;
-    if (period !== "YTD") return portfolioHistory;
+    if (!livePortfolioHistory) return null;
+    if (period !== "YTD") return livePortfolioHistory;
     const jan1 = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
-    const startIdx = portfolioHistory.timestamp.findIndex((ts) => ts >= jan1);
-    if (startIdx <= 0) return portfolioHistory;
+    const startIdx = livePortfolioHistory.timestamp.findIndex((ts) => ts >= jan1);
+    if (startIdx <= 0) return livePortfolioHistory;
     return {
-      ...portfolioHistory,
-      timestamp: portfolioHistory.timestamp.slice(startIdx),
-      equity: portfolioHistory.equity.slice(startIdx),
-      profit_loss: portfolioHistory.profit_loss.slice(startIdx),
-      profit_loss_pct: portfolioHistory.profit_loss_pct.slice(startIdx),
+      ...livePortfolioHistory,
+      timestamp: livePortfolioHistory.timestamp.slice(startIdx),
+      equity: livePortfolioHistory.equity.slice(startIdx),
+      profit_loss: livePortfolioHistory.profit_loss.slice(startIdx),
+      profit_loss_pct: livePortfolioHistory.profit_loss_pct.slice(startIdx),
     };
-  }, [portfolioHistory, period]);
+  }, [livePortfolioHistory, period]);
 
-  // Filter orders by selected time period
   const filteredOrders = useMemo(() => {
     const cutoff = periodToStartMs(period);
-    return orders.filter((o) => new Date(o.created_at).getTime() >= cutoff);
-  }, [orders, period]);
+    return liveOrders.filter((o) => new Date(o.created_at).getTime() >= cutoff);
+  }, [liveOrders, period]);
 
-  const unrealPnl = positions.reduce((s, p) => s + p.unrealized_pl, 0);
-
-  // Derive P/L and return from portfolio history
-  const periodPnl = filteredHistory && filteredHistory.profit_loss.length > 0
-    ? filteredHistory.profit_loss[filteredHistory.profit_loss.length - 1]
-    : null;
-  const periodReturn = filteredHistory && filteredHistory.profit_loss_pct.length > 0
-    ? filteredHistory.profit_loss_pct[filteredHistory.profit_loss_pct.length - 1]
-    : null;
+  const unrealPnl    = livePositions.reduce((s, p) => s + p.unrealized_pl, 0);
+  const periodPnl    = filteredHistory?.profit_loss.at(-1) ?? null;
+  const periodReturn = filteredHistory?.profit_loss_pct.at(-1) ?? null;
 
   async function handleRefresh() {
     setRefreshing(true);
     try {
-      await Promise.all([fetchPositions(), fetchPortfolioHistory(periodToAlpaca(period))]);
+      await Promise.all([fetchLivePositions(), fetchLivePortfolioHistory(periodToAlpaca(period))]);
     } finally { setRefreshing(false); }
   }
 
@@ -93,9 +82,7 @@ export default function PortfolioPage() {
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">Please sign in to view your portfolio.</p>
-          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
-            Go to Dashboard
-          </Link>
+          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">Go to Dashboard</Link>
         </div>
       </main>
     );
@@ -109,13 +96,29 @@ export default function PortfolioPage() {
           <div className="size-14 rounded-full bg-amber-500/10 flex items-center justify-center">
             <Lock className="size-7 text-amber-400" />
           </div>
-          <h2 className="text-lg font-semibold text-foreground">Portfolio requires a paid plan</h2>
+          <h2 className="text-lg font-semibold text-foreground">Live Portfolio requires a paid plan</h2>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Upgrade to the <span className="text-emerald-400 font-semibold">Basic</span> or <span className="text-violet-400 font-semibold">Executive</span> plan to access your trading portfolio.
+            Upgrade to the <span className="text-emerald-400 font-semibold">Basic</span> or <span className="text-violet-400 font-semibold">Executive</span> plan to access live trading.
           </p>
-          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
-            Go to Dashboard
-          </Link>
+          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">Go to Dashboard</Link>
+        </div>
+      </main>
+    );
+  }
+
+  // Not connected to live Alpaca
+  if (!liveAccount) {
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center flex flex-col items-center gap-4">
+          <div className="size-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
+            <Wallet className="size-7 text-emerald-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Live account not connected</h2>
+          <p className="text-muted-foreground text-sm max-w-xs">
+            Connect your Alpaca live trading credentials in the dashboard to view your live portfolio.
+          </p>
+          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">Go to Dashboard</Link>
         </div>
       </main>
     );
@@ -123,7 +126,7 @@ export default function PortfolioPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* ── Top bar ──────────────────────────────────────────────────── */}
+      {/* ── Top bar ── */}
       <header className="sticky top-0 z-30 glass border-b border-border px-4 py-3 flex items-center gap-3">
         <Link
           href="/dashboard"
@@ -134,76 +137,63 @@ export default function PortfolioPage() {
         </Link>
         <div className="flex items-center gap-2">
           <Wallet className="size-4 text-emerald-500" />
-          <span className="text-sm font-semibold text-foreground">Paper Portfolio</span>
+          <span className="text-sm font-semibold text-foreground">Live Portfolio</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20 font-semibold uppercase tracking-wide">
+            Real Money
+          </span>
         </div>
+        {/* Paper portfolio link */}
         <Link
-          href="/portfolio/live"
-          className="ml-auto mr-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          href="/portfolio"
+          className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition-colors"
         >
-          View Live Portfolio →
+          View Paper Portfolio →
         </Link>
-        {account && (
-          <div className="flex items-center gap-4 text-[11px]">
-            <div className="text-right">
-              <p className="text-muted-foreground">Equity</p>
-              <p className="font-mono font-bold text-foreground">{currFmt.format(account.equity)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-muted-foreground">Buying Power</p>
-              <p className="font-mono font-bold text-foreground">{currFmt.format(account.buying_power)}</p>
-            </div>
+        <div className="flex items-center gap-4 text-[11px]">
+          <div className="text-right">
+            <p className="text-muted-foreground">Equity</p>
+            <p className="font-mono font-bold text-foreground">{currFmt.format(liveAccount.equity)}</p>
           </div>
-        )}
-        {!account && (
-          <p className="ml-auto text-[11px] text-muted-foreground/70">
-            Connect Alpaca in the dashboard to see live positions
-          </p>
-        )}
+          <div className="text-right">
+            <p className="text-muted-foreground">Buying Power</p>
+            <p className="font-mono font-bold text-foreground">{currFmt.format(liveAccount.buying_power)}</p>
+          </div>
+        </div>
       </header>
 
       <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-8">
 
-        {/* ── Summary cards ──────────────────────────────────────────── */}
+        {/* ── Summary cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Open Positions</p>
-            <p className="text-2xl font-bold text-foreground tabular-nums">{positions.length}</p>
+            <p className="text-2xl font-bold text-foreground tabular-nums">{livePositions.length}</p>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Unrealized P/L</p>
-            <p className={cn(
-              "text-2xl font-bold tabular-nums font-mono",
-              unrealPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
-            )}>
+            <p className={cn("text-2xl font-bold tabular-nums font-mono",
+              unrealPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600")}>
               {unrealPnl >= 0 ? "+" : ""}{currFmt.format(unrealPnl)}
             </p>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
-              P/L ({period})
-            </p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">P/L ({period})</p>
             <div className="flex items-center gap-1.5">
               {(periodPnl ?? 0) >= 0
                 ? <TrendingUp className="size-4 dark:text-emerald-400 text-emerald-600 shrink-0" />
                 : <TrendingDown className="size-4 dark:text-red-400 text-red-600 shrink-0" />}
-              <p className={cn(
-                "text-2xl font-bold tabular-nums font-mono",
-                (periodPnl ?? 0) >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
-              )}>
+              <p className={cn("text-2xl font-bold tabular-nums font-mono",
+                (periodPnl ?? 0) >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600")}>
                 {periodPnl != null ? `${periodPnl >= 0 ? "+" : ""}${currFmt.format(periodPnl)}` : "—"}
               </p>
             </div>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
-              Return ({period})
-            </p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Return ({period})</p>
             <div className="flex items-center gap-1.5">
               <Activity className="size-4 text-muted-foreground shrink-0" />
-              <p className={cn(
-                "text-2xl font-bold tabular-nums font-mono",
-                (periodReturn ?? 0) >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
-              )}>
+              <p className={cn("text-2xl font-bold tabular-nums font-mono",
+                (periodReturn ?? 0) >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600")}>
                 {periodReturn != null ? `${periodReturn >= 0 ? "+" : ""}${(periodReturn * 100).toFixed(2)}%` : "—"}
               </p>
             </div>
@@ -213,30 +203,29 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        {/* ── Active Positions ────────────────────────────────────────── */}
+        {/* ── Active Positions ── */}
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">Active Positions</h2>
             <button
               onClick={handleRefresh}
-              disabled={refreshing || !account}
+              disabled={refreshing}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent hover:border-border transition-all disabled:opacity-40"
             >
               <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
               Refresh
             </button>
           </div>
-          <PositionsTable positions={positions} />
+          <PositionsTable positions={livePositions} />
         </section>
 
-        {/* ── Trade History ───────────────────────────────────────────── */}
+        {/* ── Trade History ── */}
         <section className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <h2 className="text-sm font-semibold text-foreground">Trade History</h2>
             <TimePeriodSelector value={period} onChange={setPeriod} />
           </div>
 
-          {/* Equity Chart */}
           <div className="glass rounded-2xl p-4">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-3">
               Account Value — {period}
@@ -244,7 +233,6 @@ export default function PortfolioPage() {
             <EquityChart history={filteredHistory} />
           </div>
 
-          {/* P/L Chart */}
           <div className="glass rounded-2xl p-4">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-3">
               Profit / Loss — {period}
@@ -252,7 +240,6 @@ export default function PortfolioPage() {
             <PnLChart history={filteredHistory} />
           </div>
 
-          {/* Order table */}
           <TradeHistoryTable orders={filteredOrders} strategies={strategies} period={period} />
         </section>
       </div>

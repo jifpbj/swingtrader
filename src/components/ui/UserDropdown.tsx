@@ -237,10 +237,14 @@ export function UserDropdown() {
               {dataMode === "paper" && wsConnected && <PulseDot />}
             </button>
 
-            {/* Live (paid only, coming soon) */}
-            <PaidTooltip>
-              <LiveButton dataMode={dataMode} wsConnected={wsConnected} isPaid={isPaid()} onUpgrade={() => { setSubscriptionModalOpen(true); close(); }} />
-            </PaidTooltip>
+            {/* Live (paid only) */}
+            {isPaid() ? (
+              <LiveButton dataMode={dataMode} wsConnected={wsConnected} />
+            ) : (
+              <PaidTooltip>
+                <LiveButton dataMode={dataMode} wsConnected={wsConnected} locked />
+              </PaidTooltip>
+            )}
           </div>
 
           <Divider />
@@ -301,14 +305,25 @@ export function UserDropdown() {
 
           {/* Portfolio (paid only) */}
           {isPaid() ? (
-            <Link
-              href="/portfolio"
-              onClick={close}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
-            >
-              <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-              Portfolio
-            </Link>
+            <>
+              <Link
+                href="/portfolio"
+                onClick={close}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+              >
+                <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+                <span className="flex-1">Paper Portfolio</span>
+              </Link>
+              <Link
+                href="/portfolio/live"
+                onClick={close}
+                className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+              >
+                <BarChart2 className="size-3.5 text-emerald-500 dark:text-emerald-500 shrink-0" />
+                <span className="flex-1">Live Portfolio</span>
+                <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-semibold">LIVE</span>
+              </Link>
+            </>
           ) : (
             <PaidTooltip>
               <button
@@ -371,10 +386,18 @@ export function UserDropdown() {
   );
 }
 
-// ─── Live button with its own "Coming Soon" state ─────────────────────────────
-function LiveButton({ dataMode, wsConnected, isPaid, onUpgrade }: { dataMode: string; wsConnected: boolean; isPaid: boolean; onUpgrade: () => void }) {
-  const [showComingSoon, setShowComingSoon] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+// ─── Live button ──────────────────────────────────────────────────────────────
+function LiveButton({
+  dataMode,
+  wsConnected,
+  locked = false,
+}: {
+  dataMode: string;
+  wsConnected: boolean;
+  locked?: boolean;
+}) {
+  const setDemoMode    = useUIStore((s) => s.setDemoMode);
+  const setTradingMode = useAlpacaStore((s) => s.setTradingMode);
 
   function PulseDot() {
     return (
@@ -385,37 +408,27 @@ function LiveButton({ dataMode, wsConnected, isPaid, onUpgrade }: { dataMode: st
     );
   }
 
-  function handle() {
-    if (!isPaid) { onUpgrade(); return; }
-    setShowComingSoon(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setShowComingSoon(false), 2500);
-  }
-
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
   return (
     <div className="relative flex-1">
       <button
-        onClick={handle}
+        onClick={() => {
+          if (locked) return;
+          setDemoMode(false);
+          setTradingMode("live");
+        }}
         className={cn(
           "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
-          !isPaid
+          locked
             ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
             : dataMode === "live"
             ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
             : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
         )}
       >
-        {!isPaid && <Lock className="size-2.5 shrink-0" />}
+        {locked && <Lock className="size-2.5 shrink-0" />}
         Live
         {dataMode === "live" && wsConnected && <PulseDot />}
       </button>
-      {showComingSoon && (
-        <span className="absolute top-full mt-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-md text-[11px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 pointer-events-none z-50">
-          Coming Soon!
-        </span>
-      )}
     </div>
   );
 }
