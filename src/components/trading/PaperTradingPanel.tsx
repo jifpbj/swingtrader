@@ -13,11 +13,9 @@ import {
   EyeOff,
   ChevronDown,
   ChevronUp,
-  Lock,
 } from "lucide-react";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { useUIStore } from "@/store/useUIStore";
-import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { toAlpacaSymbol, isCrypto } from "@/lib/alpaca";
 import type { PlaceOrderRequest } from "@/types/market";
@@ -747,8 +745,6 @@ export function PaperTradingPanel() {
   const connected = useAlpacaStore((s) => s.account !== null);
   const positions = useAlpacaStore((s) => s.positions);
   const orders = useAlpacaStore((s) => s.orders);
-  const isPaid = useSubscriptionStore((s) => s.isPaid);
-  const setSubscriptionModalOpen = useUIStore((s) => s.setSubscriptionModalOpen);
   const [tab, setTab] = useState<Tab>("trade");
   const [collapsed, setCollapsed] = useState(false);
 
@@ -794,22 +790,7 @@ export function PaperTradingPanel() {
 
       {!collapsed && (
         <>
-          {!isPaid() ? (
-            <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
-              <div className="size-10 rounded-full bg-amber-500/10 flex items-center justify-center">
-                <Lock className="size-5 text-amber-400" />
-              </div>
-              <p className="text-xs text-zinc-400">
-                Paper trading is available on the <span className="text-emerald-400 font-semibold">Basic</span> and <span className="text-violet-400 font-semibold">Executive</span> plans.
-              </p>
-              <button
-                onClick={() => setSubscriptionModalOpen(true)}
-                className="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all"
-              >
-                Upgrade to Unlock
-              </button>
-            </div>
-          ) : !connected ? (
+          {!connected ? (
             <ConnectForm />
           ) : (
             <>

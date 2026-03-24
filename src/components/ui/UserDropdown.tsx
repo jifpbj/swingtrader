@@ -223,27 +223,19 @@ export function UserDropdown() {
               Demo
             </button>
 
-            {/* Paper (paid only) */}
-            <PaidTooltip>
-              <button
-                onClick={() => {
-                  if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
-                  setDemoMode(false); setTradingMode("paper");
-                }}
-                className={cn(
-                  "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
-                  !isPaid()
-                    ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
-                    : dataMode === "paper"
-                    ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
-                    : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
-                )}
-              >
-                {!isPaid() && <Lock className="size-2.5 shrink-0" />}
-                Paper
-                {dataMode === "paper" && wsConnected && <PulseDot />}
-              </button>
-            </PaidTooltip>
+            {/* Paper — free for all users */}
+            <button
+              onClick={() => { setDemoMode(false); setTradingMode("paper"); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
+                dataMode === "paper"
+                  ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
+                  : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
+              )}
+            >
+              Paper
+              {dataMode === "paper" && wsConnected && <PulseDot />}
+            </button>
 
             {/* Live (paid only, coming soon) */}
             <PaidTooltip>
