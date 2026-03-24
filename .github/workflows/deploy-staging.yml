@@ -49,18 +49,18 @@ jobs:
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
 
-      - name: Deploy to Cloud Run (staging — private behind IAP)
+      - name: Deploy to Cloud Run (staging)
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
             --image    ${{ env.IMAGE }}:${{ github.sha }} \
             --region   ${{ env.REGION }} \
             --project  ${{ env.PROJECT_ID }} \
-            --no-allow-unauthenticated \
-            --set-env-vars "APP_ENV=staging" \
+            --allow-unauthenticated \
+            --set-env-vars "APP_ENV=staging,USE_MOCK_DATA=false" \
             --set-secrets "ALPACA_API_KEY=ALPACA_API_KEY:latest,ALPACA_SECRET_KEY=ALPACA_SECRET_KEY:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest,RESEND_API_KEY=RESEND_API_KEY:latest" \
             --quiet
-          # Cloud Run is NOT publicly accessible.
-          # All traffic reaches it via the Global HTTPS LB + IAP.
+          # Staging Cloud Run is publicly accessible — protected by Firebase Auth
+          # on the frontend. Staging uses paper/test keys so no sensitive data risk.
           # Firebase/Firestore auth uses Application Default Credentials (ADC) —
           # the compute SA must have roles/datastore.user (see setup-staging.sh).
 

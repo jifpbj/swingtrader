@@ -3,28 +3,46 @@
 import { useState } from "react";
 import { ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { TradeRecord } from "@/types/trade";
+import { matchOrderToStrategy } from "@/lib/utils";
+import type { AlpacaOrder } from "@/types/market";
 import type { TimePeriod } from "@/components/portfolio/TimePeriodSelector";
 
 const currFmt  = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
-const currFmt0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const dtFmt    = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
-type SortKey = "exitTime" | "pnlDollars" | "pnlPercent" | "ticker" | "entryValue" | "exitValue";
+type SortKey = "created_at" | "symbol" | "side" | "filled_qty" | "totalValue";
 
 interface Props {
-  trades: TradeRecord[];
+  orders: AlpacaOrder[];
+  strategies: { ticker: string; name: string }[];
   period?: TimePeriod;
 }
 
-export function TradeHistoryTable({ trades, period }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>("exitTime");
+const STATUS_COLORS: Record<string, string> = {
+  filled:           "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  partially_filled: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  new:              "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  accepted:         "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  canceled:         "bg-zinc-500/15 text-zinc-500",
+  expired:          "bg-zinc-500/15 text-zinc-500",
+  rejected:         "bg-red-500/15 text-red-600 dark:text-red-400",
+  pending_new:      "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+};
+
+function totalValue(o: AlpacaOrder): number {
+  if (o.filled_avg_price && o.filled_qty) return o.filled_avg_price * o.filled_qty;
+  if (o.notional) return o.notional;
+  return 0;
+}
+
+export function TradeHistoryTable({ orders, strategies, period }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortAsc, setSortAsc] = useState(false);
 
-  if (trades.length === 0) {
+  if (orders.length === 0) {
     return (
       <p className="text-sm text-muted-foreground/70 text-center py-8">
-        No trade history in this period.
+        No orders in this period.
       </p>
     );
   }
@@ -34,27 +52,27 @@ export function TradeHistoryTable({ trades, period }: Props) {
     else { setSortKey(key); setSortAsc(false); }
   }
 
-  const sorted = [...trades].sort((a, b) => {
+  const sorted = [...orders].sort((a, b) => {
     const mul = sortAsc ? 1 : -1;
-    if (sortKey === "ticker")      return mul * a.ticker.localeCompare(b.ticker);
-    if (sortKey === "entryValue")  return mul * ((a.entryPrice * a.qty) - (b.entryPrice * b.qty));
-    if (sortKey === "exitValue")   return mul * ((a.exitPrice  * a.qty) - (b.exitPrice  * b.qty));
-    return mul * (a[sortKey] - b[sortKey]);
+    if (sortKey === "symbol")     return mul * a.symbol.localeCompare(b.symbol);
+    if (sortKey === "side")       return mul * a.side.localeCompare(b.side);
+    if (sortKey === "filled_qty") return mul * ((a.filled_qty ?? 0) - (b.filled_qty ?? 0));
+    if (sortKey === "totalValue") return mul * (totalValue(a) - totalValue(b));
+    // created_at (ISO string sorts lexicographically)
+    return mul * a.created_at.localeCompare(b.created_at);
   });
 
-  const totalPnl = trades.reduce((s, t) => s + t.pnlDollars, 0);
-
-  function SortHeader({ col, label }: { col: SortKey; label: string }) {
+  function SortHeader({ col, label, align = "right" }: { col: SortKey; label: string; align?: "left" | "right" }) {
     const active = sortKey === col;
     return (
       <th
         onClick={() => handleSort(col)}
         className={cn(
-          "text-right px-3 py-2 font-medium cursor-pointer select-none transition-colors",
+          `text-${align} px-3 py-2 font-medium cursor-pointer select-none transition-colors`,
           active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         )}
       >
-        <span className="inline-flex items-center gap-1 justify-end">
+        <span className={cn("inline-flex items-center gap-1", align === "right" ? "justify-end" : "justify-start")}>
           {label}
           <ArrowUpDown className={cn("size-2.5", active ? "opacity-80" : "opacity-40")} />
         </span>
@@ -67,11 +85,8 @@ export function TradeHistoryTable({ trades, period }: Props) {
       {/* Summary */}
       <div className="flex items-center justify-between text-[11px] px-1">
         <span className="text-muted-foreground">
-          {trades.length} trade{trades.length !== 1 ? "s" : ""}
+          {orders.length} order{orders.length !== 1 ? "s" : ""}
           {period ? <span className="text-muted-foreground/70"> · {period}</span> : null}
-        </span>
-        <span className={cn("font-mono font-bold tabular-nums", totalPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600")}>
-          Cumulative P/L: {totalPnl >= 0 ? "+" : ""}{currFmt.format(totalPnl)}
         </span>
       </div>
 
@@ -80,80 +95,60 @@ export function TradeHistoryTable({ trades, period }: Props) {
           <thead>
             <tr className="border-b border-border">
               <th className="text-left px-3 py-2 text-muted-foreground font-medium">Strategy</th>
-              <SortHeader col="ticker" label="Ticker" />
-              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Entry Date</th>
-              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Exit Date</th>
-              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Qty</th>
-              <SortHeader col="entryValue" label="Entry Val" />
-              <SortHeader col="exitValue"  label="Exit Val" />
-              <SortHeader col="pnlDollars" label="P/L $" />
-              <SortHeader col="pnlPercent" label="P/L %" />
+              <SortHeader col="symbol" label="Ticker" align="left" />
+              <SortHeader col="side" label="Side" align="left" />
+              <SortHeader col="created_at" label="Date" />
+              <th className="text-center px-3 py-2 text-muted-foreground font-medium">Status</th>
+              <SortHeader col="filled_qty" label="Qty" />
+              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Fill Price</th>
+              <SortHeader col="totalValue" label="Total Value" />
+              <th className="text-right px-3 py-2 text-muted-foreground font-medium">Type</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((t) => {
-              const plColor    = t.pnlDollars >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600";
-              const entryValue = t.entryPrice * t.qty;
-              const exitValue  = t.exitPrice  * t.qty;
+            {sorted.map((o) => {
+              const strategyName = matchOrderToStrategy(o.symbol, strategies);
+              const sideColor = o.side === "buy"
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-red-500/15 text-red-600 dark:text-red-400";
+              const statusColor = STATUS_COLORS[o.status] ?? "bg-zinc-500/15 text-zinc-500";
+              const val = totalValue(o);
+
               return (
-                <tr key={t.id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                  <td className="px-3 py-2 text-muted-foreground max-w-[100px] truncate" title={t.strategyName}>
-                    {t.strategyName}
+                <tr key={o.id} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
+                  <td className="px-3 py-2 text-muted-foreground max-w-[100px] truncate" title={strategyName ?? "—"}>
+                    {strategyName ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">{t.ticker}</td>
+                  <td className="px-3 py-2 font-mono font-semibold text-foreground">{o.symbol}</td>
+                  <td className="px-3 py-2">
+                    <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase", sideColor)}>
+                      {o.side}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">
-                    {dtFmt.format(new Date(t.entryTime * 1000))}
+                    {dtFmt.format(new Date(o.created_at))}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">
-                    {dtFmt.format(new Date(t.exitTime * 1000))}
+                  <td className="px-3 py-2 text-center">
+                    <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", statusColor)}>
+                      {o.status.replace(/_/g, " ")}
+                    </span>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">{t.qty}</td>
-
-                  {/* Entry market value = entryPrice × qty */}
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">
+                    {o.filled_qty || (o.qty ?? "—")}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums">
+                    {o.filled_avg_price ? currFmt.format(o.filled_avg_price) : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
-                    {currFmt0.format(entryValue)}
+                    {val > 0 ? currFmt.format(val) : "—"}
                   </td>
-                  {/* Exit market value = exitPrice × qty */}
-                  <td className={cn(
-                    "px-3 py-2 text-right font-mono tabular-nums",
-                    t.pnlDollars >= 0 ? "text-foreground/80" : "text-muted-foreground",
-                  )}>
-                    {currFmt0.format(exitValue)}
-                  </td>
-
-                  <td className={cn("px-3 py-2 text-right font-mono font-semibold tabular-nums", plColor)}>
-                    {t.pnlDollars >= 0 ? "+" : ""}{currFmt.format(t.pnlDollars)}
-                  </td>
-                  <td className={cn("px-3 py-2 text-right font-mono font-semibold tabular-nums", plColor)}>
-                    {t.pnlPercent >= 0 ? "+" : ""}{(t.pnlPercent * 100).toFixed(2)}%
+                  <td className="px-3 py-2 text-right text-muted-foreground capitalize">
+                    {o.order_type.replace(/_/g, " ")}
                   </td>
                 </tr>
               );
             })}
           </tbody>
-          <tfoot>
-            <tr className="border-t border-border bg-muted/30">
-              <td colSpan={5} className="px-3 py-2 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                Period total{period ? ` · ${period}` : ""}
-              </td>
-              {/* Entry value total */}
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums text-[11px]">
-                {currFmt0.format(trades.reduce((s, t) => s + t.entryPrice * t.qty, 0))}
-              </td>
-              {/* Exit value total */}
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground tabular-nums text-[11px]">
-                {currFmt0.format(trades.reduce((s, t) => s + t.exitPrice * t.qty, 0))}
-              </td>
-              {/* P/L $ total */}
-              <td className={cn(
-                "px-3 py-2 text-right font-mono font-bold tabular-nums",
-                totalPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
-              )}>
-                {totalPnl >= 0 ? "+" : ""}{currFmt.format(totalPnl)}
-              </td>
-              <td />
-            </tr>
-          </tfoot>
         </table>
       </div>
     </div>

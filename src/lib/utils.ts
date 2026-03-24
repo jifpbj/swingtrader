@@ -46,3 +46,20 @@ export function timestampToDate(timestamp: number): string {
     hour12: false,
   });
 }
+
+/** Normalize a ticker symbol for comparison: strip slashes, hyphens, lowercase */
+function normalizeSymbol(s: string): string {
+  return s.replace(/[/\-]/g, "").toUpperCase();
+}
+
+/** Match an Alpaca order symbol to a saved strategy by ticker */
+export function matchOrderToStrategy(
+  orderSymbol: string,
+  strategies: { ticker: string; name: string }[],
+): string | null {
+  const norm = normalizeSymbol(orderSymbol);
+  for (const s of strategies) {
+    if (normalizeSymbol(s.ticker) === norm) return s.name;
+  }
+  return null;
+}

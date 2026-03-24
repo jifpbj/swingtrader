@@ -127,6 +127,15 @@ class AlpacaOrder(BaseModel):
     limit_price: float | None = None
 
 
+class PortfolioHistory(BaseModel):
+    timestamp: list[int]
+    equity: list[float]
+    profit_loss: list[float]
+    profit_loss_pct: list[float]
+    base_value: float
+    timeframe: str
+
+
 class PlaceOrderRequest(BaseModel):
     symbol: str
     qty: float | None = None
@@ -181,6 +190,34 @@ async def get_account(
         daytrade_count=int(d.get("daytrade_count", 0)),
         pattern_day_trader=bool(d.get("pattern_day_trader", False)),
         trading_blocked=bool(d.get("trading_blocked", False)),
+    )
+
+
+@router.get(
+    "/account/portfolio/history",
+    response_model=PortfolioHistory,
+    summary="Fetch portfolio value history",
+)
+async def get_portfolio_history(
+    x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
+    x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
+    x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
+    period: str = Query(default="1M"),
+    timeframe: str = Query(default="1D"),
+    extended_hours: bool = Query(default=False),
+) -> PortfolioHistory:
+    d = await _request(
+        "GET", "/v2/account/portfolio/history",
+        x_alpaca_key, x_alpaca_secret, x_alpaca_base_url,
+        params={"period": period, "timeframe": timeframe, "extended_hours": extended_hours},
+    )
+    return PortfolioHistory(
+        timestamp=d.get("timestamp", []),
+        equity=[float(v) for v in d.get("equity", [])],
+        profit_loss=[float(v) for v in d.get("profit_loss", [])],
+        profit_loss_pct=[float(v) for v in d.get("profit_loss_pct", [])],
+        base_value=float(d.get("base_value", 0)),
+        timeframe=d.get("timeframe", timeframe),
     )
 
 

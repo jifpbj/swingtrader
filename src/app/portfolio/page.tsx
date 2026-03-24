@@ -1,42 +1,87 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Activity, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
-import { useTradeStore } from "@/store/useTradeStore";
+import { useStrategyStore } from "@/store/useStrategyStore";
 import { PositionsTable } from "@/components/portfolio/PositionsTable";
 import { TradeHistoryTable } from "@/components/portfolio/TradeHistoryTable";
+import { EquityChart } from "@/components/portfolio/EquityChart";
 import { PnLChart } from "@/components/portfolio/PnLChart";
 import { TimePeriodSelector, periodToStartMs, type TimePeriod } from "@/components/portfolio/TimePeriodSelector";
 
 const currFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
+/** Map our TimePeriod to Alpaca's period param */
+function periodToAlpaca(period: TimePeriod): string {
+  switch (period) {
+    case "1W":  return "1W";
+    case "30D": return "1M";
+    case "90D": return "3M";
+    case "6M":  return "6M";
+    case "1Y":  return "1A";
+    case "YTD": return "1A"; // filter client-side to Jan 1
+  }
+}
+
 export default function PortfolioPage() {
-  const user        = useAuthStore((s) => s.user);
-  const account     = useAlpacaStore((s) => s.account);
-  const positions   = useAlpacaStore((s) => s.positions);
-  const fetchPositions = useAlpacaStore((s) => s.fetchPositions);
-  const trades      = useTradeStore((s) => s.trades);
+  const user              = useAuthStore((s) => s.user);
+  const account           = useAlpacaStore((s) => s.account);
+  const positions         = useAlpacaStore((s) => s.positions);
+  const orders            = useAlpacaStore((s) => s.orders);
+  const portfolioHistory  = useAlpacaStore((s) => s.portfolioHistory);
+  const fetchPositions    = useAlpacaStore((s) => s.fetchPositions);
+  const fetchPortfolioHistory = useAlpacaStore((s) => s.fetchPortfolioHistory);
+  const strategies        = useStrategyStore((s) => s.strategies);
   const [period, setPeriod] = useState<TimePeriod>("30D");
   const [refreshing, setRefreshing] = useState(false);
 
-  // Filter trades for the selected period
-  const filteredTrades = useMemo(() => {
-    const cutoff = periodToStartMs(period);
-    return trades.filter((t) => t.createdAt >= cutoff);
-  }, [trades, period]);
+  // Fetch portfolio history when period changes (or on mount)
+  useEffect(() => {
+    if (!account) return;
+    void fetchPortfolioHistory(periodToAlpaca(period));
+  }, [account, period, fetchPortfolioHistory]);
 
-  const totalPnl   = filteredTrades.reduce((s, t) => s + t.pnlDollars, 0);
-  const winCount   = filteredTrades.filter((t) => t.pnlDollars > 0).length;
-  const winRate    = filteredTrades.length > 0 ? winCount / filteredTrades.length : null;
-  const unrealPnl  = positions.reduce((s, p) => s + p.unrealized_pl, 0);
+  // For YTD, filter portfolio history client-side to Jan 1 of current year
+  const filteredHistory = useMemo(() => {
+    if (!portfolioHistory) return null;
+    if (period !== "YTD") return portfolioHistory;
+    const jan1 = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
+    const startIdx = portfolioHistory.timestamp.findIndex((ts) => ts >= jan1);
+    if (startIdx <= 0) return portfolioHistory;
+    return {
+      ...portfolioHistory,
+      timestamp: portfolioHistory.timestamp.slice(startIdx),
+      equity: portfolioHistory.equity.slice(startIdx),
+      profit_loss: portfolioHistory.profit_loss.slice(startIdx),
+      profit_loss_pct: portfolioHistory.profit_loss_pct.slice(startIdx),
+    };
+  }, [portfolioHistory, period]);
+
+  // Filter orders by selected time period
+  const filteredOrders = useMemo(() => {
+    const cutoff = periodToStartMs(period);
+    return orders.filter((o) => new Date(o.created_at).getTime() >= cutoff);
+  }, [orders, period]);
+
+  const unrealPnl = positions.reduce((s, p) => s + p.unrealized_pl, 0);
+
+  // Derive P/L and return from portfolio history
+  const periodPnl = filteredHistory && filteredHistory.profit_loss.length > 0
+    ? filteredHistory.profit_loss[filteredHistory.profit_loss.length - 1]
+    : null;
+  const periodReturn = filteredHistory && filteredHistory.profit_loss_pct.length > 0
+    ? filteredHistory.profit_loss_pct[filteredHistory.profit_loss_pct.length - 1]
+    : null;
 
   async function handleRefresh() {
     setRefreshing(true);
-    try { await fetchPositions(); } finally { setRefreshing(false); }
+    try {
+      await Promise.all([fetchPositions(), fetchPortfolioHistory(periodToAlpaca(period))]);
+    } finally { setRefreshing(false); }
   }
 
   // Not logged in
@@ -106,33 +151,36 @@ export default function PortfolioPage() {
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
-              Realized P/L ({period})
+              P/L ({period})
             </p>
             <div className="flex items-center gap-1.5">
-              {totalPnl >= 0
+              {(periodPnl ?? 0) >= 0
                 ? <TrendingUp className="size-4 dark:text-emerald-400 text-emerald-600 shrink-0" />
                 : <TrendingDown className="size-4 dark:text-red-400 text-red-600 shrink-0" />}
               <p className={cn(
                 "text-2xl font-bold tabular-nums font-mono",
-                totalPnl >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
+                (periodPnl ?? 0) >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
               )}>
-                {totalPnl >= 0 ? "+" : ""}{currFmt.format(totalPnl)}
+                {periodPnl != null ? `${periodPnl >= 0 ? "+" : ""}${currFmt.format(periodPnl)}` : "—"}
               </p>
             </div>
           </div>
           <div className="glass rounded-2xl p-4 flex flex-col gap-1">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Win Rate ({period})</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
+              Return ({period})
+            </p>
             <div className="flex items-center gap-1.5">
               <Activity className="size-4 text-muted-foreground shrink-0" />
-              <p className="text-2xl font-bold tabular-nums font-mono text-foreground">
-                {winRate !== null ? `${(winRate * 100).toFixed(0)}%` : "—"}
+              <p className={cn(
+                "text-2xl font-bold tabular-nums font-mono",
+                (periodReturn ?? 0) >= 0 ? "dark:text-emerald-400 text-emerald-600" : "dark:text-red-400 text-red-600",
+              )}>
+                {periodReturn != null ? `${periodReturn >= 0 ? "+" : ""}${(periodReturn * 100).toFixed(2)}%` : "—"}
               </p>
             </div>
-            {filteredTrades.length > 0 && (
-              <p className="text-[10px] text-muted-foreground/70 font-mono">
-                {winCount}W / {filteredTrades.length - winCount}L ({filteredTrades.length} trades)
-              </p>
-            )}
+            <p className="text-[10px] text-muted-foreground/70 font-mono">
+              {filteredOrders.length} order{filteredOrders.length !== 1 ? "s" : ""} in period
+            </p>
           </div>
         </div>
 
@@ -159,16 +207,24 @@ export default function PortfolioPage() {
             <TimePeriodSelector value={period} onChange={setPeriod} />
           </div>
 
+          {/* Equity Chart */}
+          <div className="glass rounded-2xl p-4">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-3">
+              Account Value — {period}
+            </p>
+            <EquityChart history={filteredHistory} />
+          </div>
+
           {/* P/L Chart */}
           <div className="glass rounded-2xl p-4">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-3">
-              Cumulative P/L — {period}
+              Profit / Loss — {period}
             </p>
-            <PnLChart trades={filteredTrades} />
+            <PnLChart history={filteredHistory} />
           </div>
 
-          {/* Trade table */}
-          <TradeHistoryTable trades={filteredTrades} period={period} />
+          {/* Order table */}
+          <TradeHistoryTable orders={filteredOrders} strategies={strategies} period={period} />
         </section>
       </div>
     </main>

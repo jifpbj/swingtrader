@@ -128,6 +128,15 @@ export interface AlpacaOrder {
   limit_price: number | null;
 }
 
+export interface AlpacaPortfolioHistory {
+  timestamp: number[];       // Unix epoch seconds
+  equity: number[];
+  profit_loss: number[];
+  profit_loss_pct: number[];
+  base_value: number;
+  timeframe: string;
+}
+
 export interface PlaceOrderRequest {
   symbol: string;
   qty?: number;

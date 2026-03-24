@@ -1,21 +1,20 @@
 "use client";
 
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
 import { useUIStore } from "@/store/useUIStore";
 import type { AlpacaPortfolioHistory } from "@/types/market";
 
 interface ChartPoint {
   date: string;
-  pnl: number;
+  equity: number;
 }
 
 interface Props {
@@ -30,7 +29,7 @@ const currFmt = new Intl.NumberFormat("en-US", {
 
 const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
-export function PnLChart({ history }: Props) {
+export function EquityChart({ history }: Props) {
   const theme = useUIStore((s) => s.theme);
   const isDark = theme === "dark";
 
@@ -44,17 +43,15 @@ export function PnLChart({ history }: Props) {
 
   const data: ChartPoint[] = history.timestamp.map((ts, i) => ({
     date: dateFmt.format(new Date(ts * 1000)),
-    pnl: history.profit_loss[i],
+    equity: history.equity[i],
   }));
 
-  const maxVal = Math.max(...data.map((d) => d.pnl));
-  const minVal = Math.min(...data.map((d) => d.pnl));
-  const lastPnl = data[data.length - 1].pnl;
-  const lineColor = lastPnl >= 0 ? "#34d399" : "#f87171";
+  const maxVal = Math.max(...data.map((d) => d.equity));
+  const minVal = Math.min(...data.map((d) => d.equity));
+  const padding = (maxVal - minVal) * 0.1 || 1;
 
   const tickColor  = isDark ? "#71717a" : "#6b7280";
   const gridColor  = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
-  const refColor   = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
   const tipBg      = isDark ? "rgba(9,9,11,0.95)" : "rgba(255,255,255,0.97)";
   const tipBorder  = isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)";
   const tipColor   = isDark ? "#e4e4e7" : "#1a1a2e";
@@ -62,7 +59,13 @@ export function PnLChart({ history }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+      <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+        <defs>
+          <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#34d399" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+          </linearGradient>
+        </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
         <XAxis
           dataKey="date"
@@ -76,8 +79,8 @@ export function PnLChart({ history }: Props) {
           axisLine={false}
           tickLine={false}
           tickFormatter={(v: number) => currFmt.format(v)}
-          domain={[Math.min(minVal * 1.1, -1), Math.max(maxVal * 1.1, 1)]}
-          width={64}
+          domain={[minVal - padding, maxVal + padding]}
+          width={72}
         />
         <Tooltip
           contentStyle={{
@@ -88,20 +91,18 @@ export function PnLChart({ history }: Props) {
             color: tipColor,
           }}
           formatter={(value: number | undefined) =>
-            [value != null ? currFmt.format(value) : "—", "P/L"] as [string, string]
+            [value != null ? currFmt.format(value) : "—", "Account Value"] as [string, string]
           }
           labelStyle={{ color: tipLabel, marginBottom: 4 }}
         />
-        <ReferenceLine y={0} stroke={refColor} strokeDasharray="4 4" />
-        <Line
+        <Area
           type="monotone"
-          dataKey="pnl"
-          stroke={lineColor}
+          dataKey="equity"
+          stroke="#34d399"
           strokeWidth={2}
-          dot={false}
-          activeDot={{ r: 4, fill: lineColor }}
+          fill="url(#equityGrad)"
         />
-      </LineChart>
+      </AreaChart>
     </ResponsiveContainer>
   );
 }

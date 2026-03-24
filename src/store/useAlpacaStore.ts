@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AlpacaAccount, AlpacaOrder, AlpacaPosition, PlaceOrderRequest } from "@/types/market";
+import type { AlpacaAccount, AlpacaOrder, AlpacaPosition, AlpacaPortfolioHistory, PlaceOrderRequest } from "@/types/market";
 import type { TradingMode } from "@/types/strategy";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -59,6 +59,7 @@ interface AlpacaState {
   account: AlpacaAccount | null;
   positions: AlpacaPosition[];
   orders: AlpacaOrder[];
+  portfolioHistory: AlpacaPortfolioHistory | null;
   loading: boolean;
   error: string | null;
 
@@ -70,6 +71,7 @@ interface AlpacaState {
   fetchAccount: () => Promise<void>;
   fetchPositions: () => Promise<void>;
   fetchOrders: () => Promise<void>;
+  fetchPortfolioHistory: (period: string, timeframe?: string) => Promise<void>;
   placeOrder: (req: PlaceOrderRequest) => Promise<AlpacaOrder>;
   cancelOrder: (orderId: string) => Promise<void>;
   cancelAllOrders: () => Promise<void>;
@@ -92,6 +94,7 @@ export const useAlpacaStore = create<AlpacaState>()(
       account: null,
       positions: [],
       orders: [],
+      portfolioHistory: null,
       loading: false,
       error: null,
 
@@ -162,12 +165,27 @@ export const useAlpacaStore = create<AlpacaState>()(
         const { apiKey, secretKey, tradingMode } = get();
         try {
           const orders = await alpacaFetch<AlpacaOrder[]>(
-            "/api/v1/trading/orders",
+            "/api/v1/trading/orders?limit=500&status=all",
             apiKey,
             secretKey,
             tradingMode,
           );
           set({ orders });
+        } catch {
+          // silently ignore
+        }
+      },
+
+      fetchPortfolioHistory: async (period, timeframe = "1D") => {
+        const { apiKey, secretKey, tradingMode } = get();
+        try {
+          const history = await alpacaFetch<AlpacaPortfolioHistory>(
+            `/api/v1/trading/account/portfolio/history?period=${period}&timeframe=${timeframe}`,
+            apiKey,
+            secretKey,
+            tradingMode,
+          );
+          set({ portfolioHistory: history });
         } catch {
           // silently ignore
         }
