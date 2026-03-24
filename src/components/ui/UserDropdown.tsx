@@ -20,6 +20,7 @@ import {
   XCircle,
   Bell,
   Lock,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useUIStore, type Theme } from "@/store/useUIStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -39,6 +40,18 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 // ─── Divider ───────────────────────────────────────────────────────────────────
 function Divider() {
   return <div className="my-1 h-px bg-zinc-200 dark:bg-white/5" />;
+}
+
+// ─── Paid-only tooltip wrapper ─────────────────────────────────────────────────
+function PaidTooltip({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative group/paid">
+      {children}
+      <span className="pointer-events-none absolute right-7 top-1/2 -translate-y-1/2 whitespace-nowrap px-2 py-0.5 rounded-md text-[10px] font-semibold bg-red-500/90 text-white shadow-lg opacity-0 group-hover/paid:opacity-100 transition-opacity duration-150 z-50">
+        Only on paid plans
+      </span>
+    </div>
+  );
 }
 
 // ─── Main dropdown ─────────────────────────────────────────────────────────────
@@ -211,27 +224,31 @@ export function UserDropdown() {
             </button>
 
             {/* Paper (paid only) */}
-            <button
-              onClick={() => {
-                if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
-                setDemoMode(false); setTradingMode("paper");
-              }}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
-                !isPaid()
-                  ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
-                  : dataMode === "paper"
-                  ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
-                  : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
-              )}
-            >
-              {!isPaid() && <Lock className="size-2.5 shrink-0" />}
-              Paper
-              {dataMode === "paper" && wsConnected && <PulseDot />}
-            </button>
+            <PaidTooltip>
+              <button
+                onClick={() => {
+                  if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
+                  setDemoMode(false); setTradingMode("paper");
+                }}
+                className={cn(
+                  "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
+                  !isPaid()
+                    ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
+                    : dataMode === "paper"
+                    ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
+                    : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
+                )}
+              >
+                {!isPaid() && <Lock className="size-2.5 shrink-0" />}
+                Paper
+                {dataMode === "paper" && wsConnected && <PulseDot />}
+              </button>
+            </PaidTooltip>
 
             {/* Live (paid only, coming soon) */}
-            <LiveButton dataMode={dataMode} wsConnected={wsConnected} isPaid={isPaid()} onUpgrade={() => { setSubscriptionModalOpen(true); close(); }} />
+            <PaidTooltip>
+              <LiveButton dataMode={dataMode} wsConnected={wsConnected} isPaid={isPaid()} onUpgrade={() => { setSubscriptionModalOpen(true); close(); }} />
+            </PaidTooltip>
           </div>
 
           <Divider />
@@ -250,22 +267,24 @@ export function UserDropdown() {
           </button>
 
           {/* API Keys (paid only) */}
-          <button
-            onClick={() => {
-              if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
-              setSettingsOpen(true); close();
-            }}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors",
-              isPaid()
-                ? "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
-                : "text-zinc-400 dark:text-zinc-600",
-            )}
-          >
-            <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-            <span className="flex-1 text-left">API Keys</span>
-            {!isPaid() && <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />}
-          </button>
+          <PaidTooltip>
+            <button
+              onClick={() => {
+                if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
+                setSettingsOpen(true); close();
+              }}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors",
+                isPaid()
+                  ? "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
+                  : "text-zinc-400 dark:text-zinc-600",
+              )}
+            >
+              <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+              <span className="flex-1 text-left">API Keys</span>
+              {!isPaid() && <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />}
+            </button>
+          </PaidTooltip>
 
           {/* Notifications */}
           <button
@@ -278,6 +297,16 @@ export function UserDropdown() {
 
           <Divider />
 
+          {/* Screener — always accessible */}
+          <Link
+            href="/screener"
+            onClick={close}
+            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+          >
+            <SlidersHorizontal className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+            Screener
+          </Link>
+
           {/* Portfolio (paid only) */}
           {isPaid() ? (
             <Link
@@ -289,14 +318,16 @@ export function UserDropdown() {
               Portfolio
             </Link>
           ) : (
-            <button
-              onClick={() => { setSubscriptionModalOpen(true); close(); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
-            >
-              <BarChart2 className="size-3.5 shrink-0" />
-              <span className="flex-1 text-left">Portfolio</span>
-              <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
-            </button>
+            <PaidTooltip>
+              <button
+                onClick={() => { setSubscriptionModalOpen(true); close(); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
+              >
+                <BarChart2 className="size-3.5 shrink-0" />
+                <span className="flex-1 text-left">Portfolio</span>
+                <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
+              </button>
+            </PaidTooltip>
           )}
 
           {/* Register for Live Trading (paid only) */}
@@ -310,14 +341,16 @@ export function UserDropdown() {
               Register for Live Trading
             </Link>
           ) : (
-            <button
-              onClick={() => { setSubscriptionModalOpen(true); close(); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
-            >
-              <UserPlus className="size-3.5 shrink-0" />
-              <span className="flex-1 text-left">Register for Live Trading</span>
-              <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
-            </button>
+            <PaidTooltip>
+              <button
+                onClick={() => { setSubscriptionModalOpen(true); close(); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
+              >
+                <UserPlus className="size-3.5 shrink-0" />
+                <span className="flex-1 text-left">Register for Live Trading</span>
+                <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
+              </button>
+            </PaidTooltip>
           )}
 
           <Divider />

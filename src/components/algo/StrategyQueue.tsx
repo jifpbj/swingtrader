@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect } from "react";
-import { Bot, Plus, LogIn } from "lucide-react";
+import { Bot, Plus, LogIn, Bell } from "lucide-react";
 
 import { useStrategyStore } from "@/store/useStrategyStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { useUIStore } from "@/store/useUIStore";
+import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { StrategyCard } from "@/components/algo/StrategyCard";
 import type { Timeframe } from "@/types/market";
 
 export function StrategyQueue() {
   const user            = useAuthStore((s) => s.user);
   const openAuthModal   = useAuthStore((s) => s.openAuthModal);
+  const isPaid          = useSubscriptionStore((s) => s.isPaid);
   const tradingMode     = useAlpacaStore((s) => s.tradingMode);
   const { strategies, loadStrategies, unloadStrategies, saveStrategy, setActiveStrategy } = useStrategyStore();
 
@@ -108,6 +110,14 @@ export function StrategyQueue() {
           <LogIn className="size-3" />
           Sign in to save strategies
         </button>
+      )}
+
+      {/* ── Free plan notification banner ────────────────────────── */}
+      {user && !isPaid() && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/8 border border-amber-500/20 text-[10px] text-amber-300/80 leading-relaxed">
+          <Bell className="size-3 shrink-0 mt-0.5 text-amber-400" />
+          <span>Email notifications only on free plan. <span className="text-amber-400 font-semibold">Upgrade</span> for live robo-trading.</span>
+        </div>
       )}
 
       {/* ── Strategy list ─────────────────────────────────────────── */}
