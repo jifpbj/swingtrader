@@ -3,10 +3,12 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Activity, RefreshCw } from "lucide-react";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { useStrategyStore } from "@/store/useStrategyStore";
+import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { PositionsTable } from "@/components/portfolio/PositionsTable";
 import { TradeHistoryTable } from "@/components/portfolio/TradeHistoryTable";
 import { EquityChart } from "@/components/portfolio/EquityChart";
@@ -29,6 +31,7 @@ function periodToAlpaca(period: TimePeriod): string {
 
 export default function PortfolioPage() {
   const user              = useAuthStore((s) => s.user);
+  const isPaid            = useSubscriptionStore((s) => s.isPaid);
   const account           = useAlpacaStore((s) => s.account);
   const positions         = useAlpacaStore((s) => s.positions);
   const orders            = useAlpacaStore((s) => s.orders);
@@ -90,6 +93,26 @@ export default function PortfolioPage() {
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">Please sign in to view your portfolio.</p>
+          <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
+            Go to Dashboard
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  // Not on a paid plan
+  if (!isPaid()) {
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center flex flex-col items-center gap-4">
+          <div className="size-14 rounded-full bg-amber-500/10 flex items-center justify-center">
+            <Lock className="size-7 text-amber-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Portfolio requires a paid plan</h2>
+          <p className="text-muted-foreground text-sm max-w-xs">
+            Upgrade to the <span className="text-emerald-400 font-semibold">Basic</span> or <span className="text-violet-400 font-semibold">Executive</span> plan to access your trading portfolio.
+          </p>
           <Link href="/dashboard" className="text-emerald-400 hover:text-emerald-300 text-sm underline">
             Go to Dashboard
           </Link>

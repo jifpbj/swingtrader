@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useBrokerStore } from "@/store/useBrokerStore";
+import { useSubscriptionStore } from "@/store/useSubscriptionStore";
 import { cn } from "@/lib/utils";
 import type { KYCFormData, BrokerAccountStatus } from "@/types/broker";
 import {
@@ -16,6 +17,7 @@ import {
   ChevronLeft,
   Loader2,
   AlertCircle,
+  Lock,
 } from "lucide-react";
 
 const US_STATES = [
@@ -81,6 +83,7 @@ const emptyForm: KYCFormData = {
 export default function OnboardPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const isPaid = useSubscriptionStore((s) => s.isPaid);
   const { account, loading, error, createAccount, fetchAccountStatus } = useBrokerStore();
 
   const [step, setStep] = useState(1);
@@ -189,6 +192,28 @@ export default function OnboardPage() {
     return (
       <div className="flex items-center justify-center h-full text-zinc-400">
         Please sign in to continue.
+      </div>
+    );
+  }
+
+  if (!isPaid()) {
+    return (
+      <div className="min-h-full bg-gradient-to-b from-zinc-950 to-zinc-900 flex items-center justify-center px-4">
+        <div className="text-center flex flex-col items-center gap-4">
+          <div className="size-14 rounded-full bg-amber-500/10 flex items-center justify-center">
+            <Lock className="size-7 text-amber-400" />
+          </div>
+          <h2 className="text-lg font-semibold text-zinc-100">Live trading registration requires a paid plan</h2>
+          <p className="text-zinc-500 text-sm max-w-xs">
+            Upgrade to the <span className="text-emerald-400 font-semibold">Basic</span> or <span className="text-violet-400 font-semibold">Executive</span> plan to register for live trading.
+          </p>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="text-emerald-400 hover:text-emerald-300 text-sm underline"
+          >
+            Go to Dashboard
+          </button>
+        </div>
       </div>
     );
   }

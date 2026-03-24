@@ -19,6 +19,7 @@ import {
   Crown,
   XCircle,
   Bell,
+  Lock,
 } from "lucide-react";
 import { useUIStore, type Theme } from "@/store/useUIStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -61,6 +62,7 @@ export function UserDropdown() {
 
   const plan   = useSubscriptionStore((s) => s.plan);
   const status = useSubscriptionStore((s) => s.status);
+  const isPaid = useSubscriptionStore((s) => s.isPaid);
 
   const user          = useAuthStore((s) => s.user);
   const openAuthModal = useAuthStore((s) => s.openAuthModal);
@@ -208,22 +210,28 @@ export function UserDropdown() {
               Demo
             </button>
 
-            {/* Paper */}
+            {/* Paper (paid only) */}
             <button
-              onClick={() => { setDemoMode(false); setTradingMode("paper"); }}
+              onClick={() => {
+                if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
+                setDemoMode(false); setTradingMode("paper");
+              }}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
-                dataMode === "paper"
+                !isPaid()
+                  ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
+                  : dataMode === "paper"
                   ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
                   : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
               )}
             >
+              {!isPaid() && <Lock className="size-2.5 shrink-0" />}
               Paper
               {dataMode === "paper" && wsConnected && <PulseDot />}
             </button>
 
-            {/* Live (coming soon) */}
-            <LiveButton dataMode={dataMode} wsConnected={wsConnected} />
+            {/* Live (paid only, coming soon) */}
+            <LiveButton dataMode={dataMode} wsConnected={wsConnected} isPaid={isPaid()} onUpgrade={() => { setSubscriptionModalOpen(true); close(); }} />
           </div>
 
           <Divider />
@@ -241,13 +249,22 @@ export function UserDropdown() {
             {user && <SubBadge />}
           </button>
 
-          {/* API Keys */}
+          {/* API Keys (paid only) */}
           <button
-            onClick={() => { setSettingsOpen(true); close(); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+            onClick={() => {
+              if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
+              setSettingsOpen(true); close();
+            }}
+            className={cn(
+              "w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors",
+              isPaid()
+                ? "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
+                : "text-zinc-400 dark:text-zinc-600",
+            )}
           >
             <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-            API Keys
+            <span className="flex-1 text-left">API Keys</span>
+            {!isPaid() && <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />}
           </button>
 
           {/* Notifications */}
@@ -261,25 +278,47 @@ export function UserDropdown() {
 
           <Divider />
 
-          {/* Portfolio */}
-          <Link
-            href="/portfolio"
-            onClick={close}
-            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
-          >
-            <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-            Portfolio
-          </Link>
+          {/* Portfolio (paid only) */}
+          {isPaid() ? (
+            <Link
+              href="/portfolio"
+              onClick={close}
+              className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+            >
+              <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+              Portfolio
+            </Link>
+          ) : (
+            <button
+              onClick={() => { setSubscriptionModalOpen(true); close(); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
+            >
+              <BarChart2 className="size-3.5 shrink-0" />
+              <span className="flex-1 text-left">Portfolio</span>
+              <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
+            </button>
+          )}
 
-          {/* Register for Live Trading */}
-          <Link
-            href="/account/onboard"
-            onClick={close}
-            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
-          >
-            <UserPlus className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-            Register for Live Trading
-          </Link>
+          {/* Register for Live Trading (paid only) */}
+          {isPaid() ? (
+            <Link
+              href="/account/onboard"
+              onClick={close}
+              className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+            >
+              <UserPlus className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+              Register for Live Trading
+            </Link>
+          ) : (
+            <button
+              onClick={() => { setSubscriptionModalOpen(true); close(); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
+            >
+              <UserPlus className="size-3.5 shrink-0" />
+              <span className="flex-1 text-left">Register for Live Trading</span>
+              <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
+            </button>
+          )}
 
           <Divider />
 
@@ -308,7 +347,7 @@ export function UserDropdown() {
 }
 
 // ─── Live button with its own "Coming Soon" state ─────────────────────────────
-function LiveButton({ dataMode, wsConnected }: { dataMode: string; wsConnected: boolean }) {
+function LiveButton({ dataMode, wsConnected, isPaid, onUpgrade }: { dataMode: string; wsConnected: boolean; isPaid: boolean; onUpgrade: () => void }) {
   const [showComingSoon, setShowComingSoon] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -322,6 +361,7 @@ function LiveButton({ dataMode, wsConnected }: { dataMode: string; wsConnected: 
   }
 
   function handle() {
+    if (!isPaid) { onUpgrade(); return; }
     setShowComingSoon(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setShowComingSoon(false), 2500);
@@ -335,11 +375,14 @@ function LiveButton({ dataMode, wsConnected }: { dataMode: string; wsConnected: 
         onClick={handle}
         className={cn(
           "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
-          dataMode === "live"
+          !isPaid
+            ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
+            : dataMode === "live"
             ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
             : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
         )}
       >
+        {!isPaid && <Lock className="size-2.5 shrink-0" />}
         Live
         {dataMode === "live" && wsConnected && <PulseDot />}
       </button>
