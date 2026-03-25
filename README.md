@@ -1,4 +1,4 @@
-# Predictive Alpha
+# Predict Alpha
 
 A high-performance, dark-mode trading dashboard with AI-powered predictive analysis. Built on a Next.js frontend and a FastAPI backend, connected via WebSocket for real-time OHLCV streaming and alpha signal delivery.
 
