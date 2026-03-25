@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # ─── Email Notifications (Resend) ────────────────────────────────────────
     resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
     email_from: str = Field(
-        default="Predictive Alpha <notifications@predictivealpha.com>",
+        default="Predict Alpha <notifications@predictalpha.online>",
         alias="EMAIL_FROM",
     )
 

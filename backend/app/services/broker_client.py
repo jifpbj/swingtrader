@@ -3,7 +3,7 @@ Alpaca Broker API Client
 ────────────────────────
 Server-side singleton that wraps all Broker API calls with HTTP Basic auth.
 
-The Broker API lets Predictive Alpha act as a broker — creating and managing
+The Broker API lets Predict Alpha act as a broker — creating and managing
 end-user trading accounts, ACH bank relationships, fund transfers, and orders
 on behalf of users.  No per-user API keys are needed.
 

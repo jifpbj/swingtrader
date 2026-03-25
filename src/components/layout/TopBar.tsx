@@ -4,7 +4,7 @@ import { useUIStore } from "@/store/useUIStore";
 import { UNIVERSE_MAP } from "@/lib/screenerUniverse";
 import { formatPrice, formatPercent } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { Search, ChevronUp, ChevronDown, Menu } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, Menu, Crosshair } from "lucide-react";
 import Link from "next/link";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { UserDropdown } from "@/components/ui/UserDropdown";
@@ -40,10 +40,10 @@ export function TopBar() {
           {/* Logo */}
           <div className="flex items-center gap-2 select-none">
             <div className="size-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-900/40">
-              <span className="text-xs font-black text-white">PA</span>
+              <Crosshair className="size-4 text-white stroke-[2.5]" />
             </div>
             <span className="text-sm font-semibold tracking-tight text-foreground/80 hidden sm:block">
-              Predictive<span className="text-emerald-400">Alpha</span>
+              Predict<span className="text-emerald-400">Alpha</span>
             </span>
           </div>
 

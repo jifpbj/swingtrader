@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Predictive Alpha — AI Trading Dashboard",
+  title: "Predict Alpha — AI Trading Dashboard",
   description:
     "Real-time AI-powered trading dashboard with predictive overlays, technical indicators, and alpha signals.",
 };

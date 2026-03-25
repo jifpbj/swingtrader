@@ -10,7 +10,7 @@ SETUP:
   2. Verify your sending domain → create an API key
   3. Set in backend/.env:
        RESEND_API_KEY=re_...
-       EMAIL_FROM=Predictive Alpha <notifications@yourdomain.com>
+       EMAIL_FROM=Predict Alpha <notifications@yourdomain.com>
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def _html_wrapper(badge_color: str, badge_label: str, rows: list[tuple[str, str]
         for label, value in rows
     )
 
-    app_url = "https://app.predictivealpha.com"
+    app_url = "https://predictalpha.online"
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -95,7 +95,7 @@ def _html_wrapper(badge_color: str, badge_label: str, rows: list[tuple[str, str]
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
       <span style="font-size:22px">📈</span>
       <span style="font-size:16px;font-weight:700;color:#fff;letter-spacing:-0.3px">
-        Predictive Alpha
+        Predict Alpha
       </span>
     </div>
 
@@ -122,7 +122,7 @@ def _html_wrapper(badge_color: str, badge_label: str, rows: list[tuple[str, str]
     <!-- Footer -->
     <p style="margin-top:24px;font-size:11px;color:#52525b">
       You're receiving this because email notifications are enabled for your
-      Predictive Alpha account.
+      Predict Alpha account.
       <a href="{app_url}" style="color:#52525b">Manage preferences</a>
     </p>
   </div>
@@ -166,7 +166,7 @@ async def email_buy(
     qty: float,
     timestamp: int,
 ) -> None:
-    subject = f"[Predictive Alpha] {ticker} Buy Executed — {_fmt_price(entry_price)}"
+    subject = f"[Predict Alpha] {ticker} Buy Executed — {_fmt_price(entry_price)}"
     html = _html_wrapper(
         badge_color="#22c55e",
         badge_label="Buy Executed",
@@ -197,7 +197,7 @@ async def email_sell(
 ) -> None:
     sign = "+" if pnl_pct >= 0 else ""
     subject = (
-        f"[Predictive Alpha] {ticker} Sell "
+        f"[Predict Alpha] {ticker} Sell "
         f"{sign}{pnl_pct * 100:.2f}% — {strategy_name or 'Strategy'}"
     )
     html = _html_wrapper(
@@ -229,7 +229,7 @@ async def email_trailing_stop(
 ) -> None:
     sign = "+" if pnl_pct >= 0 else ""
     subject = (
-        f"[Predictive Alpha] Trailing Stop Triggered — {ticker} "
+        f"[Predict Alpha] Trailing Stop Triggered — {ticker} "
         f"{sign}{pnl_pct * 100:.2f}%"
     )
     html = _html_wrapper(
@@ -259,7 +259,7 @@ async def email_signal(
 ) -> None:
     label = "BUY Signal" if direction == "entry" else "SELL Signal"
     badge_color = "#22c55e" if direction == "entry" else "#ef4444"
-    subject = f"[Predictive Alpha] Signal Alert: {indicator.upper()} {label} on {ticker}"
+    subject = f"[Predict Alpha] Signal Alert: {indicator.upper()} {label} on {ticker}"
     html = _html_wrapper(
         badge_color=badge_color,
         badge_label=f"Signal Alert — {label}",

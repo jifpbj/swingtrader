@@ -105,7 +105,7 @@ export function AuthModal() {
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
             <Dialog.Title className="text-base font-semibold text-zinc-100">
-              {tab === "signin" ? "Sign in to Predictive Alpha" : "Create your account"}
+              {tab === "signin" ? "Sign in to Predict Alpha" : "Create your account"}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-700/50">

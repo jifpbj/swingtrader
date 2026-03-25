@@ -1,5 +1,5 @@
 """
-Predictive Alpha — FastAPI Entry Point
+Predict Alpha — FastAPI Entry Point
 ──────────────────────────────────────
 Run with:
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -114,7 +114,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Predictive Alpha API",
+        title="Predict Alpha API",
         description=(
             "Real-time OHLCV streaming, technical analysis, and AI-generated "
             "price probability forecasts for equity and crypto markets."

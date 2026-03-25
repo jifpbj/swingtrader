@@ -146,7 +146,7 @@ export function ACHFormModal({ onClose }: ACHFormModalProps) {
           )}
 
           <p className="text-[11px] text-zinc-600 leading-relaxed">
-            Bank account numbers are submitted directly to Alpaca and are not stored on Predictive Alpha servers.
+            Bank account numbers are submitted directly to Alpaca and are not stored on Predict Alpha servers.
             ACH relationships are subject to Alpaca&apos;s verification process.
           </p>
         </div>

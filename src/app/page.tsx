@@ -9,6 +9,7 @@ import {
   BrainCircuit,
   BarChart2,
   Crown,
+  Crosshair,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { cn } from "@/lib/utils";
@@ -155,10 +156,10 @@ export default function HomePage() {
         {/* Logo */}
         <div className="flex items-center gap-2 select-none">
           <div className="size-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-900/40">
-            <span className="text-xs font-black text-white">PA</span>
+            <Crosshair className="size-4 text-white stroke-[2.5]" />
           </div>
           <span className="text-sm font-semibold tracking-tight text-zinc-200">
-            Predictive<span className="text-emerald-400">Alpha</span>
+            Predict<span className="text-emerald-400">Alpha</span>
           </span>
         </div>
         {/* Nav links */}
@@ -198,7 +199,7 @@ export default function HomePage() {
 
           {/* Subheadline */}
           <p className="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-8">
-            Predictive Alpha pairs AI-driven signals with battle-tested indicators and fully automated
+            Predict Alpha pairs AI-driven signals with battle-tested indicators and fully automated
             robo-trading — so you configure a strategy once and let the algorithms work around the
             clock. No finance degree, no babysitting required.
           </p>
@@ -522,7 +523,7 @@ export default function HomePage() {
           <p className="text-center text-[11px] text-zinc-600 mt-12 leading-relaxed max-w-2xl mx-auto">
             All prices in USD. Cancel anytime — no lock-in. Live Trading requires a funded Alpaca brokerage account.
             Beta pricing is locked for active subscribers for the lifetime of their subscription.
-            Predictive Alpha is not a registered investment adviser. All trading involves risk of loss.
+            Predict Alpha is not a registered investment adviser. All trading involves risk of loss.
           </p>
         </section>
 
