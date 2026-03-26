@@ -35,6 +35,7 @@ from app.services.firestore_service import (
 )
 from app.services.market_data import MarketDataService
 from app.services.email_service import email_signal, fire_email
+from app.services.stream_manager import AlpacaStreamManager
 from app.models.schemas import Timeframe
 
 logger = get_logger(__name__)
@@ -151,7 +152,10 @@ async def _check_signal_watch(
     ))
 
 
-async def auto_trade_loop(market_svc: MarketDataService) -> None:
+async def auto_trade_loop(
+    market_svc: MarketDataService,
+    stream_mgr: AlpacaStreamManager | None = None,
+) -> None:
     """
     Main perpetual loop.  Runs until cancelled (FastAPI shutdown).
     """
@@ -173,6 +177,20 @@ async def auto_trade_loop(market_svc: MarketDataService) -> None:
             except Exception as exc:
                 logger.warning("signal_watch_fetch_error", error=str(exc))
 
+            # ── Sync stream-manager subscriptions ─────────────────────────────
+            if stream_mgr:
+                needed_tickers: set[str] = set()
+                for _, strat in strategies:
+                    t = strat.get("ticker")
+                    if t:
+                        needed_tickers.add(t)
+                for _, strat in signal_watch:
+                    t = strat.get("ticker")
+                    if t:
+                        needed_tickers.add(t)
+                if needed_tickers:
+                    await stream_mgr.update_subscriptions(needed_tickers, market_svc)
+
             # ── Batch-fetch email + prefs once per unique user ────────────────
             user_context: dict[str, tuple[str | None, dict]] = {}
             if all_uids:
@@ -186,6 +204,7 @@ async def auto_trade_loop(market_svc: MarketDataService) -> None:
                         uid, strategy, market_svc,
                         user_email=user_context.get(uid, (None, {}))[0],
                         notif_prefs=user_context.get(uid, (None, {}))[1],
+                        stream_mgr=stream_mgr,
                     )
                     for uid, strategy in strategies
                 ]

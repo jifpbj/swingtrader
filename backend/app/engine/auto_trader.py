@@ -44,6 +44,13 @@ from app.services.market_data import MarketDataService
 
 logger = get_logger(__name__)
 
+# ─── In-process latest-price cache (deduplicates within same scheduler tick) ──
+_price_cache: dict[str, tuple[float, float]] = {}   # symbol → (price, unix_ts)
+_PRICE_CACHE_TTL = 5.0  # seconds
+
+# Module-level stream manager reference — set by scheduler on each tick
+_stream_mgr: Any = None
+
 # ─── Timeframe mapping (frontend string → backend enum) ──────────────────────
 
 _FRONTEND_TO_TF: dict[str, Timeframe] = {
@@ -191,7 +198,26 @@ async def _get_latest_price(
     GET /v1beta3/crypto/us/latest/trades or /v2/stocks/trades/latest.
     Returns latest trade price or None.
     Always uses data.alpaca.markets (not paper-api).
+
+    Results are cached for 5 s to deduplicate calls within the same
+    scheduler tick (e.g. trailing-stop + dollar-mode qty in the same cycle).
     """
+    # ── Check stream manager first (WebSocket-fed, freshest) ────────────────
+    if _stream_mgr is not None:
+        ws_price = _stream_mgr.get_latest_price(symbol)
+        if ws_price is not None:
+            _price_cache[symbol] = (ws_price, time.time())
+            logger.debug("price_from_stream", symbol=symbol, price=ws_price)
+            return ws_price
+
+    # ── Check in-process price cache ─────────────────────────────────────────
+    cached = _price_cache.get(symbol)
+    if cached:
+        price, ts = cached
+        if time.time() - ts < _PRICE_CACHE_TTL:
+            logger.debug("price_cache_hit", symbol=symbol, price=price)
+            return price
+
     is_crypto = "/" in symbol or (len(symbol) > 5 and symbol.isalpha() is False)
     headers = {
         "APCA-API-KEY-ID": api_key,
@@ -218,6 +244,8 @@ async def _get_latest_price(
             price = trade.get("p") or trade.get("price")
             result = float(price) if price else None
             logger.debug("alpaca_price_fetched", symbol=symbol, price=result)
+            if result is not None:
+                _price_cache[symbol] = (result, time.time())
             return result
         except Exception as exc:
             logger.warning("alpaca_price_fetch_error", symbol=symbol, error=str(exc))
@@ -457,11 +485,18 @@ async def check_strategy(
     market_svc: MarketDataService,
     user_email: str | None = None,
     notif_prefs: dict[str, Any] | None = None,
+    stream_mgr: Any = None,
 ) -> None:
     """
     Evaluate one strategy and place an order if a fresh signal is detected.
     Logs every decision point so failures are traceable.
+
+    If a stream_mgr (AlpacaStreamManager) is provided, bars and prices are
+    read from its in-memory cache first, falling back to REST on cache miss.
     """
+    global _stream_mgr
+    _stream_mgr = stream_mgr
+
     strategy_id = strategy.get("id", "<unknown>")
     ticker      = strategy.get("ticker", "")
 
@@ -479,17 +514,28 @@ async def check_strategy(
     )
 
     # ── 1. Map timeframe ──────────────────────────────────────────────────────
-    tf_str  = strategy.get("timeframe", "15m")
-    tf_enum = _FRONTEND_TO_TF.get(tf_str, _DEFAULT_TF)
-    if tf_str not in _FRONTEND_TO_TF:
-        logger.warning("auto_trader_unknown_timeframe", uid=uid, strategy_id=strategy_id, tf=tf_str)
-
-    # ── 2. Fetch OHLCV bars ───────────────────────────────────────────────────
-    try:
-        candles = await market_svc.get_ohlcv(ticker, tf_enum, limit=150)
-    except Exception as exc:
-        logger.warning("auto_trader_bar_fetch_failed", uid=uid, strategy_id=strategy_id, error=str(exc))
+    tf_str = strategy.get("timeframe")
+    if not tf_str:
+        logger.error("auto_trader_missing_timeframe", uid=uid, strategy_id=strategy_id)
         return
+    tf_enum = _FRONTEND_TO_TF.get(tf_str)
+    if tf_enum is None:
+        logger.error("auto_trader_unknown_timeframe", uid=uid, strategy_id=strategy_id, tf=tf_str)
+        return
+
+    # ── 2. Fetch OHLCV bars (prefer stream cache, fallback to REST) ────────
+    candles: list | None = None
+    if stream_mgr:
+        candles = stream_mgr.get_bars(ticker, tf_enum, limit=150)
+        if candles:
+            logger.debug("auto_trader_bars_from_stream", uid=uid, strategy_id=strategy_id, count=len(candles))
+
+    if not candles:
+        try:
+            candles = await market_svc.get_ohlcv(ticker, tf_enum, limit=150)
+        except Exception as exc:
+            logger.warning("auto_trader_bar_fetch_failed", uid=uid, strategy_id=strategy_id, error=str(exc))
+            return
 
     if len(candles) < 10:
         logger.warning(

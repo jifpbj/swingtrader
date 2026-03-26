@@ -53,8 +53,11 @@ class Settings(BaseSettings):
         alias="GOOGLE_APPLICATION_CREDENTIALS",
     )
 
-    # ─── Stream ───────────────────────────────────────────────────────────────
-    tick_interval_ms: int = 5000  # WebSocket tick poll interval
+    # ─── Stream / WebSocket ────────────────────────────────────────────────────
+    tick_interval_ms: int = 5000  # Frontend WebSocket tick poll interval
+    alpaca_ws_stock_url: str = "wss://stream.data.alpaca.markets/v2/iex"
+    alpaca_ws_crypto_url: str = "wss://stream.data.alpaca.markets/v1beta3/crypto/us"
+    ws_reconnect_max_delay: int = 60  # seconds
 
     # ─── Analysis parameters ──────────────────────────────────────────────────
     default_timeframe: str = "15Min"

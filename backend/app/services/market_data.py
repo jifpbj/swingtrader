@@ -24,6 +24,7 @@ from rapidfuzz import fuzz
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.schemas import AssetSearchResult, Candle, Timeframe, TIMEFRAME_SECONDS
+from app.services.cache import ohlcv_cache
 
 logger = get_logger(__name__)
 
@@ -462,6 +463,7 @@ class AlpacaMarketDataService(MarketDataService):
         self._http: httpx.AsyncClient | None = None
         self._broker_http: httpx.AsyncClient | None = None
         self._assets_cache: list[AssetSearchResult] = []
+        self.stream_manager: Any = None  # Set by main.py after stream mgr starts
         self._assets_cache_ts: float = 0.0
 
     async def _client(self) -> httpx.AsyncClient:
@@ -673,21 +675,31 @@ class AlpacaMarketDataService(MarketDataService):
         Fetch historical OHLCV bars.
 
         Strategy (in priority order):
+          0. In-process TTL cache (30 s) — deduplicates across strategies
           1. Crypto  → Alpaca /v1beta3/crypto/us/bars (key-authenticated, cloud-safe)
           2. Equity  → Alpaca /v2/stocks/bars IEX feed (key-authenticated, cloud-safe)
           3. Any     → yfinance fallback (works locally; blocked on many cloud hosts)
         """
+        # ── 0. Check shared OHLCV cache (30 s TTL) ──────────────────────────────
+        cache_key = f"{ticker}:{timeframe.value}:{limit}:{end or ''}"
+        cached = await ohlcv_cache.get(cache_key)
+        if cached is not None:
+            logger.debug("ohlcv_cache_hit", ticker=ticker, timeframe=timeframe, limit=limit)
+            return cached
+
         is_crypto = "/" in ticker
 
         if is_crypto:
             bars = await self._get_crypto_ohlcv_alpaca(ticker, timeframe, limit, end=end)
             if bars:
                 logger.info("alpaca_crypto_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
+                await ohlcv_cache.set(cache_key, bars)
                 return bars
         else:
             bars = await self._get_equity_ohlcv_alpaca(ticker, timeframe, limit, end=end)
             if bars:
                 logger.info("alpaca_equity_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
+                await ohlcv_cache.set(cache_key, bars)
                 return bars
 
         # Fallback: yfinance (reliable locally; may be blocked on cloud IPs)
@@ -699,9 +711,17 @@ class AlpacaMarketDataService(MarketDataService):
             None, _yf_fetch, ticker, timeframe, limit, end_dt
         )
         logger.info("yf_bars_fetched", ticker=ticker, timeframe=timeframe, count=len(bars))
+        if bars:
+            await ohlcv_cache.set(cache_key, bars)
         return bars
 
     async def get_latest_price(self, ticker: str) -> float:
+        # ── Check stream manager first (zero-cost WebSocket-fed price) ───────
+        if self.stream_manager is not None:
+            ws_price = self.stream_manager.get_latest_price(ticker)
+            if ws_price is not None:
+                return ws_price
+
         is_crypto = "/" in ticker
         if is_crypto:
             base = "/v1beta3/crypto/us/latest/trades"

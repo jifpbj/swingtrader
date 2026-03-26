@@ -30,6 +30,7 @@ from app.scheduler import auto_trade_loop
 from app.services.broker_client import get_broker_client
 from app.services.firestore_service import init_firebase
 from app.services.market_data import AlpacaMarketDataService
+from app.services.stream_manager import AlpacaStreamManager
 
 logger = get_logger(__name__)
 
@@ -85,10 +86,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             ),
         )
 
+    # ── WebSocket stream manager (shared price/bar cache) ─────────────────────
+    stream_mgr = AlpacaStreamManager(settings)
+    await stream_mgr.start()
+    app.state.stream_manager = stream_mgr
+    svc.stream_manager = stream_mgr  # Let get_latest_price() use WS prices
+
     # ── Auto-trade scheduler ──────────────────────────────────────────────────
     scheduler_task: asyncio.Task | None = None
     if firebase_ok:
-        scheduler_task = asyncio.create_task(auto_trade_loop(svc))
+        scheduler_task = asyncio.create_task(auto_trade_loop(svc, stream_mgr))
         logger.info("auto_trade_scheduler_task_created")
 
     logger.info("app_ready")
@@ -99,6 +106,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler_task.cancel()
         await asyncio.gather(scheduler_task, return_exceptions=True)
         logger.info("auto_trade_scheduler_stopped")
+
+    await stream_mgr.stop()
 
     if hasattr(svc, "close"):
         await svc.close()  # type: ignore[attr-defined]
