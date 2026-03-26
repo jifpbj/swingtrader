@@ -140,21 +140,22 @@ export function TradeStrategyWidget() {
         </div>
       )}
 
-      {/* AI Analyze — full width, above CTA */}
+      {/* AI Analyze — full width, supersized & glowing */}
       <button
         onClick={handleAnalyze}
         disabled={!!wittyPhrase || analyzing}
         title="AI Optimize — find the best indicator config for this ticker & timeframe"
         className={cn(
-          "w-full flex items-center justify-center gap-2.5 rounded-xl py-3.5 px-4",
-          "text-sm font-bold tracking-wide transition-all duration-200 select-none",
-          "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/40",
+          "w-full flex items-center justify-center gap-3 rounded-2xl py-8 px-6",
+          "text-2xl font-black tracking-wide transition-all duration-200 select-none",
+          "bg-purple-600 hover:bg-purple-500 text-white",
+          "shadow-lg shadow-purple-600/40 animate-glow-pulse",
           "active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed",
         )}
       >
         {(wittyPhrase || analyzing)
-          ? <Loader2 className="size-4 animate-spin shrink-0" />
-          : <BrainCircuit className="size-4 shrink-0" />
+          ? <Loader2 className="size-10 animate-spin shrink-0" />
+          : <BrainCircuit className="size-10 shrink-0" />
         }
         {wittyPhrase ?? (analyzing ? "Analyzing\u2026" : "AI Analyze")}
       </button>

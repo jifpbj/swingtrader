@@ -1,22 +1,27 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ChartContainer } from "@/components/trading/ChartContainer";
-import { IndicatorRibbon } from "@/components/trading/IndicatorRibbon";
-import { BacktestPanel } from "@/components/trading/BacktestPanel";
+import { PerformanceCurve } from "@/components/trading/PerformanceCurve";
+import { PeriodSelector } from "@/components/trading/PeriodSelector";
+import { CandlestickToggle } from "@/components/trading/CandlestickToggle";
+import { AIAnalyzeAnimation } from "@/components/trading/AIAnalyzeAnimation";
 import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
 import { TradeStrategyWidget } from "@/components/trading/TradeStrategyWidget";
 import { PaperTradingPanel } from "@/components/trading/PaperTradingPanel";
 import { LiveTradingPanel } from "@/components/trading/LiveTradingPanel";
+import { StrategyResultModal } from "@/components/algo/StrategyResultModal";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useAutoTrader } from "@/hooks/useAutoTrader";
 import { useTradeNotifications } from "@/hooks/useTradeNotifications";
+import { useBacktestData } from "@/hooks/useBacktestData";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
+import { useUIStore } from "@/store/useUIStore";
 import { cn } from "@/lib/utils";
 
 export default function TradingDashboard() {
@@ -25,9 +30,14 @@ export default function TradingDashboard() {
   useTradeNotifications();
   const user        = useAuthStore((s) => s.user);
   const tradingMode = useAlpacaStore((s) => s.tradingMode);
+  const candlestickVisible = useUIStore((s) => s.candlestickVisible);
+  const timeframe   = useUIStore((s) => s.timeframe);
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  // Backtest data hook — drives the PerformanceCurve and strategy controls
+  const backtest = useBacktestData();
 
   const onResizeHandlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     dragStateRef.current = { startX: e.clientX, startWidth: rightPanelWidth };
@@ -72,18 +82,53 @@ export default function TradingDashboard() {
 
         {/* Dashboard body */}
         <main className="flex flex-col md:flex-row flex-1 gap-3 p-3 md:overflow-hidden">
-          {/* ─── Left: Chart + Indicator Ribbon ─── */}
-          {/* Mobile: shrink-0 (chart has explicit h-[50vh]). Desktop: flex-1 fills remaining height. */}
-          <div className="flex flex-col shrink-0 gap-3 min-w-0 md:flex-1 md:overflow-hidden">
-            {/* Chart area: 50vh on mobile, flex-1 on desktop */}
-            <div className="glass rounded-2xl overflow-hidden relative h-[50vh] md:flex-1 md:min-h-0">
-              <ChartContainer />
+          {/* ─── Left/Center: Performance Curve + Indicators + Strategy ─── */}
+          <div className="flex flex-col shrink-0 gap-3 min-w-0 md:flex-1 md:overflow-y-auto md:overscroll-y-contain">
+            {/* Hero chart area */}
+            <div className="glass rounded-2xl overflow-hidden relative h-[60vh] md:min-h-[400px] md:flex-1 md:min-h-0">
+              {/* Period selector — top center (hidden when candlestick is active) */}
+              {!candlestickVisible && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
+                  <PeriodSelector />
+                </div>
+              )}
+
+              {/* Candlestick toggle — top right */}
+              <div className="absolute top-3 right-3 z-20">
+                <CandlestickToggle />
+              </div>
+
+              {/* Chart content — swap between Performance Curve and Candlestick */}
+              {candlestickVisible ? (
+                <ChartContainer />
+              ) : backtest.backtestLoading ? (
+                <div className="flex items-center justify-center h-full gap-2 text-zinc-500">
+                  <Loader2 className="size-5 animate-spin" />
+                  <span className="text-sm">Loading performance data…</span>
+                </div>
+              ) : (
+                <PerformanceCurve
+                  chartData={backtest.chartData}
+                  yDomain={backtest.yDomain}
+                  refY100={backtest.refY100}
+                  timeframe={timeframe}
+                  result={backtest.result}
+                  chartPeriod={backtest.chartPeriod}
+                  viewMode={backtest.viewMode}
+                  initialInvestment={backtest.initialInvestment}
+                  isAnimating={backtest.analyzing}
+                />
+              )}
+
+              {/* AI Analyze animation overlay */}
+              <AIAnalyzeAnimation />
             </div>
 
-            {/* Indicator ribbon — desktop only */}
-            <div className="rounded-2xl shrink-0 hidden md:block">
-              <IndicatorRibbon />
-            </div>
+            {/* Indicators Panel — below chart, larger fonts */}
+            <IndicatorPanel />
+
+            {/* Active Strategy Panel — below indicators, with huge glowing AI button */}
+            <TradeStrategyWidget />
           </div>
 
           {/* Resize handle — hidden when right panel is collapsed */}
@@ -98,8 +143,7 @@ export default function TradingDashboard() {
             </div>
           )}
 
-          {/* ─── Right: Analysis Panel ─── */}
-          {/* Mobile: flex-1 takes remaining height, scrolls internally. Desktop: fixed-width side panel. */}
+          {/* ─── Right: Portfolio Sidebar ─── */}
           <aside
             className={cn(
               "flex flex-col min-h-0 flex-1 w-full overflow-y-visible md:overflow-y-auto md:overscroll-y-contain",
@@ -109,7 +153,7 @@ export default function TradingDashboard() {
             )}
             style={!rightCollapsed ? ({ "--right-panel-w": `${rightPanelWidth}px` } as React.CSSProperties) : undefined}
           >
-            {/* Desktop: toggle + Create Strategy row */}
+            {/* Desktop: toggle + Portfolio heading */}
             <div className="hidden md:flex items-center gap-2 mt-2 mx-2 shrink-0">
               <button
                 onClick={() => setRightCollapsed((v) => !v)}
@@ -119,21 +163,14 @@ export default function TradingDashboard() {
                 {rightCollapsed ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
               </button>
               {!rightCollapsed && (
-                <button className="text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors select-none">
-                  Create Strategy
-                </button>
+                <span className="text-sm font-semibold text-zinc-200 select-none">
+                  Portfolio
+                </span>
               )}
             </div>
 
             {/* Panel content — hidden when collapsed on desktop */}
             <div className={cn("flex flex-col gap-3", rightCollapsed && "md:hidden")}>
-              {/* Trade CTA */}
-              <TradeStrategyWidget />
-
-              {/* Backtest + Indicator config — adjacent */}
-              <BacktestPanel />
-              <IndicatorPanel />
-
               {/* Paper trading panel — visible when in paper mode */}
               {tradingMode === "paper" && (
                 <div id="paper-trading-panel">
@@ -151,6 +188,18 @@ export default function TradingDashboard() {
           </aside>
         </main>
       </div>
+
+      {/* ── AI Result Modal ──────────────────────────────────────────── */}
+      {backtest.showModal && backtest.analysisResult && (
+        <StrategyResultModal
+          result={backtest.analysisResult}
+          onClose={() => backtest.setShowModal(false)}
+          onSaved={() => {
+            backtest.setShowModal(false);
+            backtest.setAnalysisResult(null);
+          }}
+        />
+      )}
     </div>
   );
 }

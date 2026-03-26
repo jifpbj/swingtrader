@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  <!-- Antenna - lightning bolt -->
+  <polygon points="38,16 36,8 40,11 42,2 44,12 40,9 42,16" fill="#34d399"/>
+  <!-- Head - wider, shorter -->
+  <rect x="14" y="18" width="52" height="28" rx="10" fill="#34d399"/>
+  <!-- Eyes - visor style -->
+  <rect x="22" y="26" width="36" height="10" rx="5" fill="#1e1e2e"/>
+  <circle cx="32" cy="31" r="3" fill="#34d399" opacity="0.8"/>
+  <circle cx="48" cy="31" r="3" fill="#34d399" opacity="0.8"/>
+  <circle cx="32" cy="31" r="1.5" fill="#fff"/>
+  <circle cx="48" cy="31" r="1.5" fill="#fff"/>
+  <!-- Mouth - LED dots -->
+  <circle cx="33" cy="41" r="1.5" fill="#1e1e2e"/>
+  <circle cx="38" cy="41" r="1.5" fill="#1e1e2e"/>
+  <circle cx="43" cy="41" r="1.5" fill="#1e1e2e"/>
+  <circle cx="48" cy="41" r="1.5" fill="#1e1e2e"/>
+  <!-- Body -->
+  <rect x="20" y="50" width="40" height="24" rx="6" fill="#34d399" opacity="0.8"/>
+  <!-- Body gauge -->
+  <circle cx="40" cy="62" r="7" fill="#1e1e2e" opacity="0.3"/>
+  <line x1="40" y1="62" x2="44" y2="58" stroke="#34d399" stroke-width="2" opacity="0.6" stroke-linecap="round"/>
+</svg>

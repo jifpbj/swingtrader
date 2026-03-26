@@ -587,7 +587,7 @@ export function LiveTradingPanel() {
   const livePositions  = useAlpacaStore((s) => s.livePositions);
   const liveOrders     = useAlpacaStore((s) => s.liveOrders);
   const refreshLive    = useAlpacaStore((s) => s.refreshLive);
-  const [tab, setTab]         = useState<Tab>("trade");
+  const [tab, setTab]         = useState<Tab>("positions");
   const [collapsed, setCollapsed] = useState(false);
 
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -609,7 +609,7 @@ export function LiveTradingPanel() {
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/3 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-zinc-300">Live Trading</span>
+          <span className="text-xs font-semibold text-zinc-300">Portfolio</span>
           {liveConnected && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium border border-emerald-500/20">
               Connected

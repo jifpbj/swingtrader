@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  <!-- Antenna - satellite dish -->
+  <line x1="40" y1="16" x2="40" y2="10" stroke="#fb7185" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M34 6 Q40 12 46 6" stroke="#fb7185" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <circle cx="40" cy="10" r="1.5" fill="#fb7185"/>
+  <!-- Head -->
+  <rect x="16" y="16" width="48" height="30" rx="8" fill="#fb7185"/>
+  <!-- Eyes - winking style, one closed -->
+  <circle cx="30" cy="30" r="5" fill="#1e1e2e"/>
+  <circle cx="32" cy="28" r="1.5" fill="#fff"/>
+  <path d="M45 30 Q50 26 55 30" stroke="#1e1e2e" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Mouth - grin -->
+  <path d="M28 38 L36 42 L44 42 L52 38" stroke="#1e1e2e" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Body -->
+  <rect x="22" y="50" width="36" height="24" rx="5" fill="#fb7185" opacity="0.8"/>
+  <!-- Body heart -->
+  <path d="M36 58 Q36 55 40 55 Q44 55 44 58 Q44 62 40 65 Q36 62 36 58Z" fill="#1e1e2e" opacity="0.3"/>
+</svg>

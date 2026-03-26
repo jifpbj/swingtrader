@@ -23,8 +23,8 @@ function SliderRow({ label, value, min, max, step = 1, onChange, tab }: {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-zinc-500">{label}</span>
-        <span className="text-[11px] font-mono tabular-nums text-zinc-200">
+        <span className="text-base text-zinc-500">{label}</span>
+        <span className="text-lg font-mono tabular-nums text-zinc-200">
           {Number.isInteger(step) ? value : value.toFixed(1)}
         </span>
       </div>
@@ -33,7 +33,7 @@ function SliderRow({ label, value, min, max, step = 1, onChange, tab }: {
         <Slider.Track className="bg-white/10 relative grow rounded-full h-1">
           <Slider.Range className={cn("absolute rounded-full h-full", s.track)} />
         </Slider.Track>
-        <Slider.Thumb className={cn("block size-3 rounded-full shadow focus:outline-none", s.thumb)} />
+        <Slider.Thumb className={cn("block size-5 rounded-full shadow focus:outline-none", s.thumb)} />
       </Slider.Root>
     </div>
   );
@@ -52,7 +52,7 @@ function EMAConfig() {
       <SliderRow label="Period" value={emaPeriod} min={5} max={200} onChange={setEmaPeriod} tab="EMA" />
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-emerald-400 size-3" />
-        <span className="text-[11px] text-zinc-300">Show BUY / SELL markers</span>
+        <span className="text-lg text-zinc-300">Show BUY / SELL markers</span>
       </label>
     </div>
   );
@@ -72,7 +72,7 @@ function BBConfig() {
       <SliderRow label="Std Dev" value={bbStdDev} min={1} max={4} step={0.1} onChange={setBbStdDev} tab="BB" />
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-sky-400 size-3" />
-        <span className="text-[11px] text-zinc-300">Show BUY / SELL markers</span>
+        <span className="text-lg text-zinc-300">Show BUY / SELL markers</span>
       </label>
     </div>
   );
@@ -97,7 +97,7 @@ function RSIConfig() {
       </div>
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-violet-400 size-3" />
-        <span className="text-[11px] text-zinc-300">Show BUY / SELL markers</span>
+        <span className="text-lg text-zinc-300">Show BUY / SELL markers</span>
       </label>
     </div>
   );
@@ -120,7 +120,7 @@ function MACDConfig() {
       <SliderRow label="Signal" value={macdSignalPeriod} min={3}  max={20}  onChange={setMacdSignalPeriod} tab="MACD" />
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-rose-400 size-3" />
-        <span className="text-[11px] text-zinc-300">Show BUY / SELL markers</span>
+        <span className="text-lg text-zinc-300">Show BUY / SELL markers</span>
       </label>
     </div>
   );
@@ -134,9 +134,9 @@ function TD9Config() {
     <div className="flex flex-col gap-3">
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={showSignalMarkers} onChange={e => setShowSignalMarkers(e.target.checked)} className="accent-emerald-400 size-3" />
-        <span className="text-[11px] text-zinc-300">Show TD9 completion markers</span>
+        <span className="text-lg text-zinc-300">Show TD9 completion markers</span>
       </label>
-      <div className="text-[10px] text-zinc-500 leading-relaxed">
+      <div className="text-base text-zinc-500 leading-relaxed">
         TD Sequential setup: counts when Close is below/above the Close 4 bars earlier. Markers trigger on count 9.
       </div>
     </div>
@@ -151,14 +151,14 @@ export function IndicatorPanel() {
 
   return (
     <div className="glass rounded-2xl px-4 py-3 flex flex-col gap-3 shrink-0">
-      <span className="text-xs font-semibold text-zinc-200">Indicators</span>
+      <span className="text-xl font-semibold text-zinc-200">Indicators</span>
 
       {/* Tab selector — clicking a tab activates that indicator on the chart */}
       <div className="flex gap-1">
         {TABS.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={cn(
-              "flex-1 text-[10px] font-mono font-medium py-1 rounded-lg border transition-all",
+              "flex-1 text-base font-mono font-medium py-2 rounded-lg border transition-all",
               activeTab === tab
                 ? TAB_STYLE[tab].active
                 : "text-zinc-500 border-transparent hover:text-zinc-300 hover:bg-white/5"
@@ -203,14 +203,14 @@ function TrailingStopConfig() {
           onChange={e => setTsEnabled(e.target.checked)}
           className="accent-amber-400 size-3"
         />
-        <span className="text-[11px] text-zinc-300">Trailing Stop Loss</span>
+        <span className="text-lg text-zinc-300">Trailing Stop Loss</span>
       </label>
 
       {tsEnabled && (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-zinc-500">Percentage</span>
-            <span className="text-[11px] font-mono tabular-nums text-zinc-200">
+            <span className="text-base text-zinc-500">Percentage</span>
+            <span className="text-lg font-mono tabular-nums text-zinc-200">
               {tsPercent.toFixed(1)}%
             </span>
           </div>
@@ -225,9 +225,9 @@ function TrailingStopConfig() {
             <Slider.Track className="bg-white/10 relative grow rounded-full h-1">
               <Slider.Range className="absolute rounded-full h-full bg-amber-400/60" />
             </Slider.Track>
-            <Slider.Thumb className="block size-3 rounded-full shadow focus:outline-none bg-amber-400" />
+            <Slider.Thumb className="block size-5 rounded-full shadow focus:outline-none bg-amber-400" />
           </Slider.Root>
-          <p className="text-[9px] text-zinc-500/80 leading-relaxed">
+          <p className="text-base text-zinc-500/80 leading-relaxed">
             Automatically exits when price drops {tsPercent}% from the highest price since entry.
           </p>
         </div>

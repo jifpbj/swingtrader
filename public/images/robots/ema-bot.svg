@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  <!-- Antenna - straight with circle tip -->
+  <line x1="40" y1="8" x2="40" y2="16" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="40" cy="6" r="3" fill="#fbbf24"/>
+  <!-- Head -->
+  <rect x="18" y="16" width="44" height="32" rx="8" fill="#fbbf24"/>
+  <!-- Eyes -->
+  <circle cx="30" cy="32" r="5" fill="#1e1e2e"/>
+  <circle cx="50" cy="32" r="5" fill="#1e1e2e"/>
+  <!-- Eye glints -->
+  <circle cx="32" cy="30" r="1.5" fill="#fff"/>
+  <circle cx="52" cy="30" r="1.5" fill="#fff"/>
+  <!-- Mouth -->
+  <rect x="32" y="40" width="16" height="3" rx="1.5" fill="#1e1e2e"/>
+  <!-- Body -->
+  <rect x="24" y="52" width="32" height="20" rx="5" fill="#fbbf24" opacity="0.8"/>
+  <!-- Body detail -->
+  <rect x="34" y="57" width="12" height="4" rx="2" fill="#1e1e2e" opacity="0.3"/>
+  <rect x="34" y="64" width="12" height="4" rx="2" fill="#1e1e2e" opacity="0.3"/>
+</svg>

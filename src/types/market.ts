@@ -151,7 +151,7 @@ export interface PlaceOrderRequest {
 // ─── Backtest ─────────────────────────────────────────────────────────────────
 // Long-TF periods (1h / 4h / 1d charts): trading-day windows
 // Short-TF periods (1m / 5m / 15m charts): calendar-time windows
-export type BacktestPeriodKey = "4H" | "1D" | "1W" | "1M" | "6M" | "YTD" | "1Y";
+export type BacktestPeriodKey = "4H" | "1D" | "5D" | "1W" | "1M" | "6M" | "YTD" | "1Y" | "5Y";
 export interface BacktestPeriodResult {
   strategyReturn: number; // decimal (0.14 = +14%)
   holdReturn: number;

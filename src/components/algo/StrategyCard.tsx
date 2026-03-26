@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Trash2, TrendingUp, TrendingDown, Loader2, Bot, PowerOff,
   ChevronDown, ChevronUp, ExternalLink, BarChart3, ShieldAlert,
@@ -26,6 +27,14 @@ const INDICATOR_FULL: Record<IndicatorType, string> = {
   RSI:  "Relative Strength Index",
   MACD: "MACD Crossover",
   TD9:  "TD Sequential",
+};
+
+const ROBOT_IMAGE: Record<IndicatorType, string> = {
+  EMA:  "/images/robots/ema-bot.svg",
+  BB:   "/images/robots/bb-bot.svg",
+  RSI:  "/images/robots/rsi-bot.svg",
+  MACD: "/images/robots/macd-bot.svg",
+  TD9:  "/images/robots/td9-bot.svg",
 };
 
 const INDICATOR_COLORS: Record<IndicatorType, string> = {
@@ -238,6 +247,18 @@ export function StrategyCard({ strategy }: Props) {
       {isActive && (
         <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-emerald-400" />
       )}
+
+      {/* ── Robot illustration ─────────────────────────────────────────── */}
+      <div className="absolute right-2 top-2 opacity-20 pointer-events-none">
+        <Image
+          src={ROBOT_IMAGE[strategy.indicator] ?? ROBOT_IMAGE.EMA}
+          alt=""
+          width={80}
+          height={80}
+          className="object-contain"
+          unoptimized
+        />
+      </div>
 
       {/* ════ HEADER ════════════════════════════════════════════════════════ */}
       <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2">

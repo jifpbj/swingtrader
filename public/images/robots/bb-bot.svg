@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  <!-- Antenna - zigzag -->
+  <polyline points="40,16 44,10 36,6 40,2" stroke="#38bdf8" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Head -->
+  <rect x="18" y="16" width="44" height="32" rx="10" fill="#38bdf8"/>
+  <!-- Eyes - larger, rounder -->
+  <circle cx="30" cy="30" r="6" fill="#1e1e2e"/>
+  <circle cx="50" cy="30" r="6" fill="#1e1e2e"/>
+  <!-- Eye glints -->
+  <circle cx="32" cy="28" r="2" fill="#fff"/>
+  <circle cx="52" cy="28" r="2" fill="#fff"/>
+  <!-- Smile -->
+  <path d="M30 40 Q40 46 50 40" stroke="#1e1e2e" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Body -->
+  <rect x="22" y="52" width="36" height="22" rx="6" fill="#38bdf8" opacity="0.8"/>
+  <!-- Body bolt -->
+  <circle cx="40" cy="63" r="4" fill="#1e1e2e" opacity="0.3"/>
+  <circle cx="40" cy="63" r="1.5" fill="#1e1e2e" opacity="0.2"/>
+</svg>

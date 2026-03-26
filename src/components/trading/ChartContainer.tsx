@@ -274,6 +274,15 @@ function mergeMarkers(
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ChartContainer() {
+  const candlestickVisible = useUIStore((s) => s.candlestickVisible);
+
+  // Gate: if candlestick chart is not toggled on, render nothing
+  if (!candlestickVisible) return null;
+
+  return <ChartContainerInner />;
+}
+
+function ChartContainerInner() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);

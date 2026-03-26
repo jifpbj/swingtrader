@@ -745,7 +745,7 @@ export function PaperTradingPanel() {
   const connected = useAlpacaStore((s) => s.account !== null);
   const positions = useAlpacaStore((s) => s.positions);
   const orders = useAlpacaStore((s) => s.orders);
-  const [tab, setTab] = useState<Tab>("trade");
+  const [tab, setTab] = useState<Tab>("positions");
   const [collapsed, setCollapsed] = useState(false);
 
   // Auto-refresh every 15s when connected
@@ -773,7 +773,7 @@ export function PaperTradingPanel() {
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-zinc-300">
-            Paper Trading
+            Portfolio
           </span>
           {connected && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium border border-emerald-500/20">

@@ -7,6 +7,7 @@ import type { AlphaSignal, Indicators, Prediction, Timeframe } from "@/types/mar
 
 export type IndicatorTab = "EMA" | "BB" | "RSI" | "MACD" | "TD9";
 export type Theme = "light" | "dark" | "system";
+export type PerformancePeriodKey = "1D" | "5D" | "1M" | "6M" | "YTD" | "1Y" | "5Y";
 
 interface UIState {
   // ─── Theme
@@ -114,6 +115,18 @@ interface UIState {
   demoMode: boolean;
   setDemoMode: (v: boolean) => void;
 
+  // ─── Candlestick chart visibility (opt-in, off by default)
+  candlestickVisible: boolean;
+  setCandlestickVisible: (v: boolean) => void;
+
+  // ─── Performance curve period selector
+  performancePeriod: PerformancePeriodKey;
+  setPerformancePeriod: (v: PerformancePeriodKey) => void;
+
+  // ─── AI animation state (drives overlay during analysis)
+  aiAnimating: boolean;
+  setAIAnimating: (v: boolean) => void;
+
 }
 
 export const useUIStore = create<UIState>()(
@@ -208,6 +221,15 @@ export const useUIStore = create<UIState>()(
 
     demoMode: false,
     setDemoMode: (demoMode) => set({ demoMode }),
+
+    candlestickVisible: false,
+    setCandlestickVisible: (candlestickVisible) => set({ candlestickVisible }),
+
+    performancePeriod: "1Y",
+    setPerformancePeriod: (performancePeriod) => set({ performancePeriod }),
+
+    aiAnimating: false,
+    setAIAnimating: (aiAnimating) => set({ aiAnimating }),
 
   }))
 );
