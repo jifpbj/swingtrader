@@ -125,6 +125,7 @@ _SHORT_TIMEFRAMES = {Timeframe.M1, Timeframe.M5, Timeframe.M15}
 _SHORT_TF_PERIOD_SECS: dict[str, int] = {
     "4H": 4 * 3_600,
     "1D": 86_400,
+    "5D": 5 * 86_400,
     "1W": 604_800,
     "1M": 2_592_000,
 }
@@ -134,6 +135,7 @@ _LONG_TF_PERIOD_TRADING_DAYS: dict[str, float] = {
     "1M": 21,
     "6M": 126,
     "1Y": 252,
+    "5Y": 1260,
 }
 
 # Trading bars per calendar day for each long timeframe

@@ -403,12 +403,13 @@ const SHORT_TIMEFRAMES = new Set(["1m", "5m", "15m"]);
 const SHORT_TF_SECONDS: Record<string, number> = {
   "4H": 4 * 3600,
   "1D": 24 * 3600,
+  "5D": 5 * 24 * 3600,
   "1W": 7 * 24 * 3600,
   "1M": 30 * 24 * 3600,
 };
 
-const SHORT_TF_KEYS: BacktestPeriodKey[] = ["4H", "1D", "1W", "1M"];
-const LONG_TF_KEYS:  BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y"];
+const SHORT_TF_KEYS: BacktestPeriodKey[] = ["4H", "1D", "5D", "1W", "1M"];
+const LONG_TF_KEYS:  BacktestPeriodKey[] = ["1M", "6M", "YTD", "1Y", "5Y"];
 
 export function computeStrategyBacktests(
   candles: Candle[],
@@ -495,7 +496,7 @@ export function computeStrategyBacktests(
   const endYear = new Date(lastTs * 1000).getUTCFullYear();
 
   const PERIOD_TRADING_DAYS: Record<string, number> = {
-    "1M": 21, "6M": 126, "1Y": 252,
+    "1M": 21, "6M": 126, "1Y": 252, "5Y": 1260,
   };
 
   function periodBarCount(tradingDays: number): number {
@@ -517,6 +518,7 @@ export function computeStrategyBacktests(
     "6M":  periodStartTs(126),
     "YTD": ytdIdx >= 0 ? candles[ytdIdx].time : candles[0].time,
     "1Y":  periodStartTs(252),
+    "5Y":  periodStartTs(1260),
   };
 
   for (const key of LONG_TF_KEYS) {
@@ -648,7 +650,7 @@ export function computeStrategyEquityCurve(
       const ytdIdx = candles.findIndex((c) => c.time >= ytdTs);
       fromTs = ytdIdx >= 0 ? candles[ytdIdx].time : candles[0].time;
     } else {
-      const PERIOD_BAR_DAYS: Record<string, number> = { "4H": 0.167, "1D": 1, "1W": 5, "1M": 21, "6M": 126, "1Y": 252 };
+      const PERIOD_BAR_DAYS: Record<string, number> = { "4H": 0.167, "1D": 1, "1W": 5, "1M": 21, "6M": 126, "1Y": 252, "5Y": 1260 };
       const barCount = Math.round((PERIOD_BAR_DAYS[periodKey] ?? 252) * bpd);
       fromTs = candles[Math.max(0, n - 1 - Math.min(barCount, n - 1))].time;
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, TrendingUp, TrendingDown, BrainCircuit, Loader2, CheckCircle2, Sparkles, Pause, Ban, ArrowRight } from "lucide-react";
 import {
   ComposedChart, Area, Line, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
@@ -33,6 +33,26 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState<"save" | "trade" | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Entrance animation state ────────────────────────────────────────────────
+  const [anim, setAnim] = useState({ progress: 0, textReveal: 0 });
+  useEffect(() => {
+    const start = Date.now();
+    let raf: number;
+    function tick() {
+      const now = Date.now() - start;
+      // Text typewriter: 800ms delay, 2400ms duration, ease-out quad
+      const tRaw = Math.min(Math.max(0, now - 800) / 2400, 1);
+      const textReveal = 1 - Math.pow(1 - tRaw, 2);
+      // Chart + counter: 1200ms delay, 2800ms duration, ease-out cubic
+      const cRaw = Math.min(Math.max(0, now - 1200) / 2800, 1);
+      const progress = 1 - Math.pow(1 - cRaw, 3);
+      setAnim({ progress, textReveal });
+      if (tRaw < 1 || cRaw < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   // Active-strategy fields (only present when recommendation === "active")
   const bestStrategyReturn = strategy?.bestStrategyReturn ?? 0;
@@ -76,6 +96,32 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
   const refY100 = 100 - yDomain[0];
   const hasChart = chartData.length >= 2;
 
+  // Animated chart: strategy line rises from below hold → real position
+  const animChartData = useMemo(() => {
+    const p = anim.progress;
+    return chartData.map(pt => {
+      // Start strategy below hold, interpolate to real value
+      const delta = pt.adjStrategy - pt.adjHold;
+      const startDelta = -Math.abs(delta) * 0.6;
+      const currDelta = startDelta + (delta - startDelta) * p;
+      const s = pt.adjHold + currDelta;
+      const h = pt.adjHold;
+      return {
+        ...pt,
+        adjStrategy: s,
+        grayBand: Math.min(s, h),
+        redBand: Math.max(0, h - s),
+        greenBand: Math.max(0, s - h),
+      };
+    });
+  }, [chartData, anim.progress]);
+
+  // Animated P/L counter: starts negative, counts up to real value
+  const counterStart = -Math.abs(strategyPnlPct) * 0.4;
+  const displayPnlPct = counterStart + (strategyPnlPct - counterStart) * anim.progress;
+  const displayPnlCash = (displayPnlPct / 100) * investment;
+  const displayPositive = displayPnlPct >= 0;
+
   // Friendly indicator label
   const indicatorLabel: Record<string, string> = {
     EMA: "EMA Crossover", BB: "Bollinger Bands",
@@ -117,12 +163,30 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
     const isAvoid = recommendation === "avoid";
     const holdPct = holdReturn * 100;
 
+    // Mini performance curve for hold/avoid: use real equity curve if available
+    const miniCurveData = (() => {
+      if (!equityCurve?.length) return [];
+      const yMin = yDomain[0];
+      return equityCurve.map((p) => {
+        const h = p.hold - yMin;
+        // Avoid: flat strategy at 100 (normalized); Hold: no strategy line
+        const s = isAvoid ? (100 - yMin) : h;
+        return {
+          adjHold: h,
+          adjStrategy: s,
+          grayBand: Math.min(s, h),
+          redBand: isAvoid ? Math.max(0, h - s) : 0,
+          greenBand: isAvoid ? Math.max(0, s - h) : 0,
+        };
+      });
+    })();
+
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-modal-backdrop"
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
-        <div className="glass rounded-2xl w-full max-w-md shadow-2xl border border-white/10 flex flex-col">
+        <div className="glass rounded-2xl w-full max-w-md shadow-2xl border border-white/10 flex flex-col animate-modal-card">
 
           {/* Header */}
           <div className="flex items-start justify-between px-5 pt-5 pb-4 shrink-0">
@@ -173,13 +237,62 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
                 )}>
                   {isAvoid ? "Avoid This Stock" : "Hold Strategy Recommended"}
                 </p>
-                <p className="text-[12px] text-zinc-400 mt-1 leading-relaxed max-w-xs mx-auto">
+                <p
+                  className="text-[12px] text-zinc-400 mt-1 leading-relaxed max-w-xs mx-auto"
+                  style={{ clipPath: `inset(0 ${(1 - anim.textReveal) * 100}% 0 0)` }}
+                >
                   {isAvoid
                     ? "All tested strategies — including buy-and-hold — show negative returns for this ticker. Sitting this one out is the prudent move."
                     : "No active strategy generates meaningful alpha over buy-and-hold for this ticker. Simply holding the position is the best approach."
                   }
                 </p>
               </div>
+
+              {/* Mini performance curve */}
+              {miniCurveData.length >= 2 && (
+                <div className="w-full rounded-lg overflow-hidden">
+                  <ResponsiveContainer width="100%" height={80}>
+                    <ComposedChart data={miniCurveData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                      <YAxis domain={[0, yDomain[1] - yDomain[0]]} hide />
+                      {isAvoid && (
+                        <>
+                          <Area type="monotone" dataKey="grayBand" stackId="fills"
+                            fill="rgba(113,113,122,0.15)" stroke="none" isAnimationActive={false} />
+                          <Area type="monotone" dataKey="redBand" stackId="fills"
+                            fill="rgba(239,68,68,0.25)" stroke="none" isAnimationActive={false} />
+                          <Area type="monotone" dataKey="greenBand" stackId="fills"
+                            fill="rgba(52,211,153,0.25)" stroke="none" isAnimationActive={false} />
+                        </>
+                      )}
+                      <ReferenceLine y={refY100} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                      {/* Hold line — always shown */}
+                      <Line type="monotone" dataKey="adjHold" stroke="#71717a"
+                        strokeWidth={1.25} strokeDasharray="4 3" dot={false}
+                        isAnimationActive={true} animationDuration={2800} animationBegin={800} />
+                      {/* Strategy line — only for avoid (flat line at 100) */}
+                      {isAvoid && (
+                        <Line type="monotone" dataKey="adjStrategy" stroke="#fbbf24"
+                          strokeWidth={1.5} dot={false}
+                          isAnimationActive={true} animationDuration={2800} animationBegin={800} />
+                      )}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                  <div className="flex items-center justify-center gap-4 pb-1">
+                    <div className="flex items-center gap-1.5">
+                      <svg width="16" height="4" viewBox="0 0 16 4" className="shrink-0">
+                        <line x1="0" y1="2" x2="16" y2="2" stroke="#71717a" strokeWidth="1.25" strokeDasharray="4 3" />
+                      </svg>
+                      <span className="text-[9px] text-zinc-500">Hold</span>
+                    </div>
+                    {isAvoid && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-4 h-[2px] bg-amber-400 rounded-full" />
+                        <span className="text-[9px] text-zinc-500">Strategy</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Hold return stat */}
               <div className={cn(
@@ -248,7 +361,10 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
           {/* Insight */}
           <div className="mx-5 mb-5 px-4 py-3 rounded-xl bg-white/3 border border-white/8 flex items-start gap-2.5">
             <Sparkles className="size-3.5 text-violet-400 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-zinc-400 leading-relaxed">
+            <p
+              className="text-[11px] text-zinc-400 leading-relaxed"
+              style={{ clipPath: `inset(0 ${(1 - anim.textReveal) * 100}% 0 0)` }}
+            >
               {result.alternativeTimeframes && result.alternativeTimeframes.length > 0
                 ? `Switch to the ${result.alternativeTimeframes[0].timeframe.toUpperCase()} timeframe to trade the identified alpha opportunity.`
                 : isAvoid
@@ -275,10 +391,10 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
   // ── Active strategy result UI ──────────────────────────────────────────────
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-modal-backdrop"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="glass rounded-2xl w-full max-w-lg shadow-2xl border border-white/10 flex flex-col max-h-[92vh] overflow-y-auto">
+      <div className="glass rounded-2xl w-full max-w-lg shadow-2xl border border-white/10 flex flex-col max-h-[92vh] overflow-y-auto animate-modal-card">
 
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="flex items-start justify-between px-5 pt-5 pb-2 shrink-0">
@@ -311,7 +427,10 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
                 Analysis Summary
               </span>
             </div>
-            <p className="text-[13px] text-zinc-300 leading-relaxed">
+            <p
+              className="text-[13px] text-zinc-300 leading-relaxed"
+              style={{ clipPath: `inset(0 ${(1 - anim.textReveal) * 100}% 0 0)` }}
+            >
               Based on our analysis, trading{" "}
               <span className="font-semibold text-zinc-100">{strategy?.ticker}</span>{" "}
               with{" "}
@@ -366,7 +485,7 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
           {hasChart ? (
             <div className="px-2 pb-2">
               <ResponsiveContainer width="100%" height={110} debounce={50}>
-                <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                <ComposedChart data={animChartData} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
                   <YAxis domain={[0, yDomain[1] - yDomain[0]]} hide />
 
                   {/* Grey base fill */}
@@ -483,26 +602,26 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
         {/* ── Stats grid ─────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3 px-5 pb-4 shrink-0">
 
-          {/* Total P/L */}
+          {/* Total P/L — animated counter */}
           <div className="glass-sm rounded-xl p-3 flex flex-col gap-0.5">
             <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wide flex items-center gap-1">
-              {isPositive
+              {displayPositive
                 ? <TrendingUp className="size-3 text-emerald-400" />
                 : <TrendingDown className="size-3 text-red-400" />
               }
               Total P/L
             </p>
             <span className={cn(
-              "text-2xl font-mono font-bold tabular-nums leading-tight",
-              isPositive ? "text-emerald-400" : "text-red-400",
+              "text-2xl font-mono font-bold tabular-nums leading-tight transition-colors duration-300",
+              displayPositive ? "text-emerald-400" : "text-red-400",
             )}>
-              {formatPercent(strategyPnlPct)}
+              {formatPercent(displayPnlPct)}
             </span>
             <span className={cn(
-              "text-base font-mono font-semibold tabular-nums",
-              isPositive ? "text-emerald-300/80" : "text-red-300/80",
+              "text-base font-mono font-semibold tabular-nums transition-colors duration-300",
+              displayPositive ? "text-emerald-300/80" : "text-red-300/80",
             )}>
-              {currencyFmt.format(strategyPnlCash)}
+              {currencyFmt.format(displayPnlCash)}
             </span>
           </div>
 

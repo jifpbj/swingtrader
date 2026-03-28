@@ -154,14 +154,14 @@ export default function HomePage() {
       {/* ── Marketing nav ── */}
       <header className="sticky top-0 z-30 glass-bright border-b border-white/5 px-4 sm:px-6 h-14 flex items-center justify-between">
         {/* Logo */}
-        <div className="flex items-center gap-2 select-none">
+        <Link href="/dashboard" className="flex items-center gap-2 select-none hover:opacity-80 transition-opacity">
           <div className="size-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-900/40">
             <Crosshair className="size-4 text-white stroke-[2.5]" />
           </div>
           <span className="text-sm font-semibold tracking-tight text-zinc-200">
             Predict<span className="text-emerald-400">Alpha</span>
           </span>
-        </div>
+        </Link>
         {/* Nav links */}
         <div className="flex items-center gap-4">
           <a

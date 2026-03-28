@@ -18,6 +18,10 @@ import { generateMockCandles } from "@/hooks/useMockData";
 // Long timeframes (1h / 4h / 1d) use trading-day windows.
 const SHORT_TIMEFRAMES = new Set<string>(["1m", "5m", "15m"]);
 
+// Long periods always use daily bars regardless of the active chart timeframe,
+// so bar counts stay manageable and indicators have enough history.
+const FORCE_DAILY_PERIODS = new Set<BacktestPeriodKey>(["6M", "YTD", "1Y", "5Y"]);
+
 function periodKeysForTimeframe(tf: string): BacktestPeriodKey[] {
   return SHORT_TIMEFRAMES.has(tf)
     ? ["4H", "1D", "5D", "1W", "1M"]
@@ -106,6 +110,13 @@ export function useBacktestData() {
   const [showModal, setShowModal]                   = useState(false);
   const [manualSaving, setManualSaving]             = useState(false);
   const [backtestLoading, setBacktestLoading]       = useState(false);
+  const [hasAnalyzedOnce, setHasAnalyzedOnce]       = useState(false);
+
+  // Reset when ticker changes (page refresh resets naturally via useState)
+  useEffect(() => {
+    setHasAnalyzedOnce(false);
+    setAnalysisResult(null);
+  }, [ticker]);
 
   // ─── Period selection ────────────────────────────────────────────────────────
   const periodKeys = useMemo(() => periodKeysForTimeframe(timeframe), [timeframe]);
@@ -118,9 +129,16 @@ export function useBacktestData() {
   // performancePeriod from the store takes priority, then local selectedPeriod, then default
   const chartPeriod: BacktestPeriodKey = performancePeriod ?? selectedPeriod ?? defaultPeriod;
 
+  // Long periods (6M, YTD, 1Y, 5Y) always use daily bars for manageable bar counts.
+  // This is derived at hook level so both the fetch and backtest effects use the same value.
+  const fetchTimeframe = useMemo<Timeframe>(
+    () => FORCE_DAILY_PERIODS.has(chartPeriod) ? "1d" : timeframe as Timeframe,
+    [chartPeriod, timeframe],
+  );
+
   // ─── Fetch historical bars sized for the selected period ─────────────────────
   useEffect(() => {
-    const barSecs = TIMEFRAME_SECONDS[timeframe as Timeframe] ?? 900;
+    const barSecs = TIMEFRAME_SECONDS[fetchTimeframe] ?? 86_400;
 
     function tickerToSeed(t: string): number {
       let h = 0x811c9dc5;
@@ -129,7 +147,7 @@ export function useBacktestData() {
     }
 
     if (demoMode) {
-      const count = mockBarCount(timeframe, chartPeriod);
+      const count = mockBarCount(fetchTimeframe, chartPeriod);
       setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
       return;
     }
@@ -141,7 +159,7 @@ export function useBacktestData() {
 
     fetch(
       `${apiUrl}/api/v1/market/backtest-history/${encodeURIComponent(ticker)}` +
-      `?timeframe=${toBackendTf(timeframe)}&period=${chartPeriod}`,
+      `?timeframe=${toBackendTf(fetchTimeframe)}&period=${chartPeriod}`,
       { signal: ctrl.signal },
     )
       .then((res) => {
@@ -154,19 +172,19 @@ export function useBacktestData() {
           setCandles(bars);
         } else {
           // Fewer bars than expected — fall back to mock so the chart still works
-          const count = mockBarCount(timeframe, chartPeriod);
+          const count = mockBarCount(fetchTimeframe, chartPeriod);
           setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
         }
       })
       .catch((err) => {
         if ((err as Error).name === "AbortError") return;
-        const count = mockBarCount(timeframe, chartPeriod);
+        const count = mockBarCount(fetchTimeframe, chartPeriod);
         setCandles(generateMockCandles(barSecs, count, tickerToSeed(ticker)));
       })
       .finally(() => setBacktestLoading(false));
 
     return () => ctrl.abort();
-  }, [demoMode, ticker, timeframe, chartPeriod]);
+  }, [demoMode, ticker, fetchTimeframe, chartPeriod]);
 
   // ─── Recompute backtest on indicator/candle changes ──────────────────────────
   useEffect(() => {
@@ -190,11 +208,11 @@ export function useBacktestData() {
           trailingStopEnabled,
           trailingStopPercent,
         },
-        timeframe,
+        fetchTimeframe,
       ),
     );
   }, [
-    candles, ticker, activeIndicatorTab,
+    candles, ticker, activeIndicatorTab, fetchTimeframe,
     emaPeriod, bbPeriod, bbStdDev,
     rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
@@ -202,11 +220,15 @@ export function useBacktestData() {
   ]);
 
   // ─── AI Analyze ──────────────────────────────────────────────────────────────
+  const MIN_ANIM_MS = 2500; // minimum time the animation plays before the modal appears
+
   const handleAIAnalyze = useCallback(async () => {
     if (!candles.length || analyzing) return;
     setAnalyzing(true);
-    // Run optimizer off the main thread tick so the spinner renders
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    setHasAnalyzedOnce(true);
+    const startMs = Date.now();
+    // Yield two animation frames so the overlay actually renders before synchronous work starts
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
     try {
       const currentParams = {
         emaPeriod,
@@ -313,8 +335,16 @@ export function useBacktestData() {
         });
       }
 
+      // Wait until the minimum animation duration has elapsed, then reveal the modal
+      const elapsed = Date.now() - startMs;
+      if (elapsed < MIN_ANIM_MS) {
+        await new Promise<void>(r => setTimeout(r, MIN_ANIM_MS - elapsed));
+      }
+      setAnalyzing(false);
+      // Small gap so the animation fade-out is visible before the modal enters
+      await new Promise<void>(r => setTimeout(r, 80));
       setShowModal(true);
-    } finally {
+    } catch {
       setAnalyzing(false);
     }
   }, [
@@ -415,11 +445,11 @@ export function useBacktestData() {
         trailingStopEnabled,
         trailingStopPercent,
       },
-      timeframe,
+      fetchTimeframe,
       chartPeriod,
     );
   }, [
-    candles, result, chartPeriod, activeIndicatorTab, timeframe,
+    candles, result, chartPeriod, activeIndicatorTab, fetchTimeframe,
     emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
     trailingStopEnabled, trailingStopPercent,
@@ -472,6 +502,7 @@ export function useBacktestData() {
     setSelectedPeriod,
     periodKeys,
     chartPeriod,
+    fetchTimeframe,
     equityCurve,
     yDomain,
     chartData,
@@ -481,5 +512,6 @@ export function useBacktestData() {
     analysisResult,
     setAnalysisResult,
     analyzing,
+    hasAnalyzedOnce,
   };
 }

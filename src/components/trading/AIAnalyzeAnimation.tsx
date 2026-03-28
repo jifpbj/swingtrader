@@ -86,8 +86,8 @@ export function AIAnalyzeAnimation() {
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl overflow-hidden">
-      {/* Dark backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      {/* Semi-transparent backdrop — kept light so chart + sliders show through */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[3px]" />
 
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center gap-6 px-4">

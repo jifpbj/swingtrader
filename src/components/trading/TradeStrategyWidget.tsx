@@ -5,7 +5,7 @@ import { useUIStore } from "@/store/useUIStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
 import { useStrategyStore } from "@/store/useStrategyStore";
-import { Zap, CheckCircle2, AlertCircle, BrainCircuit, Loader2 } from "lucide-react";
+import { Zap, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function TradeStrategyWidget() {
@@ -29,35 +29,10 @@ export function TradeStrategyWidget() {
 
   const tradingMode = useAlpacaStore(s => s.tradingMode);
 
-  const analyzing         = useStrategyStore(s => s.analyzing);
-  const requestAnalysis   = useStrategyStore(s => s.requestAnalysis);
   const saveStrategy      = useStrategyStore(s => s.saveStrategy);
   const setActiveStrategy = useStrategyStore(s => s.setActiveStrategy);
 
   const [submitting, setSubmitting] = useState(false);
-  const [wittyPhrase, setWittyPhrase] = useState<string | null>(null);
-
-  const WITTY_PHRASES = [
-    "Consulting the crystal ball…",
-    "Bribing the market gods…",
-    "Whispering to the algorithm…",
-    "Decoding chart hieroglyphics…",
-    "Summoning the quant overlords…",
-    "Asking the robots nicely…",
-    "Reverse-engineering alpha…",
-    "Staring at candles intensely…",
-    "Crunching numbers, hold tight…",
-    "Channeling Warren Buffett…",
-  ];
-
-  function handleAnalyze() {
-    const phrase = WITTY_PHRASES[Math.floor(Math.random() * WITTY_PHRASES.length)];
-    setWittyPhrase(phrase);
-    setTimeout(() => {
-      setWittyPhrase(null);
-      requestAnalysis();
-    }, 3000);
-  }
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,26 +114,6 @@ export function TradeStrategyWidget() {
           {error}
         </div>
       )}
-
-      {/* AI Analyze — full width, supersized & glowing */}
-      <button
-        onClick={handleAnalyze}
-        disabled={!!wittyPhrase || analyzing}
-        title="AI Optimize — find the best indicator config for this ticker & timeframe"
-        className={cn(
-          "w-full flex items-center justify-center gap-3 rounded-2xl py-8 px-6",
-          "text-2xl font-black tracking-wide transition-all duration-200 select-none",
-          "bg-purple-600 hover:bg-purple-500 text-white",
-          "shadow-lg shadow-purple-600/40 animate-glow-pulse",
-          "active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed",
-        )}
-      >
-        {(wittyPhrase || analyzing)
-          ? <Loader2 className="size-10 animate-spin shrink-0" />
-          : <BrainCircuit className="size-10 shrink-0" />
-        }
-        {wittyPhrase ?? (analyzing ? "Analyzing\u2026" : "AI Analyze")}
-      </button>
 
       {/* Trade CTA — always amber "Trade this Strategy" */}
       <button
