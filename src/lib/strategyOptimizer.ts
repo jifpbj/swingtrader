@@ -226,6 +226,7 @@ export function runAIOptimize(
     lotSizeDollars: 1_000,
     openEntry: null,
     lastExecutedSignalTime: null,
+    activatedAt: Date.now(),
   };
 
   const deltaVsHold = winner.bestStrategyReturn - winner.bestHoldReturn;

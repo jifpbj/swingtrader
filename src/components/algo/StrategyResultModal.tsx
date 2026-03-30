@@ -26,9 +26,8 @@ interface Props {
 
 export function StrategyResultModal({ result, onClose, onSaved }: Props) {
   const { recommendation, holdReturn, strategy, deltaVsHold, equityCurve } = result;
-  const { saveStrategy, setActiveStrategy } = useStrategyStore();
+  const { saveStrategy, saveStrategyLocal, setActiveStrategy } = useStrategyStore();
   const user = useAuthStore((s) => s.user);
-  const openAuthModal = useAuthStore((s) => s.openAuthModal);
 
   const [saving, setSaving] = useState<"save" | "trade" | null>(null);
   const [saved, setSaved] = useState(false);
@@ -130,23 +129,24 @@ export function StrategyResultModal({ result, onClose, onSaved }: Props) {
   const stratLabel = strategy ? (indicatorLabel[strategy.indicator] ?? strategy.indicator) : "";
 
   async function handleSave(withAutoTrade = false) {
-    if (!user) { openAuthModal(); return; }
     if (!strategy) return;
     setSaving(withAutoTrade ? "trade" : "save");
     setError(null);
     try {
       const now = Date.now();
-      const id = await saveStrategy(
-        {
-          ...strategy,
-          autoTrade: withAutoTrade,
-          orderQty: strategy.lotSizeMode === "units" ? strategy.lotSizeDollars : 1,
-          openEntry: null,
-          createdAt: now,
-          updatedAt: now,
-        },
-        user.uid,
-      );
+      const strategyData = {
+        ...strategy,
+        autoTrade: withAutoTrade,
+        orderQty: strategy.lotSizeMode === "units" ? strategy.lotSizeDollars : 1,
+        openEntry: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Save to Firestore if authenticated, otherwise save locally
+      const id = user
+        ? await saveStrategy(strategyData, user.uid)
+        : saveStrategyLocal(strategyData);
       setActiveStrategy(id);
       setSaved(true);
       onSaved?.(id);

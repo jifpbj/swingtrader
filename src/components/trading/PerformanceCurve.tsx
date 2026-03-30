@@ -73,11 +73,6 @@ export function PerformanceCurve({
     return currencyFmt.format(initialInvestment * periodData.holdReturn);
   }, [periodData, viewMode, initialInvestment]);
 
-  const stopLossDisplay = useMemo(() => {
-    if (!periodData?.sufficientData) return "—";
-    return `${(periodData.maxDrawdown * 100).toFixed(1)}%`;
-  }, [periodData]);
-
   const tradesDisplay = useMemo(() => {
     if (!periodData?.sufficientData) return "—";
     return String(periodData.tradeCount);
@@ -141,7 +136,7 @@ export function PerformanceCurve({
         </div>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={activeData} margin={{ top: 6, right: 2, bottom: 2, left: 2 }}>
+        <ComposedChart data={activeData} margin={{ top: 52, right: 8, bottom: 100, left: 8 }}>
           <YAxis domain={[0, yRange]} hide />
 
           {/* ── Stacked fill areas ───────────────────────────── */}
@@ -290,14 +285,6 @@ export function PerformanceCurve({
           <span className={`text-3xl font-black font-mono text-zinc-400${isAnimating ? " animate-number-scramble" : ""}`}
             key={isAnimating ? `h-${holdDisplay}` : "h"}>
             {holdDisplay}
-          </span>
-        </div>
-        {/* Stop Loss */}
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Stop Loss</span>
-          <span className={`text-3xl font-black font-mono text-red-400${isAnimating ? " animate-number-scramble" : ""}`}
-            key={isAnimating ? `sl-${stopLossDisplay}` : "sl"}>
-            {stopLossDisplay}
           </span>
         </div>
         {/* Trades */}

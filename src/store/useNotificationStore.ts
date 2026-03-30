@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type NotificationType = "trade_buy" | "trade_sell";
+export type NotificationType = "trade_buy" | "trade_sell" | "virtual_trade_buy" | "virtual_trade_sell";
 
 export interface AppNotification {
   id: string;

@@ -8,6 +8,7 @@ import { Search, ChevronUp, ChevronDown, Menu, Crosshair } from "lucide-react";
 import Link from "next/link";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { UserDropdown } from "@/components/ui/UserDropdown";
+import { TrialCountdown } from "@/components/ui/TrialCountdown";
 
 export function TopBar() {
   const ticker       = useUIStore((s) => s.ticker);
@@ -129,6 +130,7 @@ export function TopBar() {
             )}
           </div>
 
+          <TrialCountdown />
           <NotificationBell />
           <UserDropdown />
         </div>

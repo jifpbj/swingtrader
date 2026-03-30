@@ -64,6 +64,7 @@ export interface SavedStrategy {
   trailingStopPercent: number;      // e.g. 5 = sell if price drops 5% from high water mark
   openEntry: OpenEntry | null;      // set on buy, cleared on sell (used for P/L tracking)
   lastExecutedSignalTime: number | null; // Unix seconds — dedup guard
+  activatedAt: number;              // Unix ms — when signal tracking starts
   createdAt: number;                // Unix ms
   updatedAt: number;
 }

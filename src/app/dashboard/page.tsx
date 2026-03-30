@@ -12,11 +12,13 @@ import { AIAnalyzeAnimation } from "@/components/trading/AIAnalyzeAnimation";
 import { IndicatorPanel } from "@/components/trading/IndicatorPanel";
 import { PaperTradingPanel } from "@/components/trading/PaperTradingPanel";
 import { LiveTradingPanel } from "@/components/trading/LiveTradingPanel";
+import { VirtualPortfolioPanel } from "@/components/trading/VirtualPortfolioPanel";
 import { StrategyResultModal } from "@/components/algo/StrategyResultModal";
 import { TickerSearch } from "@/components/ui/TickerSearch";
 import { useLivePrice } from "@/hooks/useLivePrice";
 import { useAutoTrader } from "@/hooks/useAutoTrader";
 import { useTradeNotifications } from "@/hooks/useTradeNotifications";
+import { useSignalBackfill } from "@/hooks/useSignalBackfill";
 import { useBacktestData } from "@/hooks/useBacktestData";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
@@ -30,8 +32,10 @@ export default function TradingDashboard() {
   useTradeNotifications();
   const user        = useAuthStore((s) => s.user);
   const tradingMode = useAlpacaStore((s) => s.tradingMode);
+  const hasAlpacaKey = useAlpacaStore((s) => !!(s.apiKey || s.liveApiKey));
   const candlestickVisible = useUIStore((s) => s.candlestickVisible);
   const timeframe   = useUIStore((s) => s.timeframe);
+  const strategies  = useStrategyStore((s) => s.strategies);
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -41,6 +45,9 @@ export default function TradingDashboard() {
 
   // Backtest data hook — drives the PerformanceCurve and strategy controls
   const backtest = useBacktestData();
+
+  // Signal backfill — detects trade signals for active strategies
+  useSignalBackfill(strategies);
 
   const onResizeHandlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     dragStateRef.current = { startX: e.clientX, startWidth: rightPanelWidth };
@@ -88,7 +95,7 @@ export default function TradingDashboard() {
           {/* ─── Left/Center: Performance Curve + Indicators + Strategy ─── */}
           <div className="flex flex-col shrink-0 gap-3 min-w-0 md:flex-1 md:overflow-y-auto md:overscroll-y-contain">
             {/* Hero chart area */}
-            <div className="glass rounded-2xl overflow-hidden relative h-[60vh] md:min-h-[400px] md:flex-1 md:min-h-0">
+            <div className="glass rounded-2xl overflow-hidden relative h-[30vh] md:h-[60vh] md:min-h-[400px] md:flex-1 md:min-h-0">
               {/* Period selector — top center (hidden when candlestick is active) */}
               {!candlestickVisible && (
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
@@ -213,18 +220,21 @@ export default function TradingDashboard() {
 
             {/* Panel content — hidden when collapsed on desktop */}
             <div className={cn("flex flex-col gap-3", rightCollapsed && "md:hidden")}>
-              {/* Paper trading panel — visible when in paper mode */}
-              {tradingMode === "paper" && (
+              {hasAlpacaKey && tradingMode === "paper" && (
                 <div id="paper-trading-panel">
                   <PaperTradingPanel />
                 </div>
               )}
 
-              {/* Live trading panel — visible when in live mode (paid users) */}
-              {tradingMode === "live" && user && (
+              {hasAlpacaKey && tradingMode === "live" && user && (
                 <div id="live-trading-panel">
                   <LiveTradingPanel />
                 </div>
+              )}
+
+              {/* Virtual paper trading — for users without Alpaca keys */}
+              {!hasAlpacaKey && (
+                <VirtualPortfolioPanel />
               )}
             </div>
           </aside>

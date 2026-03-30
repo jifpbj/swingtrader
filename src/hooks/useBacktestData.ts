@@ -92,7 +92,7 @@ export function useBacktestData() {
 
   // ─── Strategy Store ──────────────────────────────────────────────────────────
   const {
-    saveStrategy, setActiveStrategy,
+    saveStrategy, saveStrategyLocal, setActiveStrategy,
     analysisResult, setAnalysisResult,
     analyzing, setAnalyzing,
     analysisRequested, clearAnalysisRequest,
@@ -369,48 +369,51 @@ export function useBacktestData() {
 
   // ─── Manual "Trade this Strategy" (current indicator config) ─────────────────
   const handleManualTrade = useCallback(async () => {
-    if (!result || !user) return;
+    if (!result) return;
     setManualSaving(true);
     try {
       const lastKey = result.periodKeys[result.periodKeys.length - 1];
       const lastPeriod = result.periods[lastKey];
       const now = Date.now();
-      const id = await saveStrategy(
-        {
-          name: `${result.strategyLabel} · ${ticker} · ${timeframe.toUpperCase()}`,
-          ticker,
-          timeframe,
-          indicator: activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab as "EMA" | "BB" | "RSI" | "MACD",
-          params: {
-            emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
-            macdFast: macdFastPeriod, macdSlow: macdSlowPeriod, macdSignal: macdSignalPeriod,
-            trailingStopEnabled, trailingStopPercent,
-          },
-          trailingStopEnabled,
-          trailingStopPercent,
-          backtestResult: {
-            ticker: result.ticker,
-            strategyLabel: result.strategyLabel,
-            periods: result.periods as Record<string, typeof lastPeriod & {}>,
-            periodKeys: result.periodKeys,
-          },
-          bestPeriodKey: lastKey ?? "",
-          bestStrategyReturn: lastPeriod?.strategyReturn ?? 0,
-          bestHoldReturn: lastPeriod?.holdReturn ?? 0,
-          bestMaxDrawdown: lastPeriod?.maxDrawdown ?? 0,
-          initialInvestment,
-          autoTrade: false,
-          tradingMode,
-          orderQty: 1,
-          lotSizeMode: "dollars" as const,
-          lotSizeDollars: 1_000,
-          openEntry: null,
-          lastExecutedSignalTime: null,
-          createdAt: now,
-          updatedAt: now,
+      const strategyData: Omit<import("@/types/strategy").SavedStrategy, "id"> = {
+        name: `${result.strategyLabel} · ${ticker} · ${timeframe.toUpperCase()}`,
+        ticker,
+        timeframe,
+        indicator: activeIndicatorTab === "TD9" ? "TD9" : activeIndicatorTab as "EMA" | "BB" | "RSI" | "MACD",
+        params: {
+          emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
+          macdFast: macdFastPeriod, macdSlow: macdSlowPeriod, macdSignal: macdSignalPeriod,
+          trailingStopEnabled, trailingStopPercent,
         },
-        user.uid,
-      );
+        trailingStopEnabled,
+        trailingStopPercent,
+        backtestResult: {
+          ticker: result.ticker,
+          strategyLabel: result.strategyLabel,
+          periods: result.periods as Record<string, typeof lastPeriod & {}>,
+          periodKeys: result.periodKeys,
+        },
+        bestPeriodKey: lastKey ?? "",
+        bestStrategyReturn: lastPeriod?.strategyReturn ?? 0,
+        bestHoldReturn: lastPeriod?.holdReturn ?? 0,
+        bestMaxDrawdown: lastPeriod?.maxDrawdown ?? 0,
+        initialInvestment,
+        autoTrade: false,
+        tradingMode,
+        orderQty: 1,
+        lotSizeMode: "dollars" as const,
+        lotSizeDollars: 1_000,
+        openEntry: null,
+        lastExecutedSignalTime: null,
+        activatedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Save to Firestore if authenticated, otherwise save locally
+      const id = user
+        ? await saveStrategy(strategyData, user.uid)
+        : saveStrategyLocal(strategyData);
       setActiveStrategy(id);
     } finally {
       setManualSaving(false);
@@ -420,7 +423,7 @@ export function useBacktestData() {
     emaPeriod, bbPeriod, bbStdDev, rsiPeriod, rsiOverbought, rsiOversold,
     macdFastPeriod, macdSlowPeriod, macdSignalPeriod,
     trailingStopEnabled, trailingStopPercent,
-    saveStrategy, setActiveStrategy,
+    saveStrategy, saveStrategyLocal, setActiveStrategy,
   ]);
 
   // ─── Equity curve ────────────────────────────────────────────────────────────

@@ -69,7 +69,7 @@ interface Props { strategy: SavedStrategy }
 
 export function StrategyCard({ strategy }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { activeStrategyId, setActiveStrategy, updateStrategy, deleteStrategy } = useStrategyStore();
+  const { activeStrategyId, setActiveStrategy, updateStrategy, deleteStrategy, deleteStrategyLocal } = useStrategyStore();
   const {
     setTicker, setTimeframe, setActiveIndicatorTab, setEmaPeriod, setBbPeriod, setBbStdDev,
     setRsiPeriod, setRsiOverbought, setRsiOversold, setMacdFastPeriod, setMacdSlowPeriod,
@@ -215,15 +215,19 @@ export function StrategyCard({ strategy }: Props) {
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!user) return;
     if (!confirmDelete) {
       setConfirmDelete(true);
       setTimeout(() => setConfirmDelete(false), 3000);
       return;
     }
     setDeleting(true);
-    try { await deleteStrategy(strategy.id, user.uid); }
-    finally { setDeleting(false); setConfirmDelete(false); }
+    try {
+      if (strategy.id.startsWith("local-")) {
+        deleteStrategyLocal(strategy.id);
+      } else if (user) {
+        await deleteStrategy(strategy.id, user.uid);
+      }
+    } finally { setDeleting(false); setConfirmDelete(false); }
   }
 
   // ── Helper: render a value as % or $ based on toggle ─────────────────────

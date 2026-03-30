@@ -378,6 +378,7 @@ export function BacktestPanel() {
           lotSizeDollars: 1_000,
           openEntry: null,
           lastExecutedSignalTime: null,
+          activatedAt: now,
           createdAt: now,
           updatedAt: now,
         },

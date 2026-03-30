@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useTradeStore } from "@/store/useTradeStore";
 import { useStrategyStore } from "@/store/useStrategyStore";
 import { useNotificationStore } from "@/store/useNotificationStore";
+import { useVirtualPortfolioStore } from "@/store/useVirtualPortfolioStore";
 import type { OpenEntry } from "@/types/strategy";
 
 const currFmt = new Intl.NumberFormat("en-US", {
@@ -97,4 +98,40 @@ export function useTradeNotifications() {
       prevOpenEntry.current.set(strategy.id, curr);
     }
   }, [strategies]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Virtual portfolio trades ───────────────────────────────────────────────
+  const virtualTrades = useVirtualPortfolioStore((s) => s.trades);
+  const virtualNotify = useVirtualPortfolioStore((s) => s.notificationsEnabled);
+  const knownVirtualIds = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (knownVirtualIds.current === null) {
+      knownVirtualIds.current = new Set(virtualTrades.map((t) => t.id));
+      return;
+    }
+
+    for (const trade of virtualTrades) {
+      if (knownVirtualIds.current.has(trade.id)) continue;
+      knownVirtualIds.current.add(trade.id);
+
+      const isProfit = trade.pnlDollars >= 0;
+      const pnlStr = `${isProfit ? "+" : ""}${currFmt.format(trade.pnlDollars)}`;
+      const title = `${trade.ticker} Virtual Trade ${isProfit ? "🟢" : "🔴"}`;
+      const body = `${trade.strategyName} · ${pnlStr} (${isProfit ? "+" : ""}${(trade.pnlPercent * 100).toFixed(1)}%)`;
+
+      addNotification({
+        type: "virtual_trade_sell",
+        title,
+        body,
+        timestamp: Date.now(),
+        ticker: trade.ticker,
+        strategyName: trade.strategyName,
+        pnlDollars: trade.pnlDollars,
+      });
+
+      if (virtualNotify) {
+        fireBrowserNotification(title, body, `vtrade-${trade.id}`);
+      }
+    }
+  }, [virtualTrades]); // eslint-disable-line react-hooks/exhaustive-deps
 }
