@@ -71,6 +71,20 @@ _FRONTEND_TO_TF: dict[str, Timeframe] = {
 
 _DEFAULT_TF = Timeframe.M15
 
+# ─── Anti-cycling guards ─────────────────────────────────────────────────────
+# Cooldown per timeframe (~5 candles worth of time)
+_COOLDOWN_SECONDS: dict[str, int] = {
+    "1m": 300,       # 5 min
+    "5m": 1500,      # 25 min
+    "15m": 4500,     # 75 min
+    "1h": 18000,     # 5 hours
+    "4h": 72000,     # 20 hours
+    "1d": 432000,    # 5 days
+}
+_DEFAULT_COOLDOWN = 4500  # 75 min fallback
+
+_MIN_MOVE_PCT = 0.001  # 0.1% minimum price movement to act on a signal
+
 # ─── Alpaca base URLs ─────────────────────────────────────────────────────────
 
 _ALPACA_BASE: dict[str, str] = {
@@ -616,6 +630,56 @@ async def check_strategy(
         )
         return
 
+    # ── 4a. Signal freshness — reject signals older than 2nd-to-last candle ──
+    if len(bars) >= 2:
+        second_to_last_time = bars[-2]["time"]
+        if latest["time"] < second_to_last_time:
+            logger.info(
+                "auto_trader_skip_stale_signal",
+                uid=uid,
+                strategy_id=strategy_id,
+                ticker=ticker,
+                signal_time=latest["time"],
+                second_to_last_bar=second_to_last_time,
+            )
+            return
+
+    # ── 4b. Cooldown — refuse to act if last trade was too recent ────────────
+    cooldown = _COOLDOWN_SECONDS.get(tf_str, _DEFAULT_COOLDOWN)
+    last_exec_ts = strategy.get("lastExecutedSignalTime") or 0
+    now_ts = int(time.time())
+    if now_ts - last_exec_ts < cooldown:
+        remaining = cooldown - (now_ts - last_exec_ts)
+        logger.info(
+            "auto_trader_skip_cooldown",
+            uid=uid,
+            strategy_id=strategy_id,
+            ticker=ticker,
+            cooldown_s=cooldown,
+            remaining_s=remaining,
+            last_exec_ts=last_exec_ts,
+        )
+        return
+
+    # ── 4c. Minimum price movement filter ────────────────────────────────────
+    _open_entry = strategy.get("openEntry")
+    if _open_entry:
+        entry_price = float(_open_entry.get("price", 0))
+        if entry_price > 0:
+            move_pct = abs(latest["price"] - entry_price) / entry_price
+            if move_pct < _MIN_MOVE_PCT:
+                logger.info(
+                    "auto_trader_skip_insufficient_move",
+                    uid=uid,
+                    strategy_id=strategy_id,
+                    ticker=ticker,
+                    signal_price=latest["price"],
+                    entry_price=entry_price,
+                    move_pct=round(move_pct, 6),
+                    min_move_pct=_MIN_MOVE_PCT,
+                )
+                return
+
     # ── 5. Alpaca keys ────────────────────────────────────────────────────────
     trading_mode = strategy.get("tradingMode", "paper")
     keys = await get_alpaca_keys(uid)
@@ -709,6 +773,19 @@ async def check_strategy(
     lot_dollars = float(strategy.get("lotSizeDollars", 1_000) or 1_000)
     is_crypto   = "/" in ticker
 
+    logger.info(
+        "auto_trader_lot_params",
+        uid=uid,
+        strategy_id=strategy_id,
+        lot_mode=lot_mode,
+        lot_dollars=lot_dollars,
+        raw_lot_dollars=strategy.get("lotSizeDollars"),
+        raw_lot_mode=strategy.get("lotSizeMode"),
+        raw_order_qty=strategy.get("orderQty"),
+        is_crypto=is_crypto,
+        side=side,
+    )
+
     # Buy side
     order_qty: float | None     = None
     order_notional: float | None = None
@@ -724,8 +801,16 @@ async def check_strategy(
                 if price and price > 0:
                     order_qty = max(1.0, round(lot_dollars / price, 6))
                 else:
-                    # Fallback to 1 unit if price unavailable
-                    order_qty = float(strategy.get("orderQty", 1) or 1)
+                    # Price unavailable — skip rather than trading wrong qty
+                    logger.warning(
+                        "auto_trader_skip_no_price",
+                        uid=uid,
+                        strategy_id=strategy_id,
+                        ticker=ticker,
+                        lot_mode=lot_mode,
+                        lot_dollars=lot_dollars,
+                    )
+                    return
         else:
             # unit mode — use the stored unit count
             order_qty = float(strategy.get("orderQty", 1) or 1)
