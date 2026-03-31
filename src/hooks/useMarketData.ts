@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import { auth } from "@/lib/firebase";
 import { useUIStore } from "@/store/useUIStore";
 import type {
   Candle,
@@ -104,13 +105,23 @@ export function useMarketData(callbacks: MarketDataCallbacks = {}) {
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!mounted.current) return;
     if (demoMode) return; // demo mode — mock data hook handles all updates
 
+    // Obtain a fresh Firebase ID token for WS auth
+    const token = await auth.currentUser?.getIdToken().catch(() => null);
+    if (!token) {
+      // Not signed in — skip WS connection, retry later
+      if (mounted.current) {
+        reconnectTimer.current = setTimeout(connect, 5000);
+      }
+      return;
+    }
+
     const encodedTicker = encodeURIComponent(ticker);
     const backendTf = toBackendTf(timeframe);
-    const url = `${WS_BASE}/${encodedTicker}?timeframe=${backendTf}`;
+    const url = `${WS_BASE}/${encodedTicker}?timeframe=${backendTf}&token=${encodeURIComponent(token)}`;
 
     try {
       const ws = new WebSocket(url);

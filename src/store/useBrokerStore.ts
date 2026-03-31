@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import type {
   BrokerAccount,
   BrokerAccountStatus,
@@ -19,14 +19,16 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function brokerFetch<T>(
   path: string,
-  uid: string,
+  _uid: string,
   init?: RequestInit,
 ): Promise<T> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Not authenticated");
   const resp = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "X-User-Id": uid,
+      Authorization: `Bearer ${token}`,
       ...(init?.headers ?? {}),
     },
   });

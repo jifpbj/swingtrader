@@ -2,8 +2,8 @@
 Broker API Routes — manages end-user accounts via Alpaca Broker API.
 ────────────────────────────────────────────────────────────────────
 All routes use the server-side BrokerClient (HTTP Basic auth).
-The Firebase UID is passed as the X-User-Id header to identify
-which Firestore document to read/write the alpacaAccountId from.
+Every request is authenticated via Firebase ID token (Authorization: Bearer <token>).
+The verified UID is used to scope Firestore reads/writes.
 
 Routes:
   POST   /api/v1/broker/accounts                           — create account (KYC)
@@ -24,9 +24,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 from pydantic import BaseModel, Field, EmailStr
 
+from app.api.dependencies import AuthenticatedUID
 from app.core.logging import get_logger
 from app.services.broker_client import get_broker_client
 from app.services.firestore_service import (
@@ -153,7 +154,7 @@ class PlaceBrokerOrderRequest(BaseModel):
 )
 async def create_account(
     req: CreateAccountRequest,
-    x_user_id: str = Header(..., alias="X-User-Id"),
+    uid: AuthenticatedUID,
 ) -> dict[str, Any]:
     """
     Submit KYC information to Alpaca to open a trading account for the user.
@@ -215,11 +216,11 @@ async def create_account(
     account_id = result["id"]
     account_status = result.get("status", "SUBMITTED")
 
-    await save_broker_account(x_user_id, account_id, account_status)
+    await save_broker_account(uid, account_id, account_status)
 
     logger.info(
         "broker_account_onboarded",
-        uid=x_user_id,
+        uid=uid,
         account_id=account_id,
         status=account_status,
     )
@@ -230,11 +231,16 @@ async def create_account(
     "/accounts/{uid}",
     summary="Get broker account status and details",
 )
-async def get_account(uid: str = Path(...)) -> dict[str, Any]:
+async def get_account(
+    authenticated_uid: AuthenticatedUID,
+    uid: str = Path(...),
+) -> dict[str, Any]:
     """
     Fetch the latest account info from Alpaca and sync status to Firestore.
     Used by the frontend to poll for KYC approval (SUBMITTED → ACTIVE).
     """
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     fs_data = await get_broker_account(uid, bypass_cache=True)
     account_id = fs_data.get("alpacaAccountId")
@@ -261,7 +267,12 @@ async def get_account(uid: str = Path(...)) -> dict[str, Any]:
     "/accounts/{uid}/trading",
     summary="Get broker trading account (buying power, equity, cash)",
 )
-async def get_trading_account(uid: str = Path(...)) -> dict[str, Any]:
+async def get_trading_account(
+    authenticated_uid: AuthenticatedUID,
+    uid: str = Path(...),
+) -> dict[str, Any]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     data = await client.get_trading_account(account_id)
@@ -284,7 +295,12 @@ async def get_trading_account(uid: str = Path(...)) -> dict[str, Any]:
     "/accounts/{uid}/ach",
     summary="List ACH bank relationships for this user",
 )
-async def list_ach(uid: str = Path(...)) -> list[dict[str, Any]]:
+async def list_ach(
+    authenticated_uid: AuthenticatedUID,
+    uid: str = Path(...),
+) -> list[dict[str, Any]]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     return await client.list_ach_relationships(account_id)
@@ -296,9 +312,12 @@ async def list_ach(uid: str = Path(...)) -> list[dict[str, Any]]:
     summary="Add a bank account (ACH relationship)",
 )
 async def create_ach(
+    authenticated_uid: AuthenticatedUID,
     uid: str,
     req: ACHRelationshipRequest,
 ) -> dict[str, Any]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     payload: dict[str, Any] = {
@@ -318,7 +337,13 @@ async def create_ach(
     response_class=Response,
     summary="Remove a bank account (ACH relationship)",
 )
-async def delete_ach(uid: str, relationship_id: str) -> Response:
+async def delete_ach(
+    authenticated_uid: AuthenticatedUID,
+    uid: str,
+    relationship_id: str,
+) -> Response:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     await client.delete_ach_relationship(account_id, relationship_id)
@@ -331,7 +356,12 @@ async def delete_ach(uid: str, relationship_id: str) -> Response:
     "/accounts/{uid}/transfers",
     summary="List fund transfers for this user",
 )
-async def list_transfers(uid: str = Path(...)) -> list[dict[str, Any]]:
+async def list_transfers(
+    authenticated_uid: AuthenticatedUID,
+    uid: str = Path(...),
+) -> list[dict[str, Any]]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     return await client.list_transfers(account_id)
@@ -342,7 +372,13 @@ async def list_transfers(uid: str = Path(...)) -> list[dict[str, Any]]:
     status_code=201,
     summary="Initiate an ACH deposit or withdrawal",
 )
-async def create_transfer(uid: str, req: TransferRequest) -> dict[str, Any]:
+async def create_transfer(
+    authenticated_uid: AuthenticatedUID,
+    uid: str,
+    req: TransferRequest,
+) -> dict[str, Any]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     payload: dict[str, Any] = {
@@ -361,7 +397,12 @@ async def create_transfer(uid: str, req: TransferRequest) -> dict[str, Any]:
     "/accounts/{uid}/positions",
     summary="List open positions for this user",
 )
-async def get_positions(uid: str = Path(...)) -> list[dict[str, Any]]:
+async def get_positions(
+    authenticated_uid: AuthenticatedUID,
+    uid: str = Path(...),
+) -> list[dict[str, Any]]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     return await client.get_positions(account_id)
@@ -374,10 +415,13 @@ async def get_positions(uid: str = Path(...)) -> list[dict[str, Any]]:
     summary="List orders for this user",
 )
 async def get_orders(
+    authenticated_uid: AuthenticatedUID,
     uid: str = Path(...),
     limit: int = Query(default=25, ge=1, le=500),
     order_status: str = Query(default="all", alias="status"),
 ) -> list[dict[str, Any]]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     return await client.get_orders(account_id, limit=limit, order_status=order_status)
@@ -388,7 +432,13 @@ async def get_orders(
     status_code=201,
     summary="Place an order on behalf of the user",
 )
-async def place_order(uid: str, req: PlaceBrokerOrderRequest) -> dict[str, Any]:
+async def place_order(
+    authenticated_uid: AuthenticatedUID,
+    uid: str,
+    req: PlaceBrokerOrderRequest,
+) -> dict[str, Any]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     from app.services.firestore_service import add_trade
 
     client = get_broker_client()
@@ -433,7 +483,13 @@ async def place_order(uid: str, req: PlaceBrokerOrderRequest) -> dict[str, Any]:
     response_class=Response,
     summary="Cancel an order",
 )
-async def cancel_order(uid: str, order_id: str = Path(...)) -> Response:
+async def cancel_order(
+    authenticated_uid: AuthenticatedUID,
+    uid: str,
+    order_id: str = Path(...),
+) -> Response:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     await client.cancel_order(account_id, order_id)
@@ -445,7 +501,12 @@ async def cancel_order(uid: str, order_id: str = Path(...)) -> Response:
     status_code=207,
     summary="Cancel all open orders",
 )
-async def cancel_all_orders(uid: str = Path(...)) -> list[dict[str, Any]]:
+async def cancel_all_orders(
+    authenticated_uid: AuthenticatedUID,
+    uid: str = Path(...),
+) -> list[dict[str, Any]]:
+    if authenticated_uid != uid:
+        raise HTTPException(status_code=403, detail="Access denied.")
     client = get_broker_client()
     account_id = await _resolve_account_id(uid)
     return await client.cancel_all_orders(account_id)

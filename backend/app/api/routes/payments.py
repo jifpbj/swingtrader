@@ -244,9 +244,9 @@ async def cancel_subscription(request: Request) -> dict:
         logger.info("stripe_subscription_cancelled", uid=uid, subscription_id=sub_id)
     except stripe.InvalidRequestError as exc:
         logger.warning("stripe_cancel_invalid_request", uid=uid, error=str(exc))
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail="Unable to cancel subscription. It may already be cancelled.")
     except Exception as exc:
         logger.error("stripe_cancel_failed", uid=uid, error=str(exc))
-        raise HTTPException(status_code=500, detail="Stripe cancellation failed")
+        raise HTTPException(status_code=500, detail="Subscription cancellation failed. Please try again.")
 
     return {"status": "cancelled"}

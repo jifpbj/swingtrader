@@ -12,13 +12,16 @@ import uuid
 from datetime import datetime, timezone
 from math import ceil
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api.dependencies import (
     AnalysisEngineDep,
     MarketDataDep,
     PredictiveModelDep,
+    _TICKER_RE,
 )
 from app.core.logging import get_logger
 from app.models.schemas import (
@@ -40,6 +43,18 @@ import pandas as pd
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/market", tags=["market"])
+limiter = Limiter(key_func=get_remote_address)
+
+
+def _validated_ticker(ticker: str) -> str:
+    """Validate and normalise a ticker path param (supports `/` for crypto pairs)."""
+    t = ticker.strip().upper()
+    if not _TICKER_RE.match(t):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid ticker symbol.",
+        )
+    return t
 
 
 # ─── Asset search ─────────────────────────────────────────────────────────────
@@ -58,7 +73,9 @@ async def get_popular(svc: MarketDataDep) -> list[AssetSearchResult]:
     response_model=list[AssetSearchResult],
     summary="Fuzzy search tradable assets by symbol or name",
 )
+@limiter.limit("30/minute")
 async def search_assets(
+    request: Request,
     svc: MarketDataDep,
     q: str = Query(min_length=1, max_length=30, description="Symbol or name fragment"),
     limit: int = Query(default=10, ge=1, le=50),
@@ -79,8 +96,9 @@ class PriceResponse(BaseModel):
     summary="Latest trade price (no cache — suitable for 1-second polling)",
 )
 async def get_price(ticker: str, svc: MarketDataDep) -> PriceResponse:
-    price = await svc.get_latest_price(ticker.upper())
-    return PriceResponse(ticker=ticker.upper(), price=price)
+    ticker = _validated_ticker(ticker)
+    price = await svc.get_latest_price(ticker)
+    return PriceResponse(ticker=ticker, price=price)
 
 
 # ─── OHLCV ───────────────────────────────────────────────────────────────────
@@ -97,21 +115,22 @@ async def get_ohlcv(
     limit: int = Query(default=200, ge=1, le=25000),
     end: str | None = Query(default=None, description="End datetime ISO-8601; omit for most-recent bars"),
 ) -> OHLCVResponse:
+    ticker = _validated_ticker(ticker)
     cache_key = f"ohlcv:{ticker}:{timeframe}:{limit}:{end or ''}"
     cached = await ohlcv_cache.get(cache_key)
     if cached is not None:
         return cached
 
     try:
-        bars = await svc.get_ohlcv(ticker.upper(), timeframe, limit, end)
+        bars = await svc.get_ohlcv(ticker, timeframe, limit, end)
     except Exception as exc:
         logger.error("ohlcv_fetch_failed", ticker=ticker, error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch OHLCV for {ticker}: {exc}",
+            detail="Unable to fetch market data. Please try again.",
         ) from exc
 
-    result = OHLCVResponse(ticker=ticker.upper(), timeframe=timeframe, bars=bars)
+    result = OHLCVResponse(ticker=ticker, timeframe=timeframe, bars=bars)
     await ohlcv_cache.set(cache_key, result)
     return result
 
@@ -188,7 +207,7 @@ async def get_backtest_history(
         description="Period key: 4H | 1D | 1W | 1M | 6M | YTD | 1Y",
     ),
 ) -> OHLCVResponse:
-    ticker = ticker.upper()
+    ticker = _validated_ticker(ticker)
     period = period.upper()
     cache_key = f"backtest:{ticker}:{timeframe}:{period}"
 
@@ -208,7 +227,7 @@ async def get_backtest_history(
         logger.error("backtest_history_failed", ticker=ticker, error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch backtest history for {ticker}: {exc}",
+            detail="Unable to fetch historical data. Please try again.",
         ) from exc
 
     result = OHLCVResponse(ticker=ticker, timeframe=timeframe, bars=bars)
@@ -229,12 +248,13 @@ async def get_indicators(
     engine: AnalysisEngineDep,
     timeframe: Timeframe = Query(default=Timeframe.M15),
 ) -> TechnicalIndicators:
+    ticker = _validated_ticker(ticker)
     cache_key = f"indicators:{ticker}:{timeframe}"
     cached = await indicator_cache.get(cache_key)
     if cached is not None:
         return cached
 
-    indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
+    indicators = await _load_indicators(ticker, timeframe, svc, engine)
     await indicator_cache.set(cache_key, indicators)
     return indicators
 
@@ -252,7 +272,8 @@ async def get_regime(
     engine: AnalysisEngineDep,
     timeframe: Timeframe = Query(default=Timeframe.M15),
 ) -> MarketRegime:
-    indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
+    ticker = _validated_ticker(ticker)
+    indicators = await _load_indicators(ticker, timeframe, svc, engine)
 
     # Mock sentiment — replace with real NLP pipeline
     sentiment = SentimentSnapshot(
@@ -272,7 +293,9 @@ async def get_regime(
     response_model=PriceProbabilityForecast,
     summary="AI price probability forecast",
 )
+@limiter.limit("20/minute")
 async def get_prediction(
+    request: Request,
     ticker: str,
     svc: MarketDataDep,
     engine: AnalysisEngineDep,
@@ -280,12 +303,13 @@ async def get_prediction(
     timeframe: Timeframe = Query(default=Timeframe.M15),
     horizon: int = Query(default=10, ge=1, le=50, description="Forward bars to project"),
 ) -> PriceProbabilityForecast:
+    ticker = _validated_ticker(ticker)
     cache_key = f"prediction:{ticker}:{timeframe}:{horizon}"
     cached = await prediction_cache.get(cache_key)
     if cached is not None:
         return cached
 
-    indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
+    indicators = await _load_indicators(ticker, timeframe, svc, engine)
     forecast = await model.predict(indicators, timeframe, horizon_bars=horizon)
 
     await prediction_cache.set(cache_key, forecast)
@@ -299,7 +323,9 @@ async def get_prediction(
     response_model=list[AlphaSignal],
     summary="Latest AI-generated alpha signals",
 )
+@limiter.limit("20/minute")
 async def get_signals(
+    request: Request,
     ticker: str,
     svc: MarketDataDep,
     engine: AnalysisEngineDep,
@@ -307,14 +333,15 @@ async def get_signals(
     timeframe: Timeframe = Query(default=Timeframe.M15),
     limit: int = Query(default=10, ge=1, le=50),
 ) -> list[AlphaSignal]:
+    ticker = _validated_ticker(ticker)
     try:
-        indicators = await _load_indicators(ticker.upper(), timeframe, svc, engine)
+        indicators = await _load_indicators(ticker, timeframe, svc, engine)
     except HTTPException:
         return []
     forecast = await model.predict(indicators, timeframe)
     regime = await engine.compute_regime(indicators)
 
-    signals = _derive_signals(indicators, forecast, regime, ticker.upper(), timeframe)
+    signals = _derive_signals(indicators, forecast, regime, ticker, timeframe)
     return signals[:limit]
 
 

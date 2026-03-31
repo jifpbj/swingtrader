@@ -19,14 +19,69 @@ Usage in a route:
 
 from __future__ import annotations
 
+import asyncio
+import re
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Header, HTTPException, Path, status
 from starlette.requests import HTTPConnection
 
+from app.core.logging import get_logger
 from app.engine.analysis import AnalysisEngine
 from app.engine.predictive import PredictiveModel
 from app.services.market_data import MarketDataService
+
+logger = get_logger(__name__)
+
+# ─── Ticker validation ───────────────────────────────────────────────────────
+
+_TICKER_RE = re.compile(r"^[A-Za-z0-9]{1,10}(/[A-Za-z]{2,5})?$")
+
+
+def validate_ticker(ticker: str = Path(...)) -> str:
+    """Validate and normalise a ticker path parameter."""
+    t = ticker.strip().upper()
+    if not _TICKER_RE.match(t):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid ticker symbol.",
+        )
+    return t
+
+
+ValidTicker = Annotated[str, Depends(validate_ticker)]
+
+
+# ─── Firebase auth ───────────────────────────────────────────────────────────
+
+async def verify_firebase_token(
+    authorization: str = Header(..., alias="Authorization"),
+) -> str:
+    """
+    Verify the Firebase ID token from the Authorization header and return
+    the authenticated user's UID.
+
+    Raises 401 if the token is missing, malformed, or invalid.
+    """
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token or token == authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or malformed Bearer token.",
+        )
+    try:
+        from firebase_admin import auth as firebase_auth  # noqa: PLC0415
+
+        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
+        return decoded["uid"]
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+        )
+
+
+AuthenticatedUID = Annotated[str, Depends(verify_firebase_token)]
 
 
 # ─── Service accessors ────────────────────────────────────────────────────────

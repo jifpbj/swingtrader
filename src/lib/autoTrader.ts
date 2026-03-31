@@ -7,6 +7,7 @@
  * Swapping modes is a single factory call — no other code changes needed.
  */
 
+import { auth } from "@/lib/firebase";
 import type { PlaceOrderRequest, AlpacaOrder } from "@/types/market";
 import type { TradingMode } from "@/types/strategy";
 
@@ -64,13 +65,15 @@ class BrokerTradeExecutor implements TradeExecutor {
   constructor(private readonly uid: string) {}
 
   async placeOrder(req: PlaceOrderRequest): Promise<AlpacaOrder> {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) throw new Error("Not authenticated");
     const resp = await fetch(
       `${API_BASE}/api/v1/broker/accounts/${this.uid}/orders`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": this.uid,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(req),
       },

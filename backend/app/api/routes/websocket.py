@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 import pandas as pd
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.api.dependencies import _TICKER_RE
+
 from app.api.dependencies import (
     get_analysis_engine,
     get_market_data,
@@ -271,6 +273,27 @@ async def _run_stream(
         )
 
 
+# ─── WebSocket auth & connection limits ──────────────────────────────────────
+
+_MAX_WS_CONNECTIONS = 100
+_active_ws_count = 0
+_ws_count_lock = asyncio.Lock()
+
+
+async def _verify_ws_token(websocket: WebSocket) -> str | None:
+    """Verify the Firebase token passed as a query parameter. Returns UID or None."""
+    token = websocket.query_params.get("token", "")
+    if not token:
+        return None
+    try:
+        from firebase_admin import auth as firebase_auth  # noqa: PLC0415
+
+        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
+        return decoded.get("uid")
+    except Exception:
+        return None
+
+
 # ─── WebSocket route ──────────────────────────────────────────────────────────
 
 @router.websocket("/ws/trades/{ticker:path}")
@@ -279,97 +302,123 @@ async def ws_trades(
     ticker: str,
 ) -> None:
     """
-    Connect: ws://host/ws/trades/BTC%2FUSD?timeframe=15Min
+    Connect: ws://host/ws/trades/BTC%2FUSD?timeframe=15Min&token=<firebase_id_token>
 
     Query params:
+      token       — Firebase ID token (required)
       timeframe   — Timeframe enum value (default: 15Min)
       horizon     — Prediction horizon in bars (default: 10)
     """
-    await websocket.accept()
+    # Authenticate before accepting
+    uid = await _verify_ws_token(websocket)
+    if not uid:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
 
-    # Parse query params
-    params = dict(websocket.query_params)
-    try:
-        timeframe = Timeframe(params.get("timeframe", Timeframe.M15))
-    except ValueError:
-        timeframe = Timeframe.M15
+    # Validate ticker
+    ticker_upper = ticker.strip().upper()
+    if not _TICKER_RE.match(ticker_upper):
+        await websocket.close(code=4002, reason="Invalid ticker")
+        return
 
-    try:
-        horizon = int(params.get("horizon", 10))
-    except (TypeError, ValueError):
-        horizon = 10
-    horizon = max(1, min(50, horizon))
-
-    ticker = ticker.upper()
-    key: StreamKey = (ticker, timeframe, horizon)
-
-    logger.info(
-        "ws_connected",
-        ticker=ticker,
-        timeframe=timeframe,
-        horizon=horizon,
-        remote=websocket.client,
-    )
-
-    # Grab services from app.state
-    svc = get_market_data(websocket)
-    engine = get_analysis_engine(websocket)
-    model = get_predictive_model(websocket)
-
-    settings = get_settings()
-    tick_interval = settings.tick_interval_ms / 1000
-
-    async def start_producer() -> None:
-        await _run_stream(
-            key=key,
-            tick_interval=tick_interval,
-            svc=svc,
-            engine=engine,
-            model=model,
-        )
-
-    subscribers = await _subscribe(
-        websocket,
-        key,
-        start_producer=start_producer,
-    )
+    # Enforce connection limit
+    global _active_ws_count
+    async with _ws_count_lock:
+        if _active_ws_count >= _MAX_WS_CONNECTIONS:
+            await websocket.close(code=4003, reason="Too many connections")
+            return
+        _active_ws_count += 1
 
     try:
-        # Send ACK so the client knows the connection is live.
-        await websocket.send_text(
-            WSMessage(
-                type=WSMessageType.SUBSCRIBE_ACK,
-                data={"ticker": ticker, "timeframe": timeframe, "horizon": horizon},
-                timestamp=int(time.time()),
-            ).model_dump_json()
-        )
+        await websocket.accept()
 
-        # Keep socket open and detect disconnects.
-        while True:
-            message = await websocket.receive()
-            if message.get("type") == "websocket.disconnect":
-                break
-    except WebSocketDisconnect:
-        logger.info("ws_disconnected", ticker=ticker, timeframe=timeframe, horizon=horizon)
-    except Exception as exc:
-        logger.error("ws_connection_error", ticker=ticker, error=str(exc))
+        # Parse query params
+        params = dict(websocket.query_params)
         try:
-            await websocket.send_text(
-                WSMessage(
-                    type=WSMessageType.ERROR,
-                    data={"message": str(exc)},
-                    timestamp=int(time.time()),
-                ).model_dump_json()
-            )
-        except Exception:
-            pass
-    finally:
-        remaining = await _unsubscribe(websocket, key)
+            timeframe = Timeframe(params.get("timeframe", Timeframe.M15))
+        except ValueError:
+            timeframe = Timeframe.M15
+
+        try:
+            horizon = int(params.get("horizon", 10))
+        except (TypeError, ValueError):
+            horizon = 10
+        horizon = max(1, min(50, horizon))
+
+        ticker = ticker_upper
+        key: StreamKey = (ticker, timeframe, horizon)
+
         logger.info(
-            "ws_cleanup",
+            "ws_connected",
             ticker=ticker,
             timeframe=timeframe,
             horizon=horizon,
-            remaining=remaining,
-            subscribers=subscribers,
+            uid=uid,
+            remote=websocket.client,
         )
+
+        # Grab services from app.state
+        svc = get_market_data(websocket)
+        engine = get_analysis_engine(websocket)
+        model = get_predictive_model(websocket)
+
+        settings = get_settings()
+        tick_interval = settings.tick_interval_ms / 1000
+
+        async def start_producer() -> None:
+            await _run_stream(
+                key=key,
+                tick_interval=tick_interval,
+                svc=svc,
+                engine=engine,
+                model=model,
+            )
+
+        subscribers = await _subscribe(
+            websocket,
+            key,
+            start_producer=start_producer,
+        )
+
+        try:
+            # Send ACK so the client knows the connection is live.
+            await websocket.send_text(
+                WSMessage(
+                    type=WSMessageType.SUBSCRIBE_ACK,
+                    data={"ticker": ticker, "timeframe": timeframe, "horizon": horizon},
+                    timestamp=int(time.time()),
+                ).model_dump_json()
+            )
+
+            # Keep socket open and detect disconnects.
+            while True:
+                message = await websocket.receive()
+                if message.get("type") == "websocket.disconnect":
+                    break
+        except WebSocketDisconnect:
+            logger.info("ws_disconnected", ticker=ticker, timeframe=timeframe, horizon=horizon)
+        except Exception as exc:
+            logger.error("ws_connection_error", ticker=ticker, error=str(exc))
+            try:
+                await websocket.send_text(
+                    WSMessage(
+                        type=WSMessageType.ERROR,
+                        data={"message": "Internal error"},
+                        timestamp=int(time.time()),
+                    ).model_dump_json()
+                )
+            except Exception:
+                pass
+        finally:
+            remaining = await _unsubscribe(websocket, key)
+            logger.info(
+                "ws_cleanup",
+                ticker=ticker,
+                timeframe=timeframe,
+                horizon=horizon,
+                remaining=remaining,
+                subscribers=subscribers,
+            )
+    finally:
+        async with _ws_count_lock:
+            _active_ws_count -= 1

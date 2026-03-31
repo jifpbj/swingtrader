@@ -14,11 +14,14 @@ from typing import Any, Literal
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request, Response, status
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/trading", tags=["trading"])
+limiter = Limiter(key_func=get_remote_address)
 
 ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
 ALPACA_LIVE_URL  = "https://api.alpaca.markets"
@@ -55,7 +58,7 @@ async def _request(
     if base_url not in _ALLOWED_BASE_URLS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid Alpaca base URL: {base_url}",
+            detail="Invalid trading API base URL.",
         )
     client = _get_client(base_url)
     resp = await client.request(
@@ -74,14 +77,18 @@ async def _request(
         )
     if resp.status_code == 422:
         body = resp.json() if resp.content else {}
+        logger.warning("alpaca_422", path=path, body=body)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=body.get("message", "Alpaca rejected the request."),
+            detail="Order rejected. Please check your parameters.",
         )
     if not resp.is_success:
         body = resp.json() if resp.content else {}
-        msg = body.get("message", body.get("detail", str(resp.status_code)))
-        raise HTTPException(status_code=resp.status_code, detail=f"Alpaca: {msg}")
+        logger.error("alpaca_error", path=path, status=resp.status_code, body=body)
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail="Trading service error. Please try again.",
+        )
 
     return resp.json() if resp.content else {}
 
@@ -273,7 +280,9 @@ async def get_orders(
     status_code=201,
     summary="Place an order",
 )
+@limiter.limit("10/minute")
 async def place_order(
+    request: Request,
     req: PlaceOrderRequest,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
