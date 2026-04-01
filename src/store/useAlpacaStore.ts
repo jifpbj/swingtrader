@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import type { AlpacaAccount, AlpacaOrder, AlpacaPosition, AlpacaPortfolioHistory, PlaceOrderRequest } from "@/types/market";
 import type { TradingMode } from "@/types/strategy";
 
@@ -29,10 +29,13 @@ async function alpacaFetch<T>(
   mode: TradingMode,
   init?: RequestInit,
 ): Promise<T> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Not authenticated");
   const resp = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       ...alpacaHeaders(apiKey, secretKey, mode),
+      Authorization: `Bearer ${token}`,
       ...(init?.headers ?? {}),
     },
   });

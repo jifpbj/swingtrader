@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.api.dependencies import AuthenticatedUID
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -181,6 +182,7 @@ def _parse_order(o: dict) -> AlpacaOrder:
     summary="Fetch Alpaca trading account info",
 )
 async def get_account(
+    uid: AuthenticatedUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
     x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
@@ -206,6 +208,7 @@ async def get_account(
     summary="Fetch portfolio value history",
 )
 async def get_portfolio_history(
+    uid: AuthenticatedUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
     x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
@@ -234,6 +237,7 @@ async def get_portfolio_history(
     summary="List open positions",
 )
 async def get_positions(
+    uid: AuthenticatedUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
     x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
@@ -260,6 +264,7 @@ async def get_positions(
     summary="List orders",
 )
 async def get_orders(
+    uid: AuthenticatedUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
     x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
@@ -284,6 +289,7 @@ async def get_orders(
 async def place_order(
     request: Request,
     req: PlaceOrderRequest,
+    uid: AuthenticatedUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
     x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
@@ -322,6 +328,7 @@ async def place_order(
     summary="Cancel a single order",
 )
 async def cancel_order(
+    uid: AuthenticatedUID,
     order_id: str = Path(...),
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
@@ -341,6 +348,7 @@ async def cancel_order(
     summary="Cancel all open orders",
 )
 async def cancel_all_orders(
+    uid: AuthenticatedUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),
     x_alpaca_secret: str = Header(..., alias="X-Alpaca-Secret"),
     x_alpaca_base_url: str = Header(default=ALPACA_PAPER_URL, alias="X-Alpaca-Base-Url"),
