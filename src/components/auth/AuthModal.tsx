@@ -15,12 +15,12 @@ import { X, LogIn, UserPlus, Chrome } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const FRIENDLY: Record<string, string> = {
-  "auth/user-not-found":       "No account found with that email.",
-  "auth/wrong-password":       "Incorrect password.",
-  "auth/invalid-credential":   "Email or password is incorrect.",
+  "auth/user-not-found": "No account found with that email.",
+  "auth/wrong-password": "Incorrect password.",
+  "auth/invalid-credential": "Email or password is incorrect.",
   "auth/email-already-in-use": "An account with this email already exists.",
-  "auth/weak-password":        "Password must be at least 6 characters.",
-  "auth/invalid-email":        "Please enter a valid email address.",
+  "auth/weak-password": "Password must be at least 6 characters.",
+  "auth/invalid-email": "Please enter a valid email address.",
   "auth/popup-closed-by-user": "Sign-in popup was closed.",
   "auth/cancelled-popup-request": "Sign-in was cancelled.",
 };
@@ -30,22 +30,27 @@ function friendlyError(code: string): string {
 }
 
 export function AuthModal() {
-  const authModalOpen = useAuthStore(s => s.authModalOpen);
-  const closeAuthModal = useAuthStore(s => s.closeAuthModal);
+  const authModalOpen = useAuthStore((s) => s.authModalOpen);
+  const closeAuthModal = useAuthStore((s) => s.closeAuthModal);
 
-  const [tab, setTab]           = useState<"signin" | "signup">("signin");
-  const [email, setEmail]       = useState("");
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm]   = useState("");
-  const [error, setError]       = useState<string | null>(null);
-  const [busy, setBusy]         = useState(false);
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   function reset() {
-    setEmail(""); setPassword(""); setConfirm(""); setError(null); setBusy(false);
+    setEmail("");
+    setPassword("");
+    setConfirm("");
+    setError(null);
+    setBusy(false);
   }
 
   function switchTab(t: "signin" | "signup") {
-    setTab(t); setError(null);
+    setTab(t);
+    setError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -62,7 +67,11 @@ export function AuthModal() {
       if (tab === "signin") {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const cred = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password,
+        );
         await setDoc(doc(db, "users", cred.user.uid), {
           email,
           createdAt: serverTimestamp(),
@@ -82,7 +91,15 @@ export function AuthModal() {
     setError(null);
     setBusy(true);
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      await setDoc(
+        doc(db, "users", cred.user.uid),
+        {
+          email: cred.user.email,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
       reset();
       closeAuthModal();
     } catch (err: unknown) {
@@ -96,16 +113,22 @@ export function AuthModal() {
   return (
     <Dialog.Root
       open={authModalOpen}
-      onOpenChange={(open) => { if (!open) { reset(); closeAuthModal(); } }}
+      onOpenChange={(open) => {
+        if (!open) {
+          reset();
+          closeAuthModal();
+        }
+      }}
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm glass-bright rounded-2xl p-6 shadow-2xl border border-zinc-700/60 focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
-
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
             <Dialog.Title className="text-base font-semibold text-zinc-100">
-              {tab === "signin" ? "Sign in to Predict Alpha" : "Create your account"}
+              {tab === "signin"
+                ? "Sign in to Predict Alpha"
+                : "Create your account"}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded-lg hover:bg-zinc-700/50">
@@ -122,7 +145,7 @@ export function AuthModal() {
                 "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                 tab === "signin"
                   ? "bg-amber-400 text-zinc-900 shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  : "text-zinc-400 hover:text-zinc-200",
               )}
             >
               <LogIn className="size-3" /> Sign In
@@ -133,7 +156,7 @@ export function AuthModal() {
                 "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                 tab === "signup"
                   ? "bg-amber-400 text-zinc-900 shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  : "text-zinc-400 hover:text-zinc-200",
               )}
             >
               <UserPlus className="size-3" /> Create Account
@@ -143,11 +166,13 @@ export function AuthModal() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">Email</label>
+              <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
                 placeholder="you@example.com"
@@ -156,13 +181,17 @@ export function AuthModal() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">Password</label>
+              <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete={tab === "signin" ? "current-password" : "new-password"}
+                autoComplete={
+                  tab === "signin" ? "current-password" : "new-password"
+                }
                 placeholder="••••••••"
                 className="bg-zinc-800/80 border border-zinc-700/60 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-400/60 focus:ring-1 focus:ring-amber-400/30 transition-all"
               />
@@ -170,11 +199,13 @@ export function AuthModal() {
 
             {tab === "signup" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">Confirm Password</label>
+                <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+                  Confirm Password
+                </label>
                 <input
                   type="password"
                   value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
+                  onChange={(e) => setConfirm(e.target.value)}
                   required
                   autoComplete="new-password"
                   placeholder="••••••••"

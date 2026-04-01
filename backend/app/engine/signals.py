@@ -290,29 +290,29 @@ def detect_signals(candles: list[dict], strategy: dict) -> list[CrossoverSignal]
     params    = strategy.get("params", {})
 
     if indicator == "EMA":
-        return detect_ema_signals(candles, int(params.get("emaPeriod", 20)))
+        return detect_ema_signals(candles, int(params["emaPeriod"]))
 
     if indicator == "RSI":
         return detect_rsi_signals(
             candles,
-            int(params.get("rsiPeriod", 14)),
-            float(params.get("rsiOverbought", 70)),
-            float(params.get("rsiOversold", 30)),
+            int(params["rsiPeriod"]),
+            float(params["rsiOverbought"]),
+            float(params["rsiOversold"]),
         )
 
     if indicator == "MACD":
         return detect_macd_signals(
             candles,
-            int(params.get("macdFast", 12)),
-            int(params.get("macdSlow", 26)),
-            int(params.get("macdSignal", 9)),
+            int(params["macdFast"]),
+            int(params["macdSlow"]),
+            int(params["macdSignal"]),
         )
 
     if indicator == "BB":
         return detect_bb_signals(
             candles,
-            int(params.get("bbPeriod", 20)),
-            float(params.get("bbStdDev", 2.0)),
+            int(params["bbPeriod"]),
+            float(params["bbStdDev"]),
         )
 
     if indicator == "TD9":

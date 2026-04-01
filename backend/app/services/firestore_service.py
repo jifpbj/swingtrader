@@ -139,6 +139,7 @@ async def get_active_strategies() -> list[tuple[str, dict[str, Any]]]:
                 data = doc.to_dict() or {}
                 data["id"] = doc.id
                 results.append((uid, data))
+                logger.debug("firestore_strategy_loaded", uid=uid, strategy_id=doc.id, data=data)
     except Exception as exc:
         err_msg = str(exc)
         if "index" in err_msg.lower() or "FAILED_PRECONDITION" in err_msg:
