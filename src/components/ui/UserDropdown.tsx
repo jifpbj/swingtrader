@@ -14,12 +14,10 @@ import {
   Key,
   CreditCard,
   BarChart2,
-  UserPlus,
   Zap,
   Crown,
   XCircle,
   Bell,
-  Lock,
   SlidersHorizontal,
 } from "lucide-react";
 import { useUIStore, type Theme } from "@/store/useUIStore";
@@ -70,8 +68,6 @@ export function UserDropdown() {
   const setSubscriptionModalOpen       = useUIStore((s) => s.setSubscriptionModalOpen);
   const setNotificationSettingsOpen    = useUIStore((s) => s.setNotificationSettingsOpen);
 
-  const tradingMode    = useAlpacaStore((s) => s.tradingMode);
-  const setTradingMode = useAlpacaStore((s) => s.setTradingMode);
 
   const plan   = useSubscriptionStore((s) => s.plan);
   const status = useSubscriptionStore((s) => s.status);
@@ -106,8 +102,8 @@ export function UserDropdown() {
     { value: "system", icon: <Monitor className="size-3.5" />, label: "System" },
   ];
 
-  // ── Data mode: which of the three is active
-  const dataMode = demoMode ? "demo" : tradingMode; // "demo" | "paper" | "live"
+  // ── Data mode: which of the two is active (live disabled in beta)
+  const dataMode = demoMode ? "demo" : "paper";
 
   // ── Pulse dot for live/paper when WS connected
   function PulseDot() {
@@ -225,7 +221,7 @@ export function UserDropdown() {
 
             {/* Paper — free for all users */}
             <button
-              onClick={() => { setDemoMode(false); setTradingMode("paper"); }}
+              onClick={() => { setDemoMode(false); }}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
                 dataMode === "paper"
@@ -237,14 +233,7 @@ export function UserDropdown() {
               {dataMode === "paper" && wsConnected && <PulseDot />}
             </button>
 
-            {/* Live (paid only) */}
-            {isPaid() ? (
-              <LiveButton dataMode={dataMode} wsConnected={wsConnected} />
-            ) : (
-              <PaidTooltip>
-                <LiveButton dataMode={dataMode} wsConnected={wsConnected} locked />
-              </PaidTooltip>
-            )}
+            {/* Live trading disabled in beta */}
           </div>
 
           <Divider />
@@ -262,25 +251,14 @@ export function UserDropdown() {
             {user && <SubBadge />}
           </button>
 
-          {/* API Keys (paid only) */}
-          <PaidTooltip>
-            <button
-              onClick={() => {
-                if (!isPaid()) { setSubscriptionModalOpen(true); close(); return; }
-                setSettingsOpen(true); close();
-              }}
-              className={cn(
-                "w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors",
-                isPaid()
-                  ? "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
-                  : "text-zinc-400 dark:text-zinc-600",
-              )}
-            >
-              <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-              <span className="flex-1 text-left">API Keys</span>
-              {!isPaid() && <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />}
-            </button>
-          </PaidTooltip>
+          {/* API Keys — open to all users in beta */}
+          <button
+            onClick={() => { setSettingsOpen(true); close(); }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+          >
+            <Key className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+            <span className="flex-1 text-left">API Keys</span>
+          </button>
 
           {/* Notifications */}
           <button
@@ -303,62 +281,16 @@ export function UserDropdown() {
             Screener
           </Link>
 
-          {/* Portfolio (paid only) */}
-          {isPaid() ? (
-            <>
-              <Link
-                href="/portfolio"
-                onClick={close}
-                className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
-              >
-                <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-                <span className="flex-1">Paper Portfolio</span>
-              </Link>
-              <Link
-                href="/portfolio/live"
-                onClick={close}
-                className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
-              >
-                <BarChart2 className="size-3.5 text-emerald-500 dark:text-emerald-500 shrink-0" />
-                <span className="flex-1">Live Portfolio</span>
-                <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 font-semibold">LIVE</span>
-              </Link>
-            </>
-          ) : (
-            <PaidTooltip>
-              <button
-                onClick={() => { setSubscriptionModalOpen(true); close(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
-              >
-                <BarChart2 className="size-3.5 shrink-0" />
-                <span className="flex-1 text-left">Portfolio</span>
-                <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
-              </button>
-            </PaidTooltip>
-          )}
-
-          {/* Register for Live Trading (paid only) */}
-          {isPaid() ? (
-            <Link
-              href="/account/onboard"
-              onClick={close}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
-            >
-              <UserPlus className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
-              Register for Live Trading
-            </Link>
-          ) : (
-            <PaidTooltip>
-              <button
-                onClick={() => { setSubscriptionModalOpen(true); close(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 transition-colors"
-              >
-                <UserPlus className="size-3.5 shrink-0" />
-                <span className="flex-1 text-left">Register for Live Trading</span>
-                <Lock className="size-3 text-zinc-500 dark:text-zinc-600 shrink-0" />
-              </button>
-            </PaidTooltip>
-          )}
+          {/* Paper Portfolio — open to all users in beta */}
+          <Link
+            href="/portfolio"
+            onClick={close}
+            className="flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+          >
+            <BarChart2 className="size-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+            <span className="flex-1">Paper Portfolio</span>
+          </Link>
+          {/* Live Trading Registration — coming soon */}
 
           <Divider />
 
@@ -386,49 +318,3 @@ export function UserDropdown() {
   );
 }
 
-// ─── Live button ──────────────────────────────────────────────────────────────
-function LiveButton({
-  dataMode,
-  wsConnected,
-  locked = false,
-}: {
-  dataMode: string;
-  wsConnected: boolean;
-  locked?: boolean;
-}) {
-  const setDemoMode    = useUIStore((s) => s.setDemoMode);
-  const setTradingMode = useAlpacaStore((s) => s.setTradingMode);
-
-  function PulseDot() {
-    return (
-      <span className="relative flex size-1.5 shrink-0">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75" />
-        <span className="relative inline-flex rounded-full size-1.5 bg-current" />
-      </span>
-    );
-  }
-
-  return (
-    <div className="relative flex-1">
-      <button
-        onClick={() => {
-          if (locked) return;
-          setDemoMode(false);
-          setTradingMode("live");
-        }}
-        className={cn(
-          "w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md font-medium transition-all",
-          locked
-            ? "text-zinc-500 dark:text-zinc-600 cursor-not-allowed"
-            : dataMode === "live"
-            ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-            : "text-zinc-400 dark:text-muted-foreground hover:text-zinc-700 dark:hover:text-foreground",
-        )}
-      >
-        {locked && <Lock className="size-2.5 shrink-0" />}
-        Live
-        {dataMode === "live" && wsConnected && <PulseDot />}
-      </button>
-    </div>
-  );
-}

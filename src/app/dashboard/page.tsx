@@ -32,7 +32,7 @@ export default function TradingDashboard() {
   useTradeNotifications();
   const user        = useAuthStore((s) => s.user);
   const tradingMode = useAlpacaStore((s) => s.tradingMode);
-  const hasAlpacaKey = useAlpacaStore((s) => !!(s.apiKey || s.liveApiKey));
+  const hasAlpacaKey = useAlpacaStore((s) => !!s.apiKey);
   const candlestickVisible = useUIStore((s) => s.candlestickVisible);
   const timeframe   = useUIStore((s) => s.timeframe);
   const strategies  = useStrategyStore((s) => s.strategies);

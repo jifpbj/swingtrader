@@ -47,7 +47,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user, loading: false });
       if (user) {
         useTradeStore.getState().loadTrades(user.uid);
-        void useAlpacaStore.getState().loadCredentialsFromDb(user.uid);
+        // void useAlpacaStore.getState().loadCredentialsFromDb(user.uid);  // DISABLED — paper keys stored in localStorage only (demo/beta)
         void useBrokerStore.getState().loadFromFirestore(user.uid);
         useSubscriptionStore.getState().loadSubscription(user.uid);
       } else {

@@ -195,58 +195,10 @@ async def stripe_webhook(request: Request) -> dict:
 
 # ─── Cancel subscription endpoint ─────────────────────────────────────────────
 
-@router.post("/api/v1/billing/cancel-subscription", status_code=200)
+@router.post("/api/v1/billing/cancel-subscription", status_code=503)
 async def cancel_subscription(request: Request) -> dict:
-    """
-    Cancel the calling user's active Stripe subscription immediately.
-
-    Flow:
-      1. Verify Firebase ID token from Authorization header → get uid
-      2. Read stripeSubscriptionId from users/{uid}/billing/subscription
-      3. Cancel on Stripe (immediate — no proration period)
-      4. Return {"status": "cancelled"}
-
-    The existing webhook handler (customer.subscription.deleted) will then fire
-    and call clear_subscription() automatically — no manual Firestore write needed.
-    """
-    settings = get_settings()
-
-    # 1. Authenticate caller via Firebase ID token
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.removeprefix("Bearer ").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Missing Authorization token")
-
-    try:
-        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
-    except Exception as exc:
-        logger.warning("cancel_subscription_invalid_token", error=str(exc))
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    uid: str = decoded["uid"]
-
-    # 2. Fetch subscription ID from Firestore
-    db = _db()
-    try:
-        snap = await db.document(f"users/{uid}/billing/subscription").get()
-        sub_id: str | None = (snap.to_dict() or {}).get("stripeSubscriptionId")
-    except Exception as exc:
-        logger.error("cancel_subscription_firestore_read_failed", uid=uid, error=str(exc))
-        raise HTTPException(status_code=500, detail="Could not read subscription data")
-
-    if not sub_id:
-        raise HTTPException(status_code=404, detail="No active subscription found")
-
-    # 3. Cancel on Stripe
-    stripe.api_key = settings.stripe_secret_key
-    try:
-        await asyncio.to_thread(stripe.Subscription.cancel, sub_id)
-        logger.info("stripe_subscription_cancelled", uid=uid, subscription_id=sub_id)
-    except stripe.InvalidRequestError as exc:
-        logger.warning("stripe_cancel_invalid_request", uid=uid, error=str(exc))
-        raise HTTPException(status_code=400, detail="Unable to cancel subscription. It may already be cancelled.")
-    except Exception as exc:
-        logger.error("stripe_cancel_failed", uid=uid, error=str(exc))
-        raise HTTPException(status_code=500, detail="Subscription cancellation failed. Please try again.")
-
-    return {"status": "cancelled"}
+    """Disabled during demo/beta — subscription management is not available yet."""
+    raise HTTPException(
+        status_code=503,
+        detail="Subscription management is not available during the beta period. Please contact support.",
+    )

@@ -22,6 +22,8 @@ from __future__ import annotations
 import asyncio
 import os
 from collections import defaultdict
+from datetime import datetime, time as dt_time
+from zoneinfo import ZoneInfo
 
 from app.core.logging import get_logger
 from app.engine.auto_trader import check_strategy
@@ -41,8 +43,20 @@ from app.models.schemas import Timeframe
 logger = get_logger(__name__)
 
 # Configurable via AUTO_TRADE_INTERVAL_SECONDS env var.
-# Default 15 s — fast enough to catch 1m candle signals in near real-time.
-POLL_INTERVAL_SECONDS = int(os.environ.get("AUTO_TRADE_INTERVAL_SECONDS", "15"))
+# Default 900 s (15 min) to reduce API costs in demo/beta mode.
+POLL_INTERVAL_SECONDS = int(os.environ.get("AUTO_TRADE_INTERVAL_SECONDS", "900"))
+
+_US_EASTERN = ZoneInfo("America/New_York")
+_MARKET_OPEN  = dt_time(9, 30)
+_MARKET_CLOSE = dt_time(16, 0)
+
+
+def _is_market_open() -> bool:
+    """Return True only during US equity market hours (Mon–Fri 09:30–16:00 ET)."""
+    now = datetime.now(_US_EASTERN)
+    if now.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    return _MARKET_OPEN <= now.time() <= _MARKET_CLOSE
 
 _FRONTEND_TO_TF: dict[str, Timeframe] = {
     "1m":    Timeframe.M1,
@@ -162,6 +176,12 @@ async def auto_trade_loop(
     logger.info("auto_trade_scheduler_started", interval_s=POLL_INTERVAL_SECONDS)
 
     while True:
+        # ── US market hours guard ─────────────────────────────────────────────
+        if not _is_market_open():
+            logger.debug("auto_trade_outside_market_hours")
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+            continue
+
         try:
             # ── Fetch active strategies (autoTrade=True) ──────────────────────
             strategies = await get_active_strategies()

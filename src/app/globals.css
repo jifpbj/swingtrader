@@ -265,6 +265,15 @@ body {
 .gradient-bear { background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.02)); }
 .gradient-zinc { background: linear-gradient(180deg, var(--gradient-zinc-start) 0%, var(--gradient-zinc-end) 100%); }
 
+/* ─── Landing page CTA pulse ─────────────────────────────────────────────── */
+@keyframes cta-pulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 1;   }
+}
+.animate-cta-pulse {
+  animation: cta-pulse 4s ease-in-out infinite;
+}
+
 /* ─── Chart container reset ──────────────────────────────────────────────── */
 .tv-chart-container { position: relative; }
 .tv-chart-container canvas { display: block; }

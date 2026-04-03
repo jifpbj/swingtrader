@@ -3,56 +3,26 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Check,
   Zap,
   Bot,
   BrainCircuit,
   BarChart2,
-  Crown,
   Crosshair,
 } from "lucide-react";
-import { useAuthStore } from "@/store/useAuthStore";
 import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────
-   Stripe Payment Link URLs — set these in .env.local:
-     NEXT_PUBLIC_STRIPE_BASIC_LINK=https://buy.stripe.com/...
-     NEXT_PUBLIC_STRIPE_PREMIUM_LINK=https://buy.stripe.com/...
-   Falls back to "#" in dev so buttons never hard-break.
+   DISABLED in demo/beta mode — Stripe payment links hidden.
+   Re-enable by uncommenting when subscriptions are live.
 ───────────────────────────────────────────────────────────── */
-const STRIPE_BASIC        = process.env.NEXT_PUBLIC_STRIPE_BASIC_LINK        ?? "#";
-const STRIPE_BASIC_ANNUAL = process.env.NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK ?? "#";
-const STRIPE_PREMIUM      = process.env.NEXT_PUBLIC_STRIPE_PREMIUM_LINK      ?? "#";
+// const STRIPE_BASIC        = process.env.NEXT_PUBLIC_STRIPE_BASIC_LINK        ?? "#";
+// const STRIPE_BASIC_ANNUAL = process.env.NEXT_PUBLIC_STRIPE_BASIC_ANNUAL_LINK ?? "#";
+// const STRIPE_PREMIUM      = process.env.NEXT_PUBLIC_STRIPE_PREMIUM_LINK      ?? "#";
 
-/* ── Tier feature lists ──────────────────────────────────────── */
-const FREE_FEATURES = [
-  "Backtest all 6 indicators — EMA, RSI, MACD, Bollinger Bands, TD Sequential & multi-indicator",
-  "Free AI analysis of every indicator signal",
-  "Set up and save unlimited strategies",
-  "Browser notifications when it's time to trade",
-  "Email, text & mobile app alerts coming soon to free tier",
-];
-
-const BASIC_FEATURES = [
-  "Everything in Free",
-  "Register & connect your own Alpaca brokerage account",
-  "Paper Trading — automated, zero-risk practice",
-  "Live Trading (coming soon)",
-  "24/7 set-it-and-forget-it robo / algo trading engine",
-  "Server-side execution — trades run even when your tab is closed",
-];
-
-const EXEC_FEATURES = [
-  "Everything in Basic",
-  "Real AI trading signals (not rule-based heuristics)",
-  "Temporal Fusion Transformer (TFT) predictive models",
-  "Long Short-Term Memory (LSTM) deep learning models",
-  "Momentum & mean-reversion strategy templates",
-  "Sentiment-driven algorithmic trading",
-  "Monte Carlo risk simulations",
-  "Kelly Criterion position sizing",
-  "Priority Customer Support — < 4h response",
-];
+/* ── Tier feature lists — kept for reference, not rendered in beta ── */
+// const FREE_FEATURES = [ ... ];
+// const BASIC_FEATURES = [ ... ];
+// const EXEC_FEATURES = [ ... ];
 
 /* ── Try-Now CTA button with cycling witty labels ───────────── */
 const TRY_NOW_LABELS = [
@@ -88,19 +58,12 @@ function TryNowButton() {
       {/* soft outer halo — large blur, very low opacity, slow pulse */}
       <div className="relative">
         <div
-          className="absolute inset-0 rounded-2xl pointer-events-none"
+          className="absolute inset-0 rounded-2xl pointer-events-none animate-cta-pulse"
           style={{
             boxShadow:
               "0 0 40px 18px rgba(52,211,153,0.22), 0 0 100px 40px rgba(52,211,153,0.09)",
-            animation: "tryCTAPulse 4s ease-in-out infinite",
           }}
         />
-        <style>{`
-          @keyframes tryCTAPulse {
-            0%, 100% { opacity: 0.7; }
-            50%       { opacity: 1;   }
-          }
-        `}</style>
         <Link
           href="/dashboard"
           className={cn(
@@ -124,27 +87,12 @@ function TryNowButton() {
   );
 }
 
-/* ── Reusable check-mark list ────────────────────────────────── */
-function FeatureList({ items, accent }: { items: string[]; accent: string }) {
-  return (
-    <ul className="flex flex-col gap-2.5 flex-1">
-      {items.map((item) => (
-        <li key={item} className="flex items-start gap-2 text-xs text-zinc-300 leading-relaxed">
-          <Check className={cn("size-3.5 shrink-0 mt-0.5", accent)} />
-          {item}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /* ── Main page ───────────────────────────────────────────────── */
 export default function HomePage() {
-  const openAuthModal = useAuthStore((s) => s.openAuthModal);
-  const [annual, setAnnual] = useState(false);
-
-  const basicPrice = annual ? "7.20" : "9";
-  const execPrice  = annual ? "112"  : "150";
+  // const [annual, setAnnual] = useState(false);  // DISABLED — pricing hidden in beta
+  // const basicPrice = annual ? "7.20" : "9";
+  // const execPrice  = annual ? "112"  : "150";
 
   return (
     /* h-screen + overflow-y-auto: body is h-screen overflow-hidden, so the child
@@ -164,12 +112,7 @@ export default function HomePage() {
         </Link>
         {/* Nav links */}
         <div className="flex items-center gap-4">
-          <a
-            href="#pricing"
-            className="hidden md:block text-xs text-zinc-400 hover:text-zinc-100 transition-colors font-medium"
-          >
-            Pricing
-          </a>
+          {/* Pricing link hidden in beta */}
           <Link
             href="/dashboard"
             className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-400 shadow-sm shadow-emerald-500/30 transition-all"
@@ -350,182 +293,9 @@ export default function HomePage() {
         </section>
 
         {/* ══════════════════════════════════════════
-            PRICING (anchor target)
+            PRICING — hidden in demo/beta mode
+            Re-enable this section when subscriptions go live.
         ══════════════════════════════════════════ */}
-        <section id="pricing" className="pb-24 scroll-mt-16">
-
-          <div className="text-center mb-2">
-            <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-widest">Plans &amp; Pricing</span>
-          </div>
-
-          {/* Billing toggle */}
-          <div className="flex items-center justify-center gap-4 py-8">
-            <span className={cn("text-sm font-medium transition-colors", !annual ? "text-zinc-100" : "text-zinc-500")}>
-              Monthly
-            </span>
-            <button
-              onClick={() => setAnnual((v) => !v)}
-              className={cn(
-                "relative w-12 h-6 rounded-full transition-colors border",
-                annual ? "bg-emerald-500/30 border-emerald-500/50" : "bg-zinc-800 border-white/10"
-              )}
-              aria-label="Toggle billing period"
-            >
-              <span
-                className={cn(
-                  "absolute left-0 top-0.5 size-5 rounded-full bg-white transition-transform duration-200 shadow",
-                  annual ? "translate-x-[26px]" : "translate-x-[2px]"
-                )}
-              />
-            </button>
-            <span className={cn("text-sm font-medium transition-colors flex items-center gap-2", annual ? "text-zinc-100" : "text-zinc-500")}>
-              Annual
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
-                SAVE 20%+
-              </span>
-            </span>
-          </div>
-
-          {/* Pricing cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-
-            {/* ── FREE ── */}
-            <div className="glass rounded-2xl p-6 flex flex-col gap-4 animate-fade-up" style={{ animationDelay: "0ms" }}>
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-zinc-800/80 border border-white/5 flex items-center justify-center">
-                  <Zap className="size-4 text-zinc-400" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-semibold">Free</p>
-                  <p className="text-[10px] text-zinc-600">No credit card needed</p>
-                </div>
-              </div>
-              <div className="flex items-end gap-1.5">
-                <span className="text-5xl font-black text-zinc-100 font-mono leading-none">$0</span>
-                <span className="text-zinc-500 text-sm mb-1">/mo</span>
-              </div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Everything you need to learn algorithmic trading and validate strategies — before risking a single dollar of real capital.
-              </p>
-              <FeatureList items={FREE_FEATURES} accent="text-zinc-500" />
-              <button
-                onClick={openAuthModal}
-                className="mt-auto w-full py-3 rounded-xl text-sm font-semibold text-zinc-200 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all"
-              >
-                Get Started Free
-              </button>
-            </div>
-
-            {/* ── BASIC (Featured) ── */}
-            <div
-              className="relative glass-bright rounded-2xl p-6 flex flex-col gap-4 animate-fade-up ring-1 ring-emerald-500/40 shadow-2xl shadow-emerald-500/10 md:scale-[1.02]"
-              style={{ animationDelay: "80ms" }}
-            >
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-emerald-500/40 whitespace-nowrap">
-                Most Popular
-              </div>
-              <div className="flex items-center gap-3 mt-2">
-                <div className="size-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                  <Bot className="size-4 text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-emerald-400 uppercase tracking-widest font-semibold">Basic</p>
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/25 text-amber-400 text-[9px] font-bold uppercase tracking-wide">
-                    Limited-time beta price
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-end gap-1.5">
-                  <span className="text-5xl font-black text-zinc-100 font-mono leading-none">${basicPrice}</span>
-                  <span className="text-zinc-500 text-sm mb-1">/mo</span>
-                </div>
-                {annual
-                  ? <p className="text-[11px] text-zinc-500 mt-1">$86.40 billed annually</p>
-                  : <p className="text-[11px] text-zinc-500 mt-1">or $86.40/yr — save 20%</p>
-                }
-                <p className="text-[11px] text-amber-400/70 italic mt-1.5">
-                  Moving to $29/mo after beta. Grandfathered in at $9 while subscribed.
-                </p>
-              </div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Connect your Alpaca brokerage and let the algorithm trade for you, 24 hours a day — no screen time required.
-              </p>
-              <FeatureList items={BASIC_FEATURES} accent="text-emerald-500" />
-              <a
-                href={annual ? STRIPE_BASIC_ANNUAL : STRIPE_BASIC}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-auto w-full py-3 rounded-xl text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/30 hover:shadow-emerald-400/40 transition-all text-center block"
-              >
-                Start Trading →
-              </a>
-            </div>
-
-            {/* ── EXECUTIVE ── */}
-            <div
-              className="glass rounded-2xl p-6 flex flex-col gap-4 animate-fade-up ring-1 ring-amber-500/25 shadow-xl shadow-amber-500/5"
-              style={{ animationDelay: "160ms" }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="size-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                  <Crown className="size-4 text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-[11px] text-amber-400 uppercase tracking-widest font-semibold">Executive</p>
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-400/80 text-[9px] font-bold uppercase tracking-wide">
-                    Grandfathered pricing
-                  </span>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-end gap-1.5">
-                  <span className="text-5xl font-black text-zinc-100 font-mono leading-none">${execPrice}</span>
-                  <span className="text-zinc-500 text-sm mb-1">/mo</span>
-                </div>
-                {annual
-                  ? <p className="text-[11px] text-zinc-500 mt-1">$1,350 billed annually — save 25%</p>
-                  : <p className="text-[11px] text-zinc-500 mt-1">or $1,350/yr — save 25%</p>
-                }
-                <p className="text-[11px] text-amber-400/70 italic mt-1.5">
-                  Price locked for active subscribers as the platform grows.
-                </p>
-              </div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Real trained AI models, institutional-grade risk tools, and white-glove support — for traders who take alpha seriously.
-              </p>
-              <FeatureList items={EXEC_FEATURES} accent="text-amber-400" />
-              {/* Executive CTA — coming soon tooltip */}
-              <div className="relative mt-auto group">
-                <button
-                  disabled
-                  aria-disabled="true"
-                  className="w-full py-3 rounded-xl text-sm font-semibold text-zinc-600 bg-amber-400/20 border border-amber-400/20 cursor-not-allowed transition-all text-center"
-                >
-                  Go Executive →
-                </button>
-                {/* Tooltip */}
-                <div className={cn(
-                  "pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 z-20",
-                  "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap",
-                  "bg-zinc-800 border border-white/10 text-zinc-200 shadow-xl",
-                  "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                )}>
-                  Coming soon
-                  {/* Arrow */}
-                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-800" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Legal disclaimer */}
-          <p className="text-center text-[11px] text-zinc-600 mt-12 leading-relaxed max-w-2xl mx-auto">
-            All prices in USD. Cancel anytime — no lock-in. Live Trading requires a funded Alpaca brokerage account.
-            Beta pricing is locked for active subscribers for the lifetime of their subscription.
-            Predict Alpha is not a registered investment adviser. All trading involves risk of loss.
-          </p>
-        </section>
 
       </div>
     </main>

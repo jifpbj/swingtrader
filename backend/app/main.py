@@ -22,7 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.api.routes import market, trading, websocket
-from app.api.routes.broker import router as broker_router
+# from app.api.routes.broker import router as broker_router  # DISABLED — demo/beta mode
 from app.api.routes.payments import router as payments_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -30,7 +30,7 @@ from app.engine.analysis import AnalysisEngine
 from app.engine.predictive import StatisticalModel
 from app.models.schemas import HealthResponse
 from app.scheduler import auto_trade_loop
-from app.services.broker_client import get_broker_client
+# from app.services.broker_client import get_broker_client  # DISABLED — demo/beta mode
 from app.services.firestore_service import init_firebase
 from app.services.market_data import AlpacaMarketDataService
 from app.services.stream_manager import AlpacaStreamManager
@@ -58,9 +58,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         port=settings.app_port,
     )
 
-    # ── Broker API client (singleton warm-up) ─────────────────────────────────
-    broker = get_broker_client()
-    logger.info("broker_client_ready", url=broker._base_url)
+    # ── Broker API client — DISABLED in demo/beta mode ────────────────────────
+    # broker = get_broker_client()
+    # logger.info("broker_client_ready", url=broker._base_url)
 
     # ── Market data service ───────────────────────────────────────────────────
     logger.info("market_data_service", backend="alpaca")
@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if hasattr(svc, "close"):
         await svc.close()  # type: ignore[attr-defined]
 
-    await broker.close()
+    # await broker.close()  # DISABLED — demo/beta mode
 
     logger.info("app_shutdown")
 
@@ -158,7 +158,7 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(market.router, prefix="/api/v1")
     app.include_router(trading.router, prefix="/api/v1")
-    app.include_router(broker_router, prefix="/api/v1")
+    # app.include_router(broker_router, prefix="/api/v1")  # DISABLED — demo/beta mode
     app.include_router(payments_router)          # POST /webhook/stripe (no /api/v1 prefix)
     app.include_router(websocket.router)
 

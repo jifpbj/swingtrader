@@ -57,3 +57,7 @@ backend/venv/
 backend/service-account.json
 service-account.json
 *service-account*.json
+
+# Demo/beta: live trading pages disabled — exclude from future commits
+src/app/account/onboard/
+src/app/account/funding/
