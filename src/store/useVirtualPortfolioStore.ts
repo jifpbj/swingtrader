@@ -41,12 +41,14 @@ interface VirtualPortfolioState {
   /** Update current prices for all positions (mark-to-market) */
   updatePositionPrices: (prices: Record<string, number>) => void;
 
-  /** Process historical signals for a strategy (backfill) */
+  /** Process historical signals for a strategy (backfill).
+   *  Pass force=true to re-run even if trades already exist (e.g. after a date reset). */
   backfillSignals: (
     strategyId: string,
     strategyName: string,
     lotSizeDollars: number,
     signals: SignalEvent[],
+    force?: boolean,
   ) => void;
 
   /** Record an equity snapshot */
@@ -184,13 +186,13 @@ export const useVirtualPortfolioStore = create<VirtualPortfolioState>()(
         });
       },
 
-      backfillSignals: (strategyId, strategyName, lotSizeDollars, signals) => {
+      backfillSignals: (strategyId, strategyName, lotSizeDollars, signals, force = false) => {
         const state = get();
         // Check if we already backfilled this strategy (has any trades for it)
         const existingTrades = state.trades.filter(
           (t) => t.strategyId === strategyId,
         );
-        if (existingTrades.length > 0) return; // already backfilled
+        if (existingTrades.length > 0 && !force) return; // already backfilled
 
         // Process signals chronologically
         const sorted = [...signals].sort((a, b) => a.time - b.time);

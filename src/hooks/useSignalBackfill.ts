@@ -29,6 +29,28 @@ function tickerToSeed(t: string): number {
 }
 
 /**
+ * Fetch candles and run backfill for a single strategy from a given date.
+ * Can be called directly (e.g. when the user picks a new from-date).
+ */
+export async function runStrategyBackfill(
+  strategy: SavedStrategy,
+  sinceMs: number,
+  backfillFn: (
+    strategyId: string,
+    strategyName: string,
+    lotSizeDollars: number,
+    signals: ReturnType<typeof detectSignalsSince>,
+    force?: boolean,
+  ) => void,
+): Promise<void> {
+  const candles = await fetchCandles(strategy, sinceMs);
+  if (candles.length < 10) return;
+  const signals = detectSignalsSince(candles, strategy, sinceMs);
+  if (signals.length === 0) return;
+  backfillFn(strategy.id, strategy.name, strategy.lotSizeDollars, signals);
+}
+
+/**
  * For each saved strategy with an `activatedAt` timestamp, fetch historical
  * candles and detect signals that would have fired since activation.
  * Backfills trades into the virtual portfolio store.
@@ -53,18 +75,7 @@ export function useSignalBackfill(strategies: SavedStrategy[]) {
       processedRef.current.add(key);
 
       try {
-        const candles = await fetchCandles(strategy);
-        if (candles.length < 10) return;
-
-        const signals = detectSignalsSince(candles, strategy, since);
-        if (signals.length === 0) return;
-
-        backfillSignals(
-          strategy.id,
-          strategy.name,
-          strategy.lotSizeDollars,
-          signals,
-        );
+        await runStrategyBackfill(strategy, since, backfillSignals);
       } catch {
         // Silently fail — will retry on next interval
         processedRef.current.delete(key);
@@ -91,12 +102,11 @@ export function useSignalBackfill(strategies: SavedStrategy[]) {
   }, [strategies, backfillSignals]);
 }
 
-async function fetchCandles(strategy: SavedStrategy): Promise<Candle[]> {
+async function fetchCandles(strategy: SavedStrategy, sinceMs: number): Promise<Candle[]> {
   const { ticker, timeframe } = strategy;
   const barSecs = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 }[timeframe] ?? 86400;
 
-  // Calculate how many bars we need since activatedAt
-  const sinceMs = strategy.activatedAt;
+  // Calculate how many bars we need since sinceMs
   const elapsedSecs = (Date.now() - sinceMs) / 1000;
   const barsNeeded = Math.ceil(elapsedSecs / barSecs) + 100; // +100 for warmup
 
