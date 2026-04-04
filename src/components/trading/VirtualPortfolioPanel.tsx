@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -16,12 +16,9 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
-  Loader2,
 } from "lucide-react";
 import { useVirtualPortfolioStore } from "@/store/useVirtualPortfolioStore";
-import { useStrategyStore } from "@/store/useStrategyStore";
 import { useUIStore } from "@/store/useUIStore";
-import { runStrategyBackfill } from "@/hooks/useSignalBackfill";
 import { cn } from "@/lib/utils";
 
 const currFmt = new Intl.NumberFormat("en-US", {
@@ -36,10 +33,6 @@ const currFmtSmall = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-function toDateInput(ms: number): string {
-  return new Date(ms).toISOString().split("T")[0];
-}
-
 export function VirtualPortfolioPanel() {
   const account = useVirtualPortfolioStore((s) => s.account);
   const positions = useVirtualPortfolioStore((s) => s.positions);
@@ -50,45 +43,11 @@ export function VirtualPortfolioPanel() {
   const recordEquitySnapshot = useVirtualPortfolioStore((s) => s.recordEquitySnapshot);
   const updatePositionPrices = useVirtualPortfolioStore((s) => s.updatePositionPrices);
   const reset = useVirtualPortfolioStore((s) => s.reset);
-  const backfillSignals = useVirtualPortfolioStore((s) => s.backfillSignals);
 
-  const strategies = useStrategyStore((s) => s.strategies);
   const livePrice = useUIStore((s) => s.livePrice);
   const ticker = useUIStore((s) => s.ticker);
 
   const [showTrades, setShowTrades] = useState(false);
-  const [backtesting, setBacktesting] = useState(false);
-
-  // Default from-date: earliest activatedAt across all strategies, or today
-  const defaultFromMs = useMemo(() => {
-    const dates = strategies.map((s) => s.activatedAt).filter(Boolean);
-    return dates.length > 0 ? Math.min(...dates) : Date.now();
-  }, [strategies]);
-
-  const [fromDate, setFromDate] = useState(() => toDateInput(defaultFromMs));
-
-  // Keep fromDate in sync if strategies load after mount
-  const initializedRef = useRef(false);
-  useEffect(() => {
-    if (!initializedRef.current && strategies.length > 0) {
-      initializedRef.current = true;
-      setFromDate(toDateInput(defaultFromMs));
-    }
-  }, [defaultFromMs, strategies.length]);
-
-  const handleDateChange = useCallback(async (dateStr: string) => {
-    setFromDate(dateStr);
-    if (!dateStr || !strategies.length) return;
-    const sinceMs = new Date(dateStr).getTime();
-    if (isNaN(sinceMs)) return;
-
-    setBacktesting(true);
-    reset();
-    await Promise.all(
-      strategies.map((s) => runStrategyBackfill(s, sinceMs, backfillSignals)),
-    );
-    setBacktesting(false);
-  }, [strategies, reset, backfillSignals]);
 
   // Update position prices with live data
   useEffect(() => {
@@ -159,7 +118,7 @@ export function VirtualPortfolioPanel() {
             }
           </button>
           <button
-            onClick={() => void handleDateChange(fromDate)}
+            onClick={reset}
             title="Reset to $100K"
             className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/5 transition-colors"
           >
@@ -167,27 +126,6 @@ export function VirtualPortfolioPanel() {
           </button>
         </div>
       </div>
-
-      {/* Date picker — backtest from date */}
-      {strategies.length > 0 && (
-        <div className="px-4 pb-3">
-          <label className="text-[9px] uppercase tracking-wider text-zinc-500 font-semibold block mb-1">
-            Backtest from
-          </label>
-          <div className="relative flex items-center">
-            <input
-              type="date"
-              value={fromDate}
-              max={toDateInput(Date.now())}
-              onChange={(e) => void handleDateChange(e.target.value)}
-              className="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/20 transition-all [color-scheme:dark]"
-            />
-            {backtesting && (
-              <Loader2 className="absolute right-2.5 size-3 text-emerald-400 animate-spin pointer-events-none" />
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Account Value */}
       <div className="px-4 pb-2">

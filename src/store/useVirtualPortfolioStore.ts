@@ -57,6 +57,9 @@ interface VirtualPortfolioState {
   /** Toggle browser notifications */
   setNotificationsEnabled: (v: boolean) => void;
 
+  /** Clear all trades and positions for one strategy and recompute account */
+  resetStrategy: (strategyId: string) => void;
+
   /** Reset to initial $100K state */
   reset: () => void;
 }
@@ -256,6 +259,22 @@ export const useVirtualPortfolioStore = create<VirtualPortfolioState>()(
       },
 
       setNotificationsEnabled: (v) => set({ notificationsEnabled: v }),
+
+      resetStrategy: (strategyId) => {
+        set((s) => {
+          const positions = s.positions.filter((p) => p.strategyId !== strategyId);
+          const trades    = s.trades.filter((t) => t.strategyId !== strategyId);
+          // Recalculate cash from remaining trades
+          const pnl = trades.reduce((sum, t) => sum + t.pnlDollars, 0);
+          const posEquity = positions.reduce((sum, p) => sum + p.currentPrice * p.qty, 0);
+          const cash = INITIAL_CASH + pnl - posEquity;
+          return {
+            positions,
+            trades,
+            account: { ...s.account, cash, buyingPower: cash, equity: cash + posEquity },
+          };
+        });
+      },
 
       reset: () =>
         set({

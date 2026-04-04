@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/utils";
 import { useStrategyStore } from "@/store/useStrategyStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useVirtualPortfolioStore } from "@/store/useVirtualPortfolioStore";
+import { runStrategyBackfill } from "@/hooks/useSignalBackfill";
 import { useUIStore } from "@/store/useUIStore";
 import { useTradeStore } from "@/store/useTradeStore";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
@@ -86,6 +88,25 @@ export function StrategyCard({ strategy }: Props) {
   const [deleting,      setDeleting]      = useState(false);
   const [expanded,      setExpanded]      = useState(false);
   const [showCash,      setShowCash]      = useState(false);   // % vs $ toggle
+
+  // Virtual portfolio backtest date (non-logged-in users only)
+  const backfillSignals  = useVirtualPortfolioStore((s) => s.backfillSignals);
+  const resetStrategy    = useVirtualPortfolioStore((s) => s.resetStrategy);
+  const [backtestDate, setBacktestDate] = useState(
+    () => new Date(strategy.activatedAt).toISOString().split("T")[0],
+  );
+  const [backtesting, setBacktesting] = useState(false);
+
+  const handleBacktestDate = useCallback(async (dateStr: string) => {
+    setBacktestDate(dateStr);
+    if (!dateStr) return;
+    const sinceMs = new Date(dateStr).getTime();
+    if (isNaN(sinceMs)) return;
+    setBacktesting(true);
+    resetStrategy(strategy.id);
+    await runStrategyBackfill(strategy, sinceMs, backfillSignals);
+    setBacktesting(false);
+  }, [strategy, resetStrategy, backfillSignals]);
 
   // Editable lot size
   const [lotSizeDollars, setLotSizeDollars] = useState(strategy.lotSizeDollars ?? 1_000);
@@ -306,6 +327,27 @@ export function StrategyCard({ strategy }: Props) {
           <p className="text-[10px] text-muted-foreground/70">
             Started {dateFmtLg.format(startDate)}
           </p>
+
+          {/* Backtest from date — virtual portfolio only (non-logged-in) */}
+          {!user && (
+            <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+              <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                Backtest from
+              </p>
+              <div className="relative flex items-center">
+                <input
+                  type="date"
+                  value={backtestDate}
+                  max={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => void handleBacktestDate(e.target.value)}
+                  className="w-full bg-secondary/60 border border-border rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-foreground focus:outline-none focus:border-emerald-400/60 focus:ring-1 focus:ring-emerald-400/20 transition-all [color-scheme:dark]"
+                />
+                {backtesting && (
+                  <Loader2 className="absolute right-2 size-3 text-emerald-400 animate-spin pointer-events-none" />
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* % / $ toggle + delete */}
