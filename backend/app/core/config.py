@@ -82,10 +82,10 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         if self.cors_origins_env.strip():
             return [o.strip() for o in self.cors_origins_env.split(",") if o.strip()]
-        # Default: allow localhost only in development, deny all otherwise.
-        if self.is_development:
-            return ["http://localhost:3000", "http://localhost:3001"]
-        return []
+        # Default: allow all origins. Sensitive endpoints are protected by
+        # Firebase auth (AuthenticatedUID / OptionalUID), not CORS.
+        # Lock down by setting CORS_ORIGINS=https://your-domain.com in production.
+        return ["*"]
 
 
 @lru_cache(maxsize=1)
