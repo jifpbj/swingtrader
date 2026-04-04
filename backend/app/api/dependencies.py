@@ -84,6 +84,37 @@ async def verify_firebase_token(
 AuthenticatedUID = Annotated[str, Depends(verify_firebase_token)]
 
 
+async def verify_firebase_token_optional(
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> str | None:
+    """
+    Like verify_firebase_token but does not require the header.
+    Returns the UID if a valid token is supplied, None otherwise.
+    An invalid (malformed/expired) token still raises 401.
+    """
+    if not authorization:
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token or token == authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or malformed Bearer token.",
+        )
+    try:
+        from firebase_admin import auth as firebase_auth  # noqa: PLC0415
+
+        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
+        return decoded["uid"]
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+        )
+
+
+OptionalUID = Annotated[str | None, Depends(verify_firebase_token_optional)]
+
+
 # ─── Service accessors ────────────────────────────────────────────────────────
 
 def get_market_data(request: HTTPConnection) -> MarketDataService:

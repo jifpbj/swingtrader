@@ -220,7 +220,7 @@ export default function TradingDashboard() {
 
             {/* Panel content — hidden when collapsed on desktop */}
             <div className={cn("flex flex-col gap-3", rightCollapsed && "md:hidden")}>
-              {hasAlpacaKey && tradingMode === "paper" && (
+              {tradingMode === "paper" && (
                 <div id="paper-trading-panel">
                   <PaperTradingPanel />
                 </div>
@@ -232,8 +232,8 @@ export default function TradingDashboard() {
                 </div>
               )}
 
-              {/* Virtual paper trading — for users without Alpaca keys */}
-              {!hasAlpacaKey && (
+              {/* Virtual paper trading — shown below connect form when no Alpaca key */}
+              {!hasAlpacaKey && tradingMode === "paper" && (
                 <VirtualPortfolioPanel />
               )}
             </div>

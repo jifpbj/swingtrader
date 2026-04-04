@@ -25,13 +25,12 @@ async function alpacaFetch<T>(
   secretKey: string,
   init?: RequestInit,
 ): Promise<T> {
-  const token = await auth.currentUser?.getIdToken();
-  if (!token) throw new Error("Not authenticated");
+  const token = await auth.currentUser?.getIdToken().catch(() => null) ?? null;
   const resp = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       ...alpacaHeaders(apiKey, secretKey),
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
