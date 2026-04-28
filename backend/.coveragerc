@@ -12,3 +12,9 @@ omit =
     app/engine/auto_trader.py
     # WebSocket handler — requires live WS connections
     app/api/routes/websocket.py
+    # Stripe webhook handler — requires Stripe credentials
+    app/api/routes/payments.py
+    # Alpaca market data client — mock is injected in tests, file itself is untestable
+    app/services/market_data.py
+    # OTel instrumentation — returns immediately in APP_ENV=testing, untestable here
+    app/core/telemetry.py
