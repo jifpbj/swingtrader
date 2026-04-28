@@ -37,13 +37,8 @@ def configure_telemetry(app: FastAPI) -> None:
 
     app_env = os.getenv("APP_ENV", "development")
 
-    # Skip real exporters in tests — BatchSpanProcessor uses a background thread
-    # that tries to flush to a closed file handle after the process exits.
+    # Skip all OTel setup in tests — no exporters, no background flush threads.
     if app_env == "testing":
-        from opentelemetry.sdk.trace.export import NoOpSpanExporter
-        provider = TracerProvider(resource=Resource.create({"service.name": "predictive-alpha-api"}))
-        provider.add_span_processor(BatchSpanProcessor(NoOpSpanExporter()))
-        trace.set_tracer_provider(provider)
         return
 
     resource = Resource.create(

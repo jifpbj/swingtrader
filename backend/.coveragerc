@@ -1,0 +1,14 @@
+[run]
+source = app
+omit =
+    # Requires live Alpaca/Firebase/Resend credentials — not unit-testable
+    app/api/routes/broker.py
+    app/services/broker_client.py
+    app/services/firestore_service.py
+    app/services/email_service.py
+    app/services/stream_manager.py
+    # Background scheduler and live-trading engine
+    app/scheduler.py
+    app/engine/auto_trader.py
+    # WebSocket handler — requires live WS connections
+    app/api/routes/websocket.py
