@@ -15,7 +15,6 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useAlpacaStore } from "@/store/useAlpacaStore";
-import { useAuthStore } from "@/store/useAuthStore";
 import { useUIStore } from "@/store/useUIStore";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { toAlpacaSymbol, isCrypto } from "@/lib/alpaca";
@@ -743,7 +742,6 @@ function OrdersTab() {
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function PaperTradingPanel() {
-  const user = useAuthStore((s) => s.user);
   const connected = useAlpacaStore((s) => s.account !== null);
   const positions = useAlpacaStore((s) => s.positions);
   const orders = useAlpacaStore((s) => s.orders);
@@ -793,7 +791,7 @@ export function PaperTradingPanel() {
       {!collapsed && (
         <>
           {!connected ? (
-            user ? <ConnectForm /> : null
+            <ConnectForm />
           ) : (
             <>
               <AccountBar />

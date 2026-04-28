@@ -105,11 +105,14 @@ async def verify_firebase_token_optional(
 
         decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
         return decoded["uid"]
-    except Exception:
+    except firebase_auth.InvalidIdTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token.",
         )
+    except Exception:
+        logger.warning("firebase_token_verification_skipped", reason="unexpected_error")
+        return None
 
 
 OptionalUID = Annotated[str | None, Depends(verify_firebase_token_optional)]
