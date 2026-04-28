@@ -5,6 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade "setuptools>=80.0" "wheel>=0.46.2" \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
