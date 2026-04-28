@@ -35,17 +35,27 @@ def configure_telemetry(app: FastAPI) -> None:
         logger.warning("opentelemetry-sdk not installed — tracing disabled")
         return
 
+    app_env = os.getenv("APP_ENV", "development")
+
+    # Skip real exporters in tests — BatchSpanProcessor uses a background thread
+    # that tries to flush to a closed file handle after the process exits.
+    if app_env == "testing":
+        from opentelemetry.sdk.trace.export import NoOpSpanExporter
+        provider = TracerProvider(resource=Resource.create({"service.name": "predictive-alpha-api"}))
+        provider.add_span_processor(BatchSpanProcessor(NoOpSpanExporter()))
+        trace.set_tracer_provider(provider)
+        return
+
     resource = Resource.create(
         {
             "service.name": "predictive-alpha-api",
             "service.version": "1.0.0",
-            "deployment.environment": os.getenv("APP_ENV", "development"),
+            "deployment.environment": app_env,
         }
     )
 
     provider = TracerProvider(resource=resource)
 
-    app_env = os.getenv("APP_ENV", "development")
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
     jaeger_endpoint = os.getenv("JAEGER_ENDPOINT", "")
