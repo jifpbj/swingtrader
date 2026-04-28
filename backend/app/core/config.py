@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # ─── App ──────────────────────────────────────────────────────────────────
     app_env: Literal["development", "production", "staging", "testing"] = "development"
-    app_host: str = "0.0.0.0"
+    app_host: str = "0.0.0.0"  # nosec B104 — intentional: server must bind all interfaces
     app_port: int = 8000
     log_level: str = "INFO"
     cors_origins_env: str = Field(default="", alias="CORS_ORIGINS")

@@ -28,6 +28,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── Quality gate: tests, SAST, container scan ─────────────────────────
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          cd backend
+          python3 -m pytest --no-header --tb=short -q --cov=app --cov-fail-under=60
+        env:
+          APP_ENV: testing
+          USE_MOCK_DATA: "true"
+
+      - name: Python SAST (bandit)
+        run: |
+          pip install bandit[toml] --quiet
+          bandit -r backend/app -ll -x backend/app/engine/predictive.py
+
       - name: Authenticate to Google Cloud (staging)
         uses: google-github-actions/auth@v2
         with:
@@ -48,6 +73,15 @@ jobs:
 
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
+
+      - name: Container vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
 
       - name: Deploy to Cloud Run (staging)
         run: |

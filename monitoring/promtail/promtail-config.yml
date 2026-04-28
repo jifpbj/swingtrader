@@ -1,0 +1,37 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Always set job=docker so Loki has at least one label on every stream
+      - target_label: job
+        replacement: docker
+      # Set service from docker-compose service name (may be empty for non-compose containers)
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      # Set container from container name, stripping leading /
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.*)
+        target_label: container
+    pipeline_stages:
+      # Only parse structlog JSON — non-JSON lines pass through unchanged
+      - json:
+          expressions:
+            level: level
+            event: event
+      # Promote level as a label (low cardinality: info/warning/error/debug)
+      # Do NOT promote trace_id — it's high cardinality and creates too many streams
+      - labels:
+          level:

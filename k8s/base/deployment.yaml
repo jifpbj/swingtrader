@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictive-alpha-api
+  labels:
+    app: predictive-alpha-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: predictive-alpha-api
+  template:
+    metadata:
+      labels:
+        app: predictive-alpha-api
+    spec:
+      serviceAccountName: predictive-alpha-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: api
+          image: us-west1-docker.pkg.dev/predict-alpha-4ed0c/cloud-run-source-deploy/predictive-alpha-api:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          envFrom:
+            - configMapRef:
+                name: predictive-alpha-config
+          env:
+            - name: ALPACA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: predictive-alpha-secrets
+                  key: ALPACA_API_KEY
+            - name: ALPACA_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: predictive-alpha-secrets
+                  key: ALPACA_SECRET_KEY
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: predictive-alpha-secrets
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: predictive-alpha-secrets
+                  key: STRIPE_WEBHOOK_SECRET
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: predictive-alpha-secrets
+                  key: RESEND_API_KEY
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3

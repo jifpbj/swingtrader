@@ -14,15 +14,12 @@ from typing import Any, Literal
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request, Response, status
 from pydantic import BaseModel
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.api.dependencies import OptionalUID
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/trading", tags=["trading"])
-limiter = Limiter(key_func=get_remote_address)
 
 ALPACA_PAPER_URL = "https://paper-api.alpaca.markets"
 ALPACA_LIVE_URL  = "https://api.alpaca.markets"
@@ -285,9 +282,7 @@ async def get_orders(
     status_code=201,
     summary="Place an order",
 )
-@limiter.limit("10/minute")
 async def place_order(
-    request: Request,
     req: PlaceOrderRequest,
     uid: OptionalUID,
     x_alpaca_key: str = Header(..., alias="X-Alpaca-Key"),

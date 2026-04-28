@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: predictive-alpha-config
+data:
+  APP_ENV: "production"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8080"
+  LOG_LEVEL: "INFO"
+  USE_MOCK_DATA: "false"

@@ -12,10 +12,8 @@ import uuid
 from datetime import datetime, timezone
 from math import ceil
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.api.dependencies import (
     AnalysisEngineDep,
@@ -43,7 +41,6 @@ import pandas as pd
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/market", tags=["market"])
-limiter = Limiter(key_func=get_remote_address)
 
 
 def _validated_ticker(ticker: str) -> str:
@@ -73,9 +70,7 @@ async def get_popular(svc: MarketDataDep) -> list[AssetSearchResult]:
     response_model=list[AssetSearchResult],
     summary="Fuzzy search tradable assets by symbol or name",
 )
-@limiter.limit("30/minute")
 async def search_assets(
-    request: Request,
     svc: MarketDataDep,
     q: str = Query(min_length=1, max_length=30, description="Symbol or name fragment"),
     limit: int = Query(default=10, ge=1, le=50),
@@ -293,9 +288,7 @@ async def get_regime(
     response_model=PriceProbabilityForecast,
     summary="AI price probability forecast",
 )
-@limiter.limit("20/minute")
 async def get_prediction(
-    request: Request,
     ticker: str,
     svc: MarketDataDep,
     engine: AnalysisEngineDep,
@@ -323,9 +316,7 @@ async def get_prediction(
     response_model=list[AlphaSignal],
     summary="Latest AI-generated alpha signals",
 )
-@limiter.limit("20/minute")
 async def get_signals(
-    request: Request,
     ticker: str,
     svc: MarketDataDep,
     engine: AnalysisEngineDep,

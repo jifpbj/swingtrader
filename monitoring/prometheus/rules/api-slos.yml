@@ -1,0 +1,136 @@
+groups:
+  - name: predictive_alpha_recording
+    interval: 30s
+    rules:
+      # ── Throughput ──────────────────────────────────────────────────────────
+      - record: job:http_requests_total:rate5m
+        expr: sum(rate(http_requests_total[5m])) by (handler)
+
+      - record: job:http_requests_total:rate1h
+        expr: sum(rate(http_requests_total[1h]))
+
+      # ── Error rate ──────────────────────────────────────────────────────────
+      - record: job:http_errors_total:rate5m
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+
+      - record: job:http_error_ratio:rate5m
+        expr: >-
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+
+      # ── Latency ─────────────────────────────────────────────────────────────
+      - record: job:http_request_duration_p50:5m
+        expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: job:http_request_duration_p95:5m
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: job:http_request_duration_p99:5m
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      # ── Availability ────────────────────────────────────────────────────────
+      - record: job:availability:1h
+        expr: avg_over_time(up{job="predictive-alpha"}[1h])
+
+      # ── SLO burn rate (error budget consumption) ────────────────────────────
+      # SLO: < 0.5% error rate.  Burn rate = actual_error_ratio / slo_error_ratio.
+      # Burn rate of 14.4 = budget exhausted in 1h (60min × 14.4 = 864min = 30d budget).
+      - record: job:slo_burn_rate:1h
+        expr: >-
+          sum(rate(http_requests_total{status_code=~"5.."}[1h]))
+          /
+          sum(rate(http_requests_total[1h]))
+          / 0.005
+
+      - record: job:slo_burn_rate:6h
+        expr: >-
+          sum(rate(http_requests_total{status_code=~"5.."}[6h]))
+          /
+          sum(rate(http_requests_total[6h]))
+          / 0.005
+
+      - record: job:slo_burn_rate:3d
+        expr: >-
+          sum(rate(http_requests_total{status_code=~"5.."}[3d]))
+          /
+          sum(rate(http_requests_total[3d]))
+          / 0.005
+
+  # ── Alerting rules ──────────────────────────────────────────────────────────
+  - name: predictive_alpha_alerts
+    rules:
+      - alert: ServiceDown
+        expr: up{job="predictive-alpha"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "predictive-alpha is DOWN"
+          description: "The API has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: job:http_error_ratio:rate5m > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate above 1%"
+          description: "5xx error rate is {{ printf \"%.2f\" (mul $value 100) }}% over the last 5 minutes."
+
+      - alert: HighLatency_p95
+        expr: job:http_request_duration_p95:5m > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above 500ms"
+          description: "p95 response time is {{ printf \"%.0f\" (mul $value 1000) }}ms."
+
+      - alert: HighLatency_p99
+        expr: job:http_request_duration_p99:5m > 1.0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "p99 latency above 1s"
+          description: "p99 response time is {{ printf \"%.0f\" (mul $value 1000) }}ms."
+
+      - alert: SLOBurnRateCritical
+        expr: job:slo_burn_rate:1h > 14.4
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO burn rate critical ({{ printf \"%.1f\" $value }}×)"
+          description: "Error budget will be exhausted within 1 hour at current burn rate."
+
+      - alert: SLOBurnRateWarning
+        expr: job:slo_burn_rate:6h > 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLO burn rate elevated ({{ printf \"%.1f\" $value }}×)"
+          description: "Error budget burning faster than replenishment over 6h window."
+
+      - alert: LowThroughput
+        expr: sum(rate(http_requests_total[15m])) < 0.01
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Near-zero traffic — possible dead service"
+          description: "Request rate has been below 0.01 RPS for 15 minutes."
+
+      - alert: HighRequestVolume
+        expr: sum(rate(http_requests_total[5m])) > 100
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Traffic spike — {{ printf \"%.0f\" $value }} RPS"
+          description: "Request rate has exceeded 100 RPS. Consider scaling."
+
+  # ── Inhibition rules (applied in Alertmanager config) ──────────────────────
+  # ServiceDown suppresses all other alerts for the same job to prevent cascade noise.

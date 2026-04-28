@@ -17,15 +17,16 @@ from typing import AsyncIterator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.api.routes import market, trading, websocket
 # from app.api.routes.broker import router as broker_router  # DISABLED — demo/beta mode
 from app.api.routes.payments import router as payments_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.rate_limit import limiter
+from app.core.telemetry import configure_telemetry
 from app.engine.analysis import AnalysisEngine
 from app.engine.predictive import StatisticalModel
 from app.models.schemas import HealthResponse
@@ -151,8 +152,7 @@ def create_app() -> FastAPI:
     )
 
     # ── Rate Limiting ────────────────────────────────────────────────────────
-    limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
-    app.state.limiter = limiter
+    app.state.limiter = limiter   # shared singleton from app.core.rate_limit
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────────
@@ -161,6 +161,12 @@ def create_app() -> FastAPI:
     # app.include_router(broker_router, prefix="/api/v1")  # DISABLED — demo/beta mode
     app.include_router(payments_router)          # POST /webhook/stripe (no /api/v1 prefix)
     app.include_router(websocket.router)
+
+    # ── Observability — OTel tracing (no-ops if SDK not installed) ────────────
+    configure_telemetry(app)
+
+    # ── Observability — Prometheus metrics (/metrics endpoint) ───────────────
+    _setup_prometheus(app)
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", response_model=HealthResponse, tags=["meta"])
@@ -182,6 +188,27 @@ def create_app() -> FastAPI:
         )
 
     return app
+
+
+def _setup_prometheus(app: FastAPI) -> None:
+    """Expose /metrics with per-route HTTP histograms. No-ops if package missing."""
+    try:
+        from prometheus_client import REGISTRY, Info
+        from prometheus_fastapi_instrumentator import Instrumentator
+
+        settings = get_settings()
+        Instrumentator(
+            should_group_status_codes=False,
+            excluded_handlers=["/health", "/metrics"],
+        ).instrument(app).expose(app, include_in_schema=False)
+
+        # Guard against duplicate registration when create_app() is called multiple
+        # times (e.g., in tests) — prometheus_client uses a global registry.
+        if "app_info" not in REGISTRY._names_to_collectors:
+            app_info = Info("app", "Application metadata")
+            app_info.info({"version": "1.0.0", "env": settings.app_env})
+    except ImportError:
+        logger.warning("prometheus_fastapi_instrumentator not installed — /metrics disabled")
 
 
 app = create_app()

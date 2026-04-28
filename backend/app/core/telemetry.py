@@ -1,0 +1,115 @@
+"""
+OpenTelemetry instrumentation.
+
+Configures tracing for the FastAPI app and injects trace context into
+every structlog log entry so logs and traces are co-indexed by trace_id.
+
+Exporters:
+  - Dev  (APP_ENV != production) + JAEGER_ENDPOINT set: OTLP gRPC → Jaeger
+  - Dev  (fallback): console (stdout)
+  - Prod (APP_ENV == production) + OTEL_EXPORTER_OTLP_ENDPOINT set: OTLP gRPC → GCP Cloud Trace
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+
+from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
+
+
+def configure_telemetry(app: FastAPI) -> None:
+    """
+    Wire up OpenTelemetry SDK and auto-instrument FastAPI.
+
+    Call this from the lifespan or create_app() before the first request.
+    """
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    except ImportError:
+        logger.warning("opentelemetry-sdk not installed — tracing disabled")
+        return
+
+    resource = Resource.create(
+        {
+            "service.name": "predictive-alpha-api",
+            "service.version": "1.0.0",
+            "deployment.environment": os.getenv("APP_ENV", "development"),
+        }
+    )
+
+    provider = TracerProvider(resource=resource)
+
+    app_env = os.getenv("APP_ENV", "development")
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+    jaeger_endpoint = os.getenv("JAEGER_ENDPOINT", "")
+
+    if app_env == "production" and otlp_endpoint:
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+            logger.info("otel_exporter: otlp_grpc endpoint=%s", otlp_endpoint)
+        except ImportError:
+            logger.warning("OTLP exporter not installed — falling back to console")
+            exporter = ConsoleSpanExporter()
+    elif jaeger_endpoint:
+        # Dev: send traces to local Jaeger via OTLP gRPC (docker-compose: http://jaeger:4317)
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            exporter = OTLPSpanExporter(endpoint=jaeger_endpoint, insecure=True)
+            logger.info("otel_exporter: jaeger endpoint=%s", jaeger_endpoint)
+        except ImportError:
+            logger.warning("OTLP exporter not installed — falling back to console")
+            exporter = ConsoleSpanExporter()
+    else:
+        exporter = ConsoleSpanExporter()
+        logger.info("otel_exporter: console")
+
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+    # Auto-instrument FastAPI — adds a span for every HTTP request
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("otel_fastapi_instrumented")
+    except ImportError:
+        logger.warning("opentelemetry-instrumentation-fastapi not installed")
+        return
+
+    # Inject trace_id into structlog context for co-indexed logs + traces
+    _patch_structlog_with_trace_context()
+
+
+def _patch_structlog_with_trace_context() -> None:
+    """
+    Add a structlog processor that injects the current OTel trace_id and
+    span_id into every log record.  This lets Cloud Logging / Datadog
+    correlate log lines with their trace spans.
+
+    No-ops gracefully if structlog or opentelemetry is unavailable.
+    """
+    try:
+        import structlog
+        from opentelemetry import trace
+    except ImportError:
+        return
+
+    def _inject_trace_context(logger, method, event_dict):
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            ctx = span.get_span_context()
+            event_dict["trace_id"] = format(ctx.trace_id, "032x")
+            event_dict["span_id"] = format(ctx.span_id, "016x")
+        return event_dict
+
+    # Prepend to structlog's processor chain so every log call includes IDs
+    existing = structlog.get_config().get("processors", [])
+    if _inject_trace_context not in existing:
+        structlog.configure(processors=[_inject_trace_context] + existing)

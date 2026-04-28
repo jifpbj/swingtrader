@@ -44,7 +44,16 @@ firebase-admin>=6.5.0
 # ─── Stripe (subscription webhook verification) ───────────────────────────────
 stripe>=10.0.0
 
+# ─── Observability — OpenTelemetry ───────────────────────────────────────────
+opentelemetry-sdk==1.27.0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0  # Cloud Trace (prod) + Jaeger (dev)
+
+# ─── Observability — Prometheus metrics ──────────────────────────────────────
+prometheus-fastapi-instrumentator==7.0.0  # exposes /metrics with HTTP histograms
+
 # ─── Dev / Testing ────────────────────────────────────────────────────────────
 pytest==8.3.4
 pytest-asyncio==0.24.0
+pytest-cov==5.0.0
 httpx                       # also used in tests via TestClient
