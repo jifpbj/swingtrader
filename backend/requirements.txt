@@ -47,10 +47,10 @@ protobuf>=5.29.6            # CVE-2026-0994 — DoS via recursion depth bypass
 stripe>=10.0.0
 
 # ─── Observability — OpenTelemetry ───────────────────────────────────────────
-opentelemetry-sdk==1.27.0
-opentelemetry-instrumentation-fastapi==0.48b0
-opentelemetry-exporter-otlp-proto-grpc==1.27.0  # Jaeger (dev)
-opentelemetry-exporter-gcp-trace==1.9.0         # Google Cloud Trace (prod)
+opentelemetry-sdk>=1.29.0,<2.0                   # 1.29.0+ drops protobuf <5 upper bound
+opentelemetry-instrumentation-fastapi>=0.48b0,<1.0
+opentelemetry-exporter-otlp-proto-grpc>=1.29.0,<2.0  # Jaeger (dev); >=1.29 supports protobuf v5
+opentelemetry-exporter-gcp-trace>=1.9.0,<2.0    # Google Cloud Trace (prod)
 
 # ─── Observability — Prometheus metrics ──────────────────────────────────────
 prometheus-fastapi-instrumentator==7.0.0  # exposes /metrics with HTTP histograms
