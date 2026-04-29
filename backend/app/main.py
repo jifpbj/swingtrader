@@ -197,10 +197,13 @@ def _setup_prometheus(app: FastAPI) -> None:
         from prometheus_fastapi_instrumentator import Instrumentator
 
         settings = get_settings()
+        # Fine-grained buckets up to 2s give accurate p50/p95/p99 for API routes.
+        # Default sparse buckets (0.1, 0.5, 1.0, +Inf) cause ~200ms interpolation error.
+        buckets = (0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0, float("inf"))
         Instrumentator(
             should_group_status_codes=False,
             excluded_handlers=["/health", "/metrics"],
-        ).instrument(app).expose(app, include_in_schema=False)
+        ).instrument(app, latency_lowr_buckets=buckets).expose(app, include_in_schema=False)
 
         # Guard against duplicate registration when create_app() is called multiple
         # times (e.g., in tests) — prometheus_client uses a global registry.

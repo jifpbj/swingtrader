@@ -92,9 +92,12 @@ export function StrategyCard({ strategy }: Props) {
   // Virtual portfolio backtest date (non-logged-in users only)
   const backfillSignals  = useVirtualPortfolioStore((s) => s.backfillSignals);
   const resetStrategy    = useVirtualPortfolioStore((s) => s.resetStrategy);
-  const [backtestDate, setBacktestDate] = useState(
-    () => new Date(strategy.activatedAt).toISOString().split("T")[0],
-  );
+  const [backtestDate, setBacktestDate] = useState(() => {
+    const ts = strategy.activatedAt;
+    if (!ts) return new Date().toISOString().split("T")[0];
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? new Date().toISOString().split("T")[0] : d.toISOString().split("T")[0];
+  });
   const [backtesting, setBacktesting] = useState(false);
 
   const handleBacktestDate = useCallback(async (dateStr: string) => {
@@ -144,7 +147,7 @@ export function StrategyCard({ strategy }: Props) {
   const isActive       = activeStrategyId === strategy.id;
   const indicatorStyle = INDICATOR_COLORS[strategy.indicator] ?? "bg-zinc-500/15 text-muted-foreground border-zinc-500/20";
   const capital        = strategy.lotSizeDollars ?? 1_000;
-  const startDate      = new Date(strategy.createdAt);
+  const startDate      = strategy.createdAt ? new Date(strategy.createdAt) : new Date();
 
   // Actual trade performance
   const trades          = getTradesForStrategy(strategy.id);
