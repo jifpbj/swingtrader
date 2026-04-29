@@ -76,7 +76,7 @@ groups:
           severity: critical
         annotations:
           summary: "Error rate above 1%"
-          description: "5xx error rate is {{ printf \"%.2f\" (mul $value 100) }}% over the last 5 minutes."
+          description: "5xx error rate is {{ humanizePercentage $value }} over the last 5 minutes."
 
       - alert: HighLatency_p95
         expr: job:http_request_duration_p95:5m > 0.5
@@ -85,7 +85,7 @@ groups:
           severity: warning
         annotations:
           summary: "p95 latency above 500ms"
-          description: "p95 response time is {{ printf \"%.0f\" (mul $value 1000) }}ms."
+          description: "p95 response time is {{ humanizeDuration $value }}."
 
       - alert: HighLatency_p99
         expr: job:http_request_duration_p99:5m > 1.0
@@ -94,7 +94,7 @@ groups:
           severity: critical
         annotations:
           summary: "p99 latency above 1s"
-          description: "p99 response time is {{ printf \"%.0f\" (mul $value 1000) }}ms."
+          description: "p99 response time is {{ humanizeDuration $value }}."
 
       - alert: SLOBurnRateCritical
         expr: job:slo_burn_rate:1h > 14.4

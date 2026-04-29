@@ -11,6 +11,13 @@ resource "google_project_iam_member" "secret_accessor" {
   member  = "serviceAccount:${google_service_account.api.email}"
 }
 
+# Allow writing traces to Google Cloud Trace
+resource "google_project_iam_member" "cloudtrace_agent" {
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.api.email}"
+}
+
 resource "google_cloud_run_v2_service" "api" {
   project  = var.project_id
   name     = var.service_name

@@ -5,9 +5,11 @@ Configures tracing for the FastAPI app and injects trace context into
 every structlog log entry so logs and traces are co-indexed by trace_id.
 
 Exporters:
+  - Prod (APP_ENV == production): CloudTraceSpanExporter → Google Cloud Trace
+      Requires: opentelemetry-exporter-gcp-trace installed + roles/cloudtrace.agent on SA
+      Project auto-detected from GOOGLE_CLOUD_PROJECT env var (set automatically on Cloud Run).
   - Dev  (APP_ENV != production) + JAEGER_ENDPOINT set: OTLP gRPC → Jaeger
   - Dev  (fallback): console (stdout)
-  - Prod (APP_ENV == production) + OTEL_EXPORTER_OTLP_ENDPOINT set: OTLP gRPC → GCP Cloud Trace
 """
 
 from __future__ import annotations
@@ -51,17 +53,16 @@ def configure_telemetry(app: FastAPI) -> None:
 
     provider = TracerProvider(resource=resource)
 
-    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-
     jaeger_endpoint = os.getenv("JAEGER_ENDPOINT", "")
 
-    if app_env == "production" and otlp_endpoint:
+    if app_env == "production":
         try:
-            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-            exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
-            logger.info("otel_exporter: otlp_grpc endpoint=%s", otlp_endpoint)
+            from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+            project_id = os.getenv("GOOGLE_CLOUD_PROJECT")  # auto-set on Cloud Run
+            exporter = CloudTraceSpanExporter(project_id=project_id)
+            logger.info("otel_exporter: cloud_trace project=%s", project_id)
         except ImportError:
-            logger.warning("OTLP exporter not installed — falling back to console")
+            logger.warning("opentelemetry-exporter-gcp-trace not installed — falling back to console")
             exporter = ConsoleSpanExporter()
     elif jaeger_endpoint:
         # Dev: send traces to local Jaeger via OTLP gRPC (docker-compose: http://jaeger:4317)
